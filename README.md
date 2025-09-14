@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Backtest Toolkit
 =================
 
@@ -51,3 +52,6 @@ Start-Process -FilePath .\.venv_new\Scripts\python.exe -ArgumentList 'web_app.py
 ```
 
 A GitHub Actions workflow is added at `.github/workflows/smoke_test.yml` to run the smoke test on push using Python 3.10 and cache pip dependencies.
+=======
+# trading-taoquan
+>>>>>>> origin/main
