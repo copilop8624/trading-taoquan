@@ -3,9 +3,17 @@ import sys
 import json
 import time
 from pathlib import Path
+from datetime import datetime
 import requests
 
 ROOT = Path('.')
+def make_output_dirs():
+    ts = datetime.utcnow().strftime('%Y-%m-%d_%H%M%S')
+    screenshots = ROOT / 'screenshots' / ts
+    reports = ROOT / 'reports' / ts
+    screenshots.mkdir(parents=True, exist_ok=True)
+    reports.mkdir(parents=True, exist_ok=True)
+    return screenshots, reports
 SAMPLE = ROOT / 'sample_trades_TEST.csv'
 assert SAMPLE.exists(), 'sample CSV missing'
 
@@ -36,8 +44,10 @@ def call_simulate():
     return r.json()
 
 def render_and_report(resp):
+    # create timestamped output dirs
+    screenshots_dir, reports_dir = make_output_dirs()
     # save JSON
-    out_json = ROOT / 'simulate_result.json'
+    out_json = reports_dir / 'simulate_result.json'
     out_json.write_text(json.dumps(resp, indent=2), encoding='utf-8')
     print('Created', out_json)
     # render chart
@@ -49,13 +59,13 @@ def render_and_report(resp):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         render_sim_chart = getattr(module, 'render_sim_chart')
-        out_png = ROOT / 'simulate_cumulative.png'
+        out_png = screenshots_dir / 'simulate_cumulative.png'
         render_sim_chart(resp, out_png)
         print('Created', out_png)
     except Exception as e:
         print('Chart render failed:', e)
     # write report
-    out_report = ROOT / 'simulate_report.txt'
+    out_report = reports_dir / 'simulate_report.txt'
     with open(out_report, 'w', encoding='utf-8') as f:
         summary = resp.get('summary', {})
         f.write(f"total PnL: {summary.get('pnl_total')}\n")
