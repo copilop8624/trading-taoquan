@@ -44,11 +44,12 @@ jobs:
       - name: Wait for /health
         run: |
           for i in {1..60}; do
-            if curl -s http://127.0.0.1:5000/health | grep -q "healthy"; then
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/health || true)
+            if [ "$status" = "200" ]; then
               echo "Server healthy"
               exit 0
             fi
-            echo "Waiting for server... ($i)"
+            echo "Waiting for server... ($i) [status=$status]"
             sleep 1
           done
           echo "Server did not become healthy, dumping log:"
