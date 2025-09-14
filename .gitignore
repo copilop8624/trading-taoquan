@@ -4,6 +4,8 @@ simulate_report.txt
 __pycache__/
 .pytest_cache/
 .DS_Store
+screenshots/
+reports/
 
 # Ignore auto-generated simulation outputs
 simulate_result.json
