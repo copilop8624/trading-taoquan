@@ -40,6 +40,7 @@ jobs:
         run: |
           nohup python -u web_app.py >server.log 2>&1 &
           echo $! > server.pid
+          sleep 2 && cat server.log || true
 
       - name: Wait for /health
         run: |
@@ -54,6 +55,8 @@ jobs:
           done
           echo "Server did not become healthy, dumping log:"
           tail -n 50 server.log
+          echo "--- server.log (full) ---"
+          cat server.log || true
           exit 1
 
       - name: Run smoke test
