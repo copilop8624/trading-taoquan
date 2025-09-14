@@ -38,20 +38,21 @@ jobs:
 
       - name: Start web app (background)
         run: |
-          nohup python web_app.py &
+          nohup python -u web_app.py >server.log 2>&1 &
+          echo $! > server.pid
 
       - name: Wait for /health
         run: |
-          for i in {1..30}; do
-            status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/health || true)
-            if [ "$status" = "200" ]; then
+          for i in {1..60}; do
+            if curl -s http://127.0.0.1:5000/health | grep -q "healthy"; then
               echo "Server healthy"
               exit 0
             fi
             echo "Waiting for server... ($i)"
             sleep 1
           done
-          echo "Server did not become healthy" >&2
+          echo "Server did not become healthy, dumping log:"
+          tail -n 50 server.log
           exit 1
 
       - name: Run smoke test
