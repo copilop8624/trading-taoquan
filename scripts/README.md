@@ -16,6 +16,13 @@ $Env:SIM_BASE_URL = 'http://127.0.0.1:5000'
 .\.venv_new\Scripts\python.exe .\scripts\run_simulation_http_client.py
 ```
 
+Optional flags
+- Use `--tag` (or `-t`) to specify a custom folder name for outputs instead of the UTC timestamp. Example:
+
+```powershell
+.\.venv_new\Scripts\python.exe .\scripts\run_simulation_http_client.py -t my-demo-1
+```
+
 Where outputs are stored
 - Each run creates a timestamped subfolder under:
   - `screenshots/<YYYY-MM-DD_HHMMSS>/` — contains `simulate_cumulative.png`

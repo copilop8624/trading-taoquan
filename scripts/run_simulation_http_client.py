@@ -2,15 +2,19 @@ import os
 import sys
 import json
 import time
+import argparse
 from pathlib import Path
 from datetime import datetime
 import requests
 
 ROOT = Path('.')
-def make_output_dirs():
-    ts = datetime.utcnow().strftime('%Y-%m-%d_%H%M%S')
-    screenshots = ROOT / 'screenshots' / ts
-    reports = ROOT / 'reports' / ts
+def make_output_dirs(tag: str | None = None):
+    if tag:
+        name = tag
+    else:
+        name = datetime.utcnow().strftime('%Y-%m-%d_%H%M%S')
+    screenshots = ROOT / 'screenshots' / name
+    reports = ROOT / 'reports' / name
     screenshots.mkdir(parents=True, exist_ok=True)
     reports.mkdir(parents=True, exist_ok=True)
     return screenshots, reports
@@ -43,9 +47,9 @@ def call_simulate():
     r.raise_for_status()
     return r.json()
 
-def render_and_report(resp):
-    # create timestamped output dirs
-    screenshots_dir, reports_dir = make_output_dirs()
+def render_and_report(resp, tag: str | None = None):
+    # create timestamped output dirs (or use tag)
+    screenshots_dir, reports_dir = make_output_dirs(tag)
     # save JSON
     out_json = reports_dir / 'simulate_result.json'
     out_json.write_text(json.dumps(resp, indent=2), encoding='utf-8')
@@ -75,16 +79,29 @@ def render_and_report(resp):
         for d in resp.get('details', []):
             f.write(f"entryDt={d.get('entryDt')}, exitDt={d.get('exitDt')}, entryPrice={d.get('entryPrice')}, exitPrice={d.get('exitPrice')}, pnlPct={d.get('pnlPct')}, exitType={d.get('exitType')}\n")
     print('Created', out_report)
+    # Log created folder paths
+    print('Outputs written to:')
+    print(' - screenshots:', screenshots_dir)
+    print(' - reports:  ', reports_dir)
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='HTTP simulation client')
+    parser.add_argument('-t', '--tag', help='Custom output folder tag (overrides UTC timestamp)')
+    parser.add_argument('--skip-upload', action='store_true', help='Skip upload step (assumes tradelist already uploaded)')
+    args = parser.parse_args(argv)
+
     print('Uploading tradelist to', BASE)
-    up = upload_tradelist()
-    print('Upload response:', up.get('success', up))
-    time.sleep(1)
+    if not args.skip_upload:
+        up = upload_tradelist()
+        print('Upload response:', up.get('success', up))
+        time.sleep(1)
+    else:
+        print('Skipping upload step (per --skip-upload)')
+
     print('Calling simulate...')
     resp = call_simulate()
     print('Simulate returned, success=', resp.get('success'))
-    render_and_report(resp)
+    render_and_report(resp, args.tag)
 
 if __name__ == '__main__':
     main()
