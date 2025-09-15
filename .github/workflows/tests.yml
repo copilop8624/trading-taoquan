@@ -68,6 +68,12 @@ jobs:
         run: |
           alembic current
 
+      - name: Seed sample data with CLI
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: |
+          python -m src.cli seed-db --csv scripts/sample_candles.csv
+
       - name: Run pytest
         run: |
           pytest -q --maxfail=1 --disable-warnings -v
