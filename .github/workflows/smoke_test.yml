@@ -60,7 +60,7 @@ jobs:
           echo "Found at $FILE"
           export PYTHONPATH="$PYTHONPATH"
           echo "PYTHONPATH=$PYTHONPATH"
-          nohup python -u "$FILE" > server.log 2>&1 &
+          env PYTHONPATH="$PYTHONPATH" nohup python -u "$FILE" > server.log 2>&1 &
           echo $! > server.pid
           sleep 2 && echo "--- server.log (startup) ---" && cat server.log || true
 
