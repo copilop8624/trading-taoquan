@@ -1,3 +1,21 @@
+## Local Postgres + Migrations
+
+Start a local Postgres and apply migrations:
+
+PowerShell (Windows):
+
+```powershell
+./scripts/init_local_db.ps1
+```
+
+Bash (Linux/macOS):
+
+```bash
+./scripts/init_local_db.sh
+```
+
+The scripts will start the `db` service from `docker-compose.yml`, wait for Postgres to be ready, and run `alembic upgrade head` using `DATABASE_URL` from your `.env` (or construct a default from `POSTGRES_*` env vars).
+
 [![Run tests (pytest)](https://github.com/copilop8624/trading-taoquan/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/copilop8624/trading-taoquan/actions/workflows/tests.yml)
 
 Backtest Toolkit
