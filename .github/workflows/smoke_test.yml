@@ -62,6 +62,10 @@ jobs:
           echo "PYTHONPATH=$PYTHONPATH"
           env PYTHONPATH="$PYTHONPATH" nohup python -u "$FILE" > server.log 2>&1 &
           echo $! > server.pid
+          echo "--- process list (python) ---"
+          ps aux | grep python || true
+          echo "--- listening ports (ss -ltnp) ---"
+          ss -ltnp || true
           sleep 2 && echo "--- server.log (startup) ---" && cat server.log || true
 
       - name: Wait for /health
