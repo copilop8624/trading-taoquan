@@ -9,6 +9,8 @@ on:
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
 
     strategy:
       matrix:
@@ -56,6 +58,8 @@ jobs:
             exit 2
           fi
           echo "Found at $FILE"
+          export PYTHONPATH="$PYTHONPATH"
+          echo "PYTHONPATH=$PYTHONPATH"
           nohup python -u "$FILE" > server.log 2>&1 &
           echo $! > server.pid
           sleep 2 && echo "--- server.log (startup) ---" && cat server.log || true
