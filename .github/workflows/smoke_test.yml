@@ -39,19 +39,18 @@ jobs:
       - name: Start web app (background)
         working-directory: ${{ github.workspace }}
         run: |
-          echo "Locating web_app.py in workspace"
-          webapp_path=$(find "$GITHUB_WORKSPACE" -maxdepth 4 -type f -name "web_app.py" | head -n 1 || true)
-          if [ -z "$webapp_path" ]; then
-            echo "ERROR: web_app.py not found in workspace ($GITHUB_WORKSPACE)"
-            ls -la "$GITHUB_WORKSPACE" || true
+          echo "PWD:"; pwd || true
+          echo "Listing repo root:"; ls -la "$GITHUB_WORKSPACE" || true
+          echo "Find web_app.py and show its details:";
+          find . -name web_app.py -print -exec ls -la {} \; || true
+          FILE=$(find . -name web_app.py | head -n 1 || true)
+          if [ -z "$FILE" ]; then
+            echo "ERROR: web_app.py not found (workspace=$(pwd))"
             exit 2
           fi
-          echo "Found web_app.py at: $webapp_path"
-          webapp_dir=$(dirname "$webapp_path")
-          echo "Starting from dir: $webapp_dir"
-          cd "$webapp_dir"
-          nohup python -u "$webapp_path" >server.log 2>&1 &
-          echo $! > "$GITHUB_WORKSPACE/server.pid"
+          echo "Found at $FILE"
+          nohup python -u "$FILE" > server.log 2>&1 &
+          echo $! > server.pid
           sleep 2 && echo "--- server.log (startup) ---" && cat server.log || true
 
       - name: Wait for /health
