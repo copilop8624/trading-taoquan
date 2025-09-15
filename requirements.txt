@@ -1,0 +1,9 @@
+streamlit
+pandas
+numpy
+optuna
+matplotlib
+scikit-learn
+# Web server dependency required by web_app.py
+flask
+# Thêm các package khác nếu code bạn cần
