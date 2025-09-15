@@ -29,6 +29,9 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/testdb
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -59,12 +62,14 @@ jobs:
 
       - name: Run alembic migrations
         run: |
-          export DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/testdb
           alembic upgrade head
+
+      - name: Show Alembic current
+        run: |
+          alembic current
 
       - name: Run pytest
         run: |
-          export DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/testdb
           pytest -q --maxfail=1 --disable-warnings -v
         env:
           PYTHONUNBUFFERED: '1'
