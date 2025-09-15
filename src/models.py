@@ -1,28 +1,39 @@
 from datetime import datetime
+import os
 import sqlalchemy as sa
 from sqlalchemy import orm
 from sqlalchemy.ext.declarative import declarative_base
 
-# Prefer PostgreSQL JSONB/ENUM when available; fall back for SQLite tests
-try:
-    from sqlalchemy.dialects.postgresql import JSONB as PGJSONB, ENUM as PGENUM
-    JSONB = PGJSONB
-    PG_ENUM_AVAILABLE = True
-except Exception:
+# Prefer PostgreSQL JSONB/ENUM only when DATABASE_URL indicates Postgres;
+# otherwise default to sa.JSON and non-native enums so SQLite tests work.
+_DATABASE_URL = os.environ.get('DATABASE_URL', '')
+if 'postgres' in _DATABASE_URL or 'postgresql' in _DATABASE_URL:
+    try:
+        from sqlalchemy.dialects.postgresql import JSONB as PGJSONB, ENUM as PGENUM
+        JSONB = PGJSONB
+        PG_ENUM_AVAILABLE = True
+    except Exception:
+        JSONB = sa.JSON
+        PG_ENUM_AVAILABLE = False
+else:
     JSONB = sa.JSON
     PG_ENUM_AVAILABLE = False
 
 Base = declarative_base()
 
+# Helper for BigInteger primary keys that work on SQLite (use Integer there)
+BIGINT_PK = sa.BigInteger().with_variant(sa.Integer(), 'sqlite')
+
+
 
 class Symbol(Base):
     __tablename__ = 'symbols'
-    id = sa.Column(sa.BigInteger, primary_key=True, autoincrement=True)
+    id = sa.Column(BIGINT_PK, primary_key=True, autoincrement=True)
     name = sa.Column(sa.String(128), nullable=False, unique=True)
     description = sa.Column(sa.Text, nullable=True)
     base_asset = sa.Column(sa.String(64), nullable=True)
     quote_asset = sa.Column(sa.String(64), nullable=True)
-    created_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False)
+    created_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False)
 
     candles = orm.relationship('Candle', back_populates='symbol', cascade='all, delete-orphan')
 
@@ -32,12 +43,12 @@ class Symbol(Base):
 
 class FetchRun(Base):
     __tablename__ = 'fetch_runs'
-    id = sa.Column(sa.BigInteger, primary_key=True, autoincrement=True)
-    started_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False)
+    id = sa.Column(BIGINT_PK, primary_key=True, autoincrement=True)
+    started_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False)
     finished_at = sa.Column(sa.TIMESTAMP(timezone=True), nullable=True)
     source = sa.Column(sa.String(64), nullable=False)
     notes = sa.Column(sa.Text, nullable=True)
-    created_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False)
+    created_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False)
 
     candles = orm.relationship('Candle', back_populates='fetch_run', cascade='all, delete-orphan')
 
@@ -47,12 +58,12 @@ class FetchRun(Base):
 
 class Config(Base):
     __tablename__ = 'config'
-    id = sa.Column(sa.BigInteger, primary_key=True, autoincrement=True)
+    id = sa.Column(BIGINT_PK, primary_key=True, autoincrement=True)
     name = sa.Column(sa.String(128), nullable=False, unique=True)
     description = sa.Column(sa.Text, nullable=True)
     params = sa.Column(JSONB, nullable=True)
     active = sa.Column(sa.Boolean, nullable=False, server_default=sa.text('true'))
-    created_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False)
+    created_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False)
 
     scan_runs = orm.relationship('ScanRun', back_populates='config', cascade='all, delete-orphan')
 
@@ -69,13 +80,13 @@ else:
 
 class ScanRun(Base):
     __tablename__ = 'scan_runs'
-    id = sa.Column(sa.BigInteger, primary_key=True, autoincrement=True)
+    id = sa.Column(BIGINT_PK, primary_key=True, autoincrement=True)
     started_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False)
     finished_at = sa.Column(sa.TIMESTAMP(timezone=True), nullable=True)
     config_id = sa.Column(sa.BigInteger, sa.ForeignKey('config.id', ondelete='CASCADE'), nullable=False)
     status = sa.Column(scan_status_type, nullable=False, server_default='pending')
     stats = sa.Column(JSONB, nullable=True)
-    created_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False)
+    created_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False)
 
     config = orm.relationship('Config', back_populates='scan_runs')
 
@@ -85,8 +96,8 @@ class ScanRun(Base):
 
 class Candle(Base):
     __tablename__ = 'candles'
-    id = sa.Column(sa.BigInteger, primary_key=True, autoincrement=True)
-    symbol_id = sa.Column(sa.BigInteger, sa.ForeignKey('symbols.id', ondelete='CASCADE'), nullable=False)
+    id = sa.Column(BIGINT_PK, primary_key=True, autoincrement=True)
+    symbol_id = sa.Column(sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), sa.ForeignKey('symbols.id', ondelete='CASCADE'), nullable=False)
     timeframe = sa.Column(sa.String(16), nullable=False)
     open_time = sa.Column(sa.TIMESTAMP(timezone=True), nullable=False, index=True)
     close_time = sa.Column(sa.TIMESTAMP(timezone=True), nullable=True)
@@ -96,8 +107,8 @@ class Candle(Base):
     close = sa.Column(sa.Numeric, nullable=False)
     volume = sa.Column(sa.Numeric, nullable=True)
     extra = sa.Column(JSONB, nullable=True)
-    fetch_run_id = sa.Column(sa.BigInteger, sa.ForeignKey('fetch_runs.id', ondelete='CASCADE'), nullable=True)
-    created_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False)
+    fetch_run_id = sa.Column(sa.BigInteger().with_variant(sa.Integer(), 'sqlite'), sa.ForeignKey('fetch_runs.id', ondelete='CASCADE'), nullable=True)
+    created_at = sa.Column(sa.TIMESTAMP(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False)
 
     symbol = orm.relationship('Symbol', back_populates='candles')
     fetch_run = orm.relationship('FetchRun', back_populates='candles')

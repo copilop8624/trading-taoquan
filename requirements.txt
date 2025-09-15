@@ -11,3 +11,4 @@ flask
 # DB + migration dependencies
 alembic
 psycopg2-binary
+typer[all]

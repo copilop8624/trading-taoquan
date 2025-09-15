@@ -16,6 +16,33 @@ Bash (Linux/macOS):
 
 The scripts will start the `db` service from `docker-compose.yml`, wait for Postgres to be ready, and run `alembic upgrade head` using `DATABASE_URL` from your `.env` (or construct a default from `POSTGRES_*` env vars).
 
+## CLI: DB Seed & Admin
+
+There is a Typer-based CLI at `src/cli.py` for seeding and managing the database.
+
+Examples:
+
+PowerShell / Bash:
+
+```bash
+# Seed database (creates sample symbols and optionally imports sample candles)
+python -m src.cli seed-db --csv scripts/sample_candles.csv
+
+# List symbols
+python -m src.cli list-symbols
+
+# Add a symbol
+python -m src.cli add-symbol BTCJPY
+
+# Show configs
+python -m src.cli show-config
+
+# Update config
+python -m src.cli update-config mykey myvalue
+```
+
+The CLI uses `DATABASE_URL` from the environment. If not set, it falls back to `sqlite:///./data/dev.db`.
+
 [![Run tests (pytest)](https://github.com/copilop8624/trading-taoquan/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/copilop8624/trading-taoquan/actions/workflows/tests.yml)
 
 Backtest Toolkit
