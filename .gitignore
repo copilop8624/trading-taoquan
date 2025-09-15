@@ -11,3 +11,6 @@ reports/
 simulate_result.json
 simulate_cumulative.png
 simulate_report.txt
+
+# Local Postgres data volume
+data/postgres/
