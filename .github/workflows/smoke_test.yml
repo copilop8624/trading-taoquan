@@ -40,7 +40,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           echo "Starting web_app.py from $GITHUB_WORKSPACE"
-          python -u web_app.py > server.log 2>&1 &
+          nohup python -u web_app.py >server.log 2>&1 &
           echo $! > server.pid
           sleep 2 && echo "--- server.log (startup) ---" && cat server.log || true
 
