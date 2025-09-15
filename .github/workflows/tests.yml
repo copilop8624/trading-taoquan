@@ -42,3 +42,52 @@ jobs:
           pytest -q --maxfail=1 --disable-warnings -v
         env:
           PYTHONUNBUFFERED: '1'
+
+    pytest-postgres:
+      name: Run tests with Postgres (alembic + pytest)
+      runs-on: ubuntu-latest
+      services:
+        postgres:
+          image: postgres:15
+          env:
+            POSTGRES_USER: trading
+            POSTGRES_PASSWORD: trading
+            POSTGRES_DB: trading
+          ports:
+            - 5432:5432
+          options: >-
+            --health-cmd "pg_isready -U trading -d trading"
+            --health-interval 10s
+            --health-timeout 5s
+            --health-retries 5
+
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v4
+
+        - name: Set up Python
+          uses: actions/setup-python@v4
+          with:
+            python-version: 3.11
+
+        - name: Install dependencies
+          run: |
+            python -m pip install --upgrade pip
+            if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+        - name: Wait for Postgres
+          run: |
+            for i in {1..30}; do
+              pg_isready -h localhost -p 5432 -U trading -d trading && break || sleep 2
+            done
+
+        - name: Run alembic migrations
+          run: |
+            export DATABASE_URL=postgresql://trading:trading@localhost:5432/trading
+            alembic upgrade head
+
+        - name: Run pytest
+          run: |
+            export DATABASE_URL=postgresql://trading:trading@localhost:5432/trading
+            pytest -q --maxfail=1 --disable-warnings -v
+
