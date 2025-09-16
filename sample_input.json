@@ -2,6 +2,7 @@
   "task": "run_analysis",
   "parameters": {
     "symbols": ["BTCUSDT", "ETHUSDT"],
+    "tradelist_path": "sample_tradelist.csv",
     "timeframe": "1h",
     "start_date": "2023-01-01T00:00:00Z",
     "end_date": "2023-01-02T00:00:00Z",
