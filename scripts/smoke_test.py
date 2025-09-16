@@ -4,7 +4,45 @@ import time
 from pathlib import Path
 
 ROOT = Path('.').resolve()
-PY = ROOT / '.venv_new' / 'Scripts' / 'python.exe'
+# Determine a Python executable to use. Prefer environment override, then system python,
+# then fallback to a local `.venv_new` (Windows or Unix layout). This makes the script
+# robust in CI where a project virtualenv may not exist.
+import shutil
+
+def find_python():
+    # Allow explicit override
+    env_py = os.environ.get('PYTHON')
+    if env_py:
+        return env_py
+    # Prefer the Python used to run this script (if available)
+    try:
+        import sys
+        if sys.executable:
+            return sys.executable
+    except Exception:
+        pass
+    # Fallback to PATH lookup
+    for name in ('python', 'python3'):
+        p = shutil.which(name)
+        if p:
+            return p
+    # Fallback to .venv_new layout — prefer platform-appropriate layout
+    if os.name == 'nt':
+        # Windows: Scripts\python.exe
+        v_primary = ROOT / '.venv_new' / 'Scripts' / 'python.exe'
+        v_secondary = ROOT / '.venv_new' / 'bin' / 'python'
+    else:
+        # Unix-like: bin/python
+        v_primary = ROOT / '.venv_new' / 'bin' / 'python'
+        v_secondary = ROOT / '.venv_new' / 'Scripts' / 'python.exe'
+
+    if v_primary.exists():
+        return str(v_primary)
+    if v_secondary.exists():
+        return str(v_secondary)
+    raise SystemExit('No python executable found; set PYTHON env or install python')
+
+PY = find_python()
 TAG = 'smoke_test'
 
 # Start server
