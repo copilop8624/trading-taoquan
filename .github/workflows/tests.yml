@@ -107,20 +107,7 @@ jobs:
             exit 1
           fi
 
-      - name: Check symbols count with psql
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
-        run: |
-          echo "Installing psql client..."
-          sudo apt-get update -y && sudo apt-get install -y postgresql-client
-          echo "Checking symbols count directly in DB..."
-          psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM symbols;"
-          count=$(psql -t -A "$DATABASE_URL" -c "SELECT COUNT(*) FROM symbols;")
-          echo "Symbols count: $count"
-          if [ "$count" -eq 0 ]; then
-            echo "❌ No symbols found in DB!"
-            exit 1
-          fi
+      # Removed direct-URL psql check; using PG* env vars check below
 
       - name: Parse DATABASE_URL for psql
         run: |
