@@ -129,22 +129,26 @@ jobs:
 
       - name: Check symbols count with psql (env)
         run: |
-          echo "Checking symbols count directly in DB using PG* env vars (with retries)..."
-          count=0
           for i in 1 2 3; do
-            echo "psql attempt $i..."
-            count=$(psql -t -A -c "SELECT COUNT(*) FROM symbols;") || true
+            echo "🔄 Attempt $i to count symbols..."
+            output=$(psql -t -A -c "SELECT COUNT(*) FROM symbols;" 2>&1)
+            echo "psql output: $output"
+
+            count=$(echo "$output" | grep -E '^[0-9]+$' || true)
+
             if [ -n "$count" ] && [ "$count" -gt 0 ]; then
               echo "✅ Symbols count: $count"
               break
             fi
-            echo "Attempt $i failed or zero count, sleeping 3s before retry..."
-            sleep 3
+
+            if [ "$i" -lt 3 ]; then
+              echo "Retrying in 3s..."
+              sleep 3
+            else
+              echo "❌ No symbols found after 3 attempts"
+              exit 1
+            fi
           done
-          if [ -z "$count" ] || [ "$count" -eq 0 ]; then
-            echo "❌ No symbols found in DB after retries!"
-            exit 1
-          fi
 
       - name: Run pytest
         run: |
