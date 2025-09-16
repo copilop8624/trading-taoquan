@@ -122,6 +122,33 @@ jobs:
             exit 1
           fi
 
+      - name: Parse DATABASE_URL for psql
+        run: |
+          python3 - <<'EOF'
+          import os
+          from urllib.parse import urlparse
+          url = os.environ.get('DATABASE_URL', '').replace('+psycopg2', '')
+          p = urlparse(url)
+          print(f"PGHOST={p.hostname}")
+          print(f"PGPORT={p.port or 5432}")
+          print(f"PGUSER={p.username}")
+          print(f"PGPASSWORD={p.password}")
+          print(f"PGDATABASE={p.path.lstrip('/')}")
+          EOF >> $GITHUB_ENV
+
+      - name: Check symbols count with psql (env)
+        run: |
+          echo "Installing psql client..."
+          sudo apt-get update -y && sudo apt-get install -y postgresql-client
+          echo "Checking symbols count directly in DB using PG* env vars..."
+          psql -c "SELECT COUNT(*) FROM symbols;"
+          count=$(psql -t -A -c "SELECT COUNT(*) FROM symbols;")
+          echo "Symbols count: $count"
+          if [ "$count" -eq 0 ]; then
+            echo "❌ No symbols found in DB!"
+            exit 1
+          fi
+
       - name: Run pytest
         run: |
           pytest -q --maxfail=1 --disable-warnings -v
