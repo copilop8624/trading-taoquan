@@ -132,21 +132,21 @@ jobs:
           set -euo pipefail
           : > psql_debug.log
           for i in 1 2 3; do
-            echo "🔄 Attempt $i to count symbols..." | tee -a psql_debug.log
-            output=$(psql -t -A -c "SELECT COUNT(*) FROM symbols;" 2>&1 | tee -a psql_debug.log)
+            echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") 🔄 Attempt $i to count symbols..." | tee -a psql_debug.log
+            output=$(psql -t -A -c "SELECT COUNT(*) FROM symbols;" 2>&1 | sed "s/^/$(date -u +"%Y-%m-%dT%H:%M:%SZ") /" | tee -a psql_debug.log)
 
             count=$(echo "$output" | grep -E '^[0-9]+$' || true)
 
             if [ -n "$count" ] && [ "$count" -gt 0 ]; then
-              echo "✅ Symbols count: $count" | tee -a psql_debug.log
+              echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") ✅ Symbols count: $count" | tee -a psql_debug.log
               break
             fi
 
             if [ "$i" -lt 3 ]; then
-              echo "Retrying in 3s..." | tee -a psql_debug.log
+              echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") Retrying in 3s..." | tee -a psql_debug.log
               sleep 3
             else
-              echo "❌ No symbols found after 3 attempts" | tee -a psql_debug.log
+              echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") ❌ No symbols found after 3 attempts" | tee -a psql_debug.log
               exit 1
             fi
           done
