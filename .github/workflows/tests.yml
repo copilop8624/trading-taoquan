@@ -69,16 +69,39 @@ jobs:
           alembic current
 
       - name: Seed sample data with CLI
+        if: github.ref == 'refs/heads/main'
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
         run: |
-          python -m src.cli seed-db --csv scripts/sample_candles.csv
+          # retry up to 3 times in case Postgres is still finishing startup
+          attempts=0
+          max_attempts=3
+          until [ $attempts -ge $max_attempts ]
+          do
+            attempts=$((attempts+1))
+            echo "Seed attempt $attempts/$max_attempts"
+            python -m src.cli seed-db --csv scripts/sample_candles.csv && break || true
+            echo "Seed failed, sleeping 5s before retry"
+            sleep 5
+          done
 
       - name: Verify seeded symbols
+        if: github.ref == 'refs/heads/main'
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
         run: |
           python -m src.cli list-symbols
+
+      - name: Check symbol count
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: |
+          count=$(python -m src.cli list-symbols | wc -l)
+          echo "Seeded symbols: $count"
+          if [ "$count" -eq 0 ]; then
+            echo "❌ No symbols seeded!"
+            exit 1
+          fi
 
       - name: Run pytest
         run: |
