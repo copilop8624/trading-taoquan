@@ -12,3 +12,4 @@ flask
 alembic
 psycopg2-binary
 typer[all]
+pytest
