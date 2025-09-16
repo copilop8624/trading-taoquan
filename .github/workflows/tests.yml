@@ -74,6 +74,12 @@ jobs:
         run: |
           python -m src.cli seed-db --csv scripts/sample_candles.csv
 
+      - name: Verify seeded symbols
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: |
+          python -m src.cli list-symbols
+
       - name: Run pytest
         run: |
           pytest -q --maxfail=1 --disable-warnings -v
