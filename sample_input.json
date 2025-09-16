@@ -1,0 +1,14 @@
+{
+  "task": "run_analysis",
+  "parameters": {
+    "symbols": ["BTCUSDT", "ETHUSDT"],
+    "timeframe": "1h",
+    "start_date": "2023-01-01T00:00:00Z",
+    "end_date": "2023-01-02T00:00:00Z",
+    "max_items": 100
+  },
+  "options": {
+    "verbose": true,
+    "save_intermediate": true
+  }
+}
