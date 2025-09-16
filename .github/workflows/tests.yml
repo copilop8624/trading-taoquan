@@ -73,16 +73,17 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
         run: |
-          # retry up to 3 times in case Postgres is still finishing startup
-          attempts=0
-          max_attempts=3
-          until [ $attempts -ge $max_attempts ]
-          do
-            attempts=$((attempts+1))
-            echo "Seed attempt $attempts/$max_attempts"
-            python -m src.cli seed-db --csv scripts/sample_candles.csv && break || true
-            echo "Seed failed, sleeping 5s before retry"
-            sleep 5
+          # try up to 3 attempts; propagate non-zero exit on final attempt
+          for i in 1 2 3; do
+            echo "Seeding attempt $i..."
+            python -m src.cli seed-db --csv scripts/sample_candles.csv && break
+            if [ $i -lt 3 ]; then
+              echo "Retrying in 5s..."
+              sleep 5
+            else
+              echo "❌ All seed attempts failed"
+              exit 1
+            fi
           done
 
       - name: Verify seeded symbols
@@ -90,6 +91,9 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
         run: |
+          echo "=== alembic current ==="
+          alembic current
+          echo "=== symbol list ==="
           python -m src.cli list-symbols
 
       - name: Check symbol count
