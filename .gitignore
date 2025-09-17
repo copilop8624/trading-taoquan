@@ -1,16 +1,97 @@
-﻿simulate_result.json
-simulate_cumulative.png
-simulate_report.txt
+﻿# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 .pytest_cache/
+
+# Virtual environments
+env/
+venv/
+.venv/
+.venv_new/
+ENV/
+env.bak/
+venv.bak/
+Scripts/
+Lib/
+Include/
+pyvenv.cfg
+
+# Flask
+instance/
+.webassets-cache
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+*.out
+*.err
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.#*
+#*#
+
+# Backup files
+*.bak
+*.backup
+backup_*/
+BACKUP_*/
+
+# Test files
+test_*.py
+*_test.py
+tests/tmp_*
+
+# Output/Results
+output_*/
+results_*/
+*.zip
+artifacts/
 screenshots/
 reports/
 
-# Ignore auto-generated simulation outputs
+# Simulation outputs
 simulate_result.json
 simulate_cumulative.png
 simulate_report.txt
+
+# Data files (keep some essential ones tracked)
+candlestick_data.db
+strategy_management.db
+backtest_results.db
+# Exclude large CSV files
+*.csv
+candles/
 
 # Local Postgres data volume
 data/postgres/

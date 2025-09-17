@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🧪 Frontend Test Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .test-section { background: white; padding: 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .test-section h3 { color: #007bff; margin-top: 0; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 4px; font-family: monospace; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        input, select, button { margin: 5px; padding: 8px; }
+        button { background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Frontend Functions Test</h1>
+    
+    <div class="test-section">
+        <h3>1. 📊 API Endpoints Test</h3>
+        <button onclick="testAPIs()">🔍 Test All APIs</button>
+        <div id="apiResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. 🧮 Parameter Range Calculator</h3>
+        <div>
+            <label>SL Min:</label> <input type="number" id="sl_min" value="0.5" step="0.1">
+            <label>Max:</label> <input type="number" id="sl_max" value="3.0" step="0.1">
+            <label>Step:</label> <input type="number" id="sl_step" value="0.1" step="0.01">
+        </div>
+        <div>
+            <label>BE Min:</label> <input type="number" id="be_min" value="0.2" step="0.1">
+            <label>Max:</label> <input type="number" id="be_max" value="1.5" step="0.1">
+            <label>Step:</label> <input type="number" id="be_step" value="0.05" step="0.01">
+        </div>
+        <div>
+            <label>TS Min:</label> <input type="number" id="ts_min" value="0.1" step="0.1">
+            <label>Max:</label> <input type="number" id="ts_max" value="1.0" step="0.1">
+            <label>Step:</label> <input type="number" id="ts_step" value="0.02" step="0.01">
+        </div>
+        <button onclick="testCalculateCombinations()">🧮 Calculate Combinations</button>
+        <div id="combinationsResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. ✅ Parameter Validation</h3>
+        <button onclick="testValidation()">🛡️ Test Validation Logic</button>
+        <div id="validationResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>4. 💡 Smart Range Suggestions</h3>
+        <select id="testSymbol">
+            <option value="BTCUSDT">BTCUSDT</option>
+            <option value="ETHUSDT">ETHUSDT</option>
+            <option value="BOMAUSDT">BOMAUSDT</option>
+        </select>
+        <select id="testTimeframe">
+            <option value="5m">5m</option>
+            <option value="30m">30m</option>
+            <option value="60m">60m</option>
+            <option value="240m">240m</option>
+        </select>
+        <button onclick="testSmartSuggestions()">💡 Get Smart Suggestions</button>
+        <div id="suggestionsResult"></div>
+    </div>
+
+    <script>
+        // Test API Endpoints
+        async function testAPIs() {
+            const results = document.getElementById('apiResults');
+            results.innerHTML = '<div class="info">🔄 Testing APIs...</div>';
+            
+            const tests = [
+                {name: 'Strategies API', url: '/list_strategies'},
+                {name: 'Candle Files API', url: '/list_candle_files'}
+            ];
+            
+            let allResults = '';
+            
+            for (const test of tests) {
+                try {
+                    const response = await fetch(`http://localhost:5000${test.url}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        const count = test.url.includes('strategies') ? data.total : data.files.length;
+                        allResults += `<div class="success">✅ ${test.name}: ${count} items loaded</div>`;
+                    } else {
+                        allResults += `<div class="error">❌ ${test.name}: Failed</div>`;
+                    }
+                } catch (error) {
+                    allResults += `<div class="error">❌ ${test.name}: ${error.message}</div>`;
+                }
+            }
+            
+            results.innerHTML = allResults;
+        }
+        
+        // Test Calculate Combinations
+        function testCalculateCombinations() {
+            try {
+                const sl_min = parseFloat(document.getElementById('sl_min').value);
+                const sl_max = parseFloat(document.getElementById('sl_max').value);
+                const sl_step = parseFloat(document.getElementById('sl_step').value);
+                
+                const be_min = parseFloat(document.getElementById('be_min').value);
+                const be_max = parseFloat(document.getElementById('be_max').value);
+                const be_step = parseFloat(document.getElementById('be_step').value);
+                
+                const ts_min = parseFloat(document.getElementById('ts_min').value);
+                const ts_max = parseFloat(document.getElementById('ts_max').value);
+                const ts_step = parseFloat(document.getElementById('ts_step').value);
+                
+                // Calculate number of steps for each parameter
+                const sl_steps = Math.floor((sl_max - sl_min) / sl_step) + 1;
+                const be_steps = Math.floor((be_max - be_min) / be_step) + 1;
+                const ts_steps = Math.floor((ts_max - ts_min) / ts_step) + 1;
+                
+                const totalCombinations = sl_steps * be_steps * ts_steps;
+                const estimatedMinutes = Math.ceil(totalCombinations * 0.5);
+                
+                document.getElementById('combinationsResult').innerHTML = `
+                    <div class="success">
+                        ✅ Calculation successful!<br>
+                        SL steps: ${sl_steps}, BE steps: ${be_steps}, TS steps: ${ts_steps}<br>
+                        <strong>Total combinations: ${totalCombinations.toLocaleString()}</strong><br>
+                        Estimated time: ~${estimatedMinutes} minutes
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('combinationsResult').innerHTML = `
+                    <div class="error">❌ Calculation error: ${error.message}</div>
+                `;
+            }
+        }
+        
+        // Test Validation
+        function testValidation() {
+            const sl_min = parseFloat(document.getElementById('sl_min').value);
+            const sl_max = parseFloat(document.getElementById('sl_max').value);
+            const be_min = parseFloat(document.getElementById('be_min').value);
+            const be_max = parseFloat(document.getElementById('be_max').value);
+            const ts_min = parseFloat(document.getElementById('ts_min').value);
+            const ts_max = parseFloat(document.getElementById('ts_max').value);
+            
+            let warnings = [];
+            
+            // Check range validity
+            if (sl_min >= sl_max) warnings.push('⚠️ SL Min phải nhỏ hơn SL Max');
+            if (be_min >= be_max) warnings.push('⚠️ BE Min phải nhỏ hơn BE Max');
+            if (ts_min >= ts_max) warnings.push('⚠️ TS Min phải nhỏ hơn TS Max');
+            
+            // Check logic constraints
+            if (be_max >= sl_min) warnings.push('⚠️ BE Max phải nhỏ hơn SL Min');
+            if (ts_max >= be_min) warnings.push('⚠️ TS Max phải nhỏ hơn BE Min');
+            
+            // Check reasonable ranges
+            if (sl_max > 10) warnings.push('⚠️ SL Max quá cao (>10%)');
+            if (ts_min < 0.01) warnings.push('⚠️ TS Min quá thấp (<0.01%)');
+            
+            const resultDiv = document.getElementById('validationResult');
+            
+            if (warnings.length > 0) {
+                resultDiv.innerHTML = `<div class="error">❌ Validation failed:<br>${warnings.join('<br>')}</div>`;
+            } else {
+                resultDiv.innerHTML = `<div class="success">✅ All parameter ranges are valid!</div>`;
+            }
+        }
+        
+        // Test Smart Suggestions
+        function testSmartSuggestions() {
+            const symbol = document.getElementById('testSymbol').value;
+            const timeframe = document.getElementById('testTimeframe').value;
+            
+            // Smart range suggestions based on symbol and timeframe
+            let ranges = getParameterRangeSuggestions(symbol, timeframe);
+            
+            document.getElementById('suggestionsResult').innerHTML = `
+                <div class="success">
+                    ✅ Smart suggestions for ${symbol} ${timeframe}:<br>
+                    <strong>SL:</strong> ${ranges.sl.min}% - ${ranges.sl.max}% (step ${ranges.sl.step}%) - ${ranges.sl.reason}<br>
+                    <strong>BE:</strong> ${ranges.be.min}% - ${ranges.be.max}% (step ${ranges.be.step}%) - ${ranges.be.reason}<br>
+                    <strong>TS:</strong> ${ranges.ts.min}% - ${ranges.ts.max}% (step ${ranges.ts.step}%) - ${ranges.ts.reason}
+                </div>
+            `;
+        }
+        
+        // Get Parameter Range Suggestions (copied from main app)
+        function getParameterRangeSuggestions(symbol, timeframe) {
+            // Base range suggestions
+            let ranges = {
+                sl: {min: 0.5, max: 2.5, step: 0.1, reason: "Standard volatility"},
+                be: {min: 0.2, max: 1.2, step: 0.05, reason: "Conservative BE range"},
+                ts: {min: 0.1, max: 0.8, step: 0.02, reason: "Tight trailing range"}
+            };
+            
+            // Adjust for volatility based on symbol
+            if (symbol.includes('BTC')) {
+                ranges.sl = {min: 1.0, max: 4.0, step: 0.2, reason: "BTC high volatility"};
+                ranges.be = {min: 0.5, max: 2.0, step: 0.1, reason: "BTC BE range"};
+                ranges.ts = {min: 0.2, max: 1.2, step: 0.05, reason: "BTC TS range"};
+            } else if (symbol.includes('ETH')) {
+                ranges.sl = {min: 0.8, max: 3.0, step: 0.15, reason: "ETH medium volatility"};
+                ranges.be = {min: 0.3, max: 1.5, step: 0.08, reason: "ETH BE range"};
+                ranges.ts = {min: 0.15, max: 1.0, step: 0.03, reason: "ETH TS range"};
+            } else if (symbol.includes('USDT') && !symbol.includes('BTC') && !symbol.includes('ETH')) {
+                ranges.sl = {min: 0.3, max: 2.0, step: 0.08, reason: "Altcoin moderate volatility"};
+                ranges.be = {min: 0.1, max: 1.0, step: 0.04, reason: "Altcoin BE range"};
+                ranges.ts = {min: 0.05, max: 0.6, step: 0.02, reason: "Altcoin TS range"};
+            }
+            
+            // Adjust for timeframe
+            if (timeframe.includes('5') || timeframe.includes('15')) {
+                // Short timeframes - tighter ranges
+                ranges.sl.min *= 0.6; ranges.sl.max *= 0.7; ranges.sl.step *= 0.5;
+                ranges.be.min *= 0.6; ranges.be.max *= 0.7; ranges.be.step *= 0.5;
+                ranges.ts.min *= 0.6; ranges.ts.max *= 0.7; ranges.ts.step *= 0.5;
+                ranges.sl.reason += " + Short TF";
+            } else if (timeframe.includes('240') || timeframe.includes('1440')) {
+                // Long timeframes - wider ranges
+                ranges.sl.min *= 1.2; ranges.sl.max *= 1.4; ranges.sl.step *= 1.2;
+                ranges.be.min *= 1.2; ranges.be.max *= 1.4; ranges.be.step *= 1.2;
+                ranges.ts.min *= 1.2; ranges.ts.max *= 1.4; ranges.ts.step *= 1.2;
+                ranges.sl.reason += " + Long TF";
+            }
+            
+            // Round to reasonable precision
+            Object.keys(ranges).forEach(param => {
+                ranges[param].min = Math.round(ranges[param].min * 100) / 100;
+                ranges[param].max = Math.round(ranges[param].max * 100) / 100;
+                ranges[param].step = Math.round(ranges[param].step * 100) / 100;
+            });
+            
+            return ranges;
+        }
+        
+        // Auto-run API test on page load
+        window.onload = function() {
+            testAPIs();
+        };
+    </script>
+</body>
+</html>

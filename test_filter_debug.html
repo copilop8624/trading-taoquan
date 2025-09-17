@@ -1,0 +1,132 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Filter Test Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { border: 1px solid #ccc; padding: 15px; margin: 10px 0; }
+        .hidden { display: none !important; background: red !important; }
+        .visible { display: table-row !important; background: lightgreen !important; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .filter-controls { margin: 10px 0; }
+        select { padding: 5px; margin: 5px; }
+        #debug { background: #f0f0f0; padding: 10px; margin: 10px 0; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Strategy Filter Test</h1>
+    
+    <div class="test-section">
+        <h3>Filter Controls</h3>
+        <div class="filter-controls">
+            <select id="symbolFilter">
+                <option value="">All Symbols</option>
+                <option value="SAGAUSDT">SAGAUSDT</option>
+                <option value="BTCUSDT">BTCUSDT</option>
+                <option value="BOMEUSDT">BOMEUSDT</option>
+            </select>
+            <button onclick="testFilter()">🧪 Test Filter</button>
+            <button onclick="resetFilter()">🔄 Reset</button>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Strategy Table</h3>
+        <table>
+            <thead>
+                <tr><th>Strategy</th><th>Symbol</th><th>Timeframe</th><th>Status</th></tr>
+            </thead>
+            <tbody id="strategiesTableBody">
+                <tr data-symbol="SAGAUSDT" data-strategy="BS4">
+                    <td>BS4</td><td>SAGAUSDT</td><td>30m</td><td class="status">VISIBLE</td>
+                </tr>
+                <tr data-symbol="BTCUSDT" data-strategy="TRADELIST">
+                    <td>TRADELIST</td><td>BTCUSDT</td><td>60m</td><td class="status">VISIBLE</td>
+                </tr>
+                <tr data-symbol="BOMEUSDT" data-strategy="BS4">
+                    <td>BS4</td><td>BOMEUSDT</td><td>240m</td><td class="status">VISIBLE</td>
+                </tr>
+                <tr data-symbol="ETHUSDT" data-strategy="LONG_SHORT">
+                    <td>LONG_SHORT</td><td>ETHUSDT</td><td>5m</td><td class="status">VISIBLE</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="test-section">
+        <h3>Debug Output</h3>
+        <div id="debug">Ready for testing...</div>
+    </div>
+
+    <script>
+        function log(message) {
+            const debug = document.getElementById('debug');
+            const timestamp = new Date().toLocaleTimeString();
+            debug.textContent += `[${timestamp}] ${message}\n`;
+            console.log(message);
+        }
+        
+        function filterStrategies() {
+            const symbolFilter = document.getElementById('symbolFilter').value.toLowerCase();
+            log(`🔍 Filter triggered with symbol: "${symbolFilter}"`);
+            
+            const rows = document.querySelectorAll('#strategiesTableBody tr');
+            log(`📊 Found ${rows.length} rows to filter`);
+            
+            let visibleCount = 0;
+            rows.forEach((row, index) => {
+                const symbol = row.getAttribute('data-symbol');
+                const strategy = row.getAttribute('data-strategy');
+                
+                if (!symbol || !strategy) {
+                    log(`⚠️ Row ${index} missing data: symbol=${symbol}, strategy=${strategy}`);
+                    return;
+                }
+                
+                const symbolMatch = !symbolFilter || symbol.toLowerCase().includes(symbolFilter);
+                const isVisible = symbolMatch;
+                
+                const statusCell = row.querySelector('.status');
+                if (isVisible) {
+                    row.style.display = '';
+                    row.classList.remove('hidden');
+                    row.classList.add('visible');
+                    if (statusCell) statusCell.textContent = 'VISIBLE';
+                    visibleCount++;
+                    log(`✅ Row ${index}: ${symbol}-${strategy} → VISIBLE`);
+                } else {
+                    row.style.display = 'none';
+                    row.classList.remove('visible');
+                    row.classList.add('hidden');
+                    if (statusCell) statusCell.textContent = 'HIDDEN';
+                    log(`❌ Row ${index}: ${symbol}-${strategy} → HIDDEN`);
+                }
+            });
+            
+            log(`🎯 Filter complete: ${visibleCount}/${rows.length} rows visible`);
+        }
+        
+        function testFilter() {
+            log('\n🧪 STARTING FILTER TEST');
+            document.getElementById('symbolFilter').value = 'SAGAUSDT';
+            filterStrategies();
+        }
+        
+        function resetFilter() {
+            log('\n🔄 RESETTING FILTER');
+            document.getElementById('symbolFilter').value = '';
+            filterStrategies();
+        }
+        
+        // Add event listener
+        document.addEventListener('DOMContentLoaded', () => {
+            log('✅ Page loaded, adding event listeners');
+            document.getElementById('symbolFilter').addEventListener('change', filterStrategies);
+            log('✅ Event listener added to symbolFilter');
+        });
+    </script>
+</body>
+</html>
+        

@@ -1,0 +1,37 @@
+name: Demo Run and Upload
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  run-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run demo script
+        run: |
+          mkdir -p output_demo
+          python -u ver_final_AI.py --input sample_input.json --output output_demo
+
+      - name: List output
+        run: ls -la output_demo || true
+
+      - name: Upload demo artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-results-${{ github.run_id }}
+          path: output_demo

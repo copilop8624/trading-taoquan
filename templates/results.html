@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <title>Results Viewer</title>
+  </head>
+  <body class="bg-light">
+    <div class="container py-4">
+      <h1 class="mb-4">Backtest Results</h1>
+      <div id="results-message" class="mb-2 text-muted"></div>
+      <table class="table table-sm table-striped" id="results-table">
+        <thead><tr><th>Filename</th><th>Symbol</th><th>Timeframe</th><th>Strategy</th><th>Rows</th><th>Last Modified</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <h3 class="mt-4">Preview (first 20 rows)</h3>
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div></div>
+        <div><button id="results-reset-options" class="btn btn-sm btn-outline-danger">Reset Options</button></div>
+      </div>
+      <div id="preview-area" class="mb-3"></div>
+
+      <h3 class="mt-4">PnL Chart</h3>
+      <div class="d-flex align-items-center mb-2">
+        <div>
+          <button id="res-1d" class="btn btn-sm btn-outline-primary me-2">1 day</button>
+          <button id="res-7d" class="btn btn-sm btn-outline-primary me-2">7 days</button>
+          <button id="res-all" class="btn btn-sm btn-outline-primary me-2">All</button>
+        </div>
+        <small class="text-muted ms-3">Use Ctrl+Scroll to zoom Y-axis; drag to pan X-axis; Reset Zoom to restore</small>
+      </div>
+      <canvas id="pnlChart" height="150"></canvas>
+    </div>
+
+    <script>
+      async function loadList(){
+        const resp = await fetch('/api/results_list');
+        const data = await resp.json();
+        const tbody = document.querySelector('#results-table tbody');
+        tbody.innerHTML = '';
+        if(!data.results || data.results.length===0){
+          document.getElementById('results-message').innerHTML = '<div class="alert alert-info">No result CSVs found. Upload a tradelist from the <a href="/">Dashboard</a>.</div>';
+          return;
+        }
+        data.results.forEach(r=>{
+          const tr = document.createElement('tr');
+          const lm = r.last_modified ? new Date(r.last_modified).toLocaleString() : '';
+          tr.innerHTML = `
+            <td>${r.filename}</td>
+            <td>${r.symbol}</td>
+            <td>${r.timeframe}</td>
+            <td>${r.strategy||''}</td>
+            <td>${r.rows}</td>
+            <td>${lm}</td>
+            <td>
+              <a class="btn btn-sm btn-outline-secondary" href="/results/download/${encodeURIComponent(r.filename)}">Download</a>
+              <button class="btn btn-sm btn-primary view-btn" data-filename="${r.filename}">View</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        document.querySelectorAll('.view-btn').forEach(btn=>{
+          btn.addEventListener('click', ()=>{
+            const filename = btn.getAttribute('data-filename');
+            loadPreviewAndChart(filename);
+          });
+        });
+      }
+
+  let chart = null;
+      function renderPreviewTable(rows, labels){
+        const area = document.getElementById('preview-area');
+        if(!rows || rows.length===0){ area.innerHTML = '<div class="text-muted">No preview available</div>'; return; }
+          const cols = Object.keys(rows[0]);
+          // add Dropped column if labels provided
+          const hasLabels = Array.isArray(labels) && labels.length === rows.length;
+          if(!cols.includes('Dropped from chart')) cols.push('Dropped from chart');
+          const tbl = document.createElement('table'); tbl.className='table table-sm table-bordered';
+          const thead = document.createElement('thead');
+          thead.innerHTML = '<tr>'+cols.map(c=>{ if(c==='Dropped from chart') return `<th title="Rows without valid timestamps are excluded from the chart series">${c} &#9432;</th>`; return `<th>${c}</th>` }).join('')+'</tr>';
+          const tbody = document.createElement('tbody');
+          rows.forEach(r=>{
+            const tr = document.createElement('tr');
+            tr.innerHTML = cols.map((c,ci)=>{
+              const raw = r[c];
+              if(raw === undefined || raw === null) return '<td></td>';
+              // format date-like columns
+              if(/date|time|timestamp/i.test(c)){
+                const d = new Date(raw);
+                if(!isNaN(d)){
+                  const YYYY = d.getFullYear(); const MM = String(d.getMonth()+1).padStart(2,'0'); const DD = String(d.getDate()).padStart(2,'0');
+                  const hh = String(d.getHours()).padStart(2,'0'); const mm = String(d.getMinutes()).padStart(2,'0');
+                  return `<td>${YYYY}-${MM}-${DD} ${hh}:${mm}</td>`;
+                }
+              }
+              // numeric formatting
+              const n = Number(raw);
+              if(!isNaN(n)) return `<td>${n.toFixed(2)}</td>`;
+              return `<td>${raw}</td>`;
+            }).join('');
+            // set Dropped column content and style if applicable
+            if(hasLabels){
+              const idx = Array.from(tbody.children).length;
+              if(!labels[idx] || labels[idx] === null){
+                tr.classList.add('dropped-row');
+                const last = tr.lastElementChild; if(last){ last.innerText = 'missing/invalid date'; last.title = 'Excluded from chart: missing/invalid timestamp'; }
+              }
+            }
+            // highlight pnl-like columns
+            const pnlKeys = ['pl','pnl','pnl_usd','pnl_pct','profit'];
+            for(const k of pnlKeys){ if(r[k] !== undefined){ const val = Number(r[k]); if(!isNaN(val)){ if(val>0) tr.style.backgroundColor='rgba(0,255,0,0.04)'; else if(val<0) tr.style.backgroundColor='rgba(255,0,0,0.04)'; break; } } }
+            tbody.appendChild(tr);
+          });
+          tbl.appendChild(thead); tbl.appendChild(tbody);
+        area.innerHTML = '';
+        area.appendChild(tbl);
+      }
+
+      async function loadPreviewAndChart(filename){
+        document.getElementById('results-message').innerText = `Loading ${filename}...`;
+        const resp = await fetch(`/results/${encodeURIComponent(filename)}`);
+        const data = await resp.json();
+        if(data.error){ document.getElementById('results-message').innerText = `Error: ${data.error}`; return; }
+  renderPreviewTable(data.preview, detail.labels);
+
+        // load cumulative PnL
+        const resp2 = await fetch('/_result/'+encodeURIComponent(filename));
+        const detail = await resp2.json();
+        const cum = detail.cumulative || [];
+        const labels = detail.labels && detail.labels.length === cum.length ? detail.labels.map(s=> new Date(s)) : cum.map((_,i)=>i+1);
+        const ctx = document.getElementById('pnlChart').getContext('2d');
+        if(chart) chart.destroy();
+        chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              { label: 'Cumulative PnL', data: cum, borderColor: 'blue', tension: 0.1, yAxisID: 'y' },
+              { label: 'Drawdown', data: detail.drawdown || [], borderColor: 'red', tension: 0.1, yAxisID: 'y2' },
+              { label: 'Winrate %', data: detail.winrate || [], borderColor: 'green', tension: 0.1, yAxisID: 'y3', hidden: detail.winrate? false: true }
+            ]
+          },
+          options: {
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              zoom: {
+                zoom: {
+                  wheel: { enabled: true, modifierKey: 'ctrl' },
+                  mode: 'y'
+                },
+                pan: {
+                  enabled: true,
+                  mode: 'x',
+                }
+              }
+            },
+            scales: {
+              y: { type: 'linear', position: 'left' },
+              y2: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } },
+              y3: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks:{ callback: v=> v + '%' } },
+              x: { type: detail.labels? 'time' : 'category', time: { tooltipFormat: 'yyyy-MM-dd HH:mm' } }
+            }
+          }
+        });
+
+        // add reset button
+        const msg = document.getElementById('results-message');
+        const resetBtnId = 'reset-zoom-btn';
+        if(!document.getElementById(resetBtnId)){
+          const btn = document.createElement('button'); btn.id = resetBtnId; btn.className='btn btn-sm btn-outline-secondary ms-2'; btn.innerText='Reset Zoom';
+          btn.addEventListener('click', ()=>{ if(chart) chart.resetZoom(); });
+          msg.appendChild(btn);
+        }
+        // attach presets
+        document.getElementById('res-1d').onclick = ()=>{ applyRange(chart, '1d'); };
+        document.getElementById('res-7d').onclick = ()=>{ applyRange(chart, '7d'); };
+        document.getElementById('res-all').onclick = ()=>{ chart.resetZoom(); };
+
+        function applyRange(chart, preset){
+          try{
+            if(!chart) return;
+            const labels = chart.data.labels;
+            if(labels && labels.length>0 && labels[0] instanceof Date){
+              const times = labels.map(d=>d.getTime());
+              const maxT = Math.max(...times);
+              let minT = Math.min(...times);
+              if(preset === '1d') minT = maxT - 24*3600*1000;
+              else if(preset === '7d') minT = maxT - 7*24*3600*1000;
+              chart.zoomScale('x', {min: minT, max: maxT});
+            }else{
+              const len = labels.length;
+              if(preset === '1d'){
+                const start = Math.max(0, len - 1440);
+                chart.zoomScale('x', {min: start, max: len});
+              }else if(preset === '7d'){
+                const start = Math.max(0, len - 10080);
+                chart.zoomScale('x', {min: start, max: len});
+              }
+            }
+          }catch(e){console.warn('applyRange error', e)}
+        }
+        document.getElementById('results-message').innerText = '';
+
+        // reset options handler (clear per-symbol keys if filename encodes symbol)
+        try{
+          const resetBtn = document.getElementById('results-reset-options');
+          resetBtn.onclick = ()=>{
+            // attempt to parse symbol from filename like SYMBOL-TF-strategy.csv
+            const parts = filename.split(/[._-]/);
+            const symbol = parts[0];
+            if(symbol){ try{ localStorage.removeItem(`parseMode_${symbol}`); localStorage.removeItem(`dropIncomplete_${symbol}`); }catch(e){console.warn('reset options results', e)} }
+            // re-render preview (defaults apply client-side if needed)
+            loadPreviewAndChart(filename);
+          };
+        }catch(e){ console.warn('attach reset handler', e) }
+      }
+
+      loadList();
+
+      // Listen for uploads from Dashboard to keep in sync
+      window.addEventListener('storage', (ev)=>{
+        if(ev.key === 'uploads-sync'){
+          try{ const payload = JSON.parse(ev.newValue || '{}'); if(payload && payload.event){ loadList(); } }catch(e){}
+        }
+      });
+
+      // Reset Options with confirm
+      document.getElementById('results-reset-options').addEventListener('click', ()=>{
+        if(!confirm('Reset saved options for this symbol? This will clear local preferences.')) return;
+        // try best-effort parsing of visible filename -> symbol
+        const firstRow = document.querySelector('#results-table tbody tr td');
+        if(!firstRow) return;
+        const filename = firstRow.innerText || '';
+        const parts = filename.split(/[._-]/);
+        const symbol = parts[0];
+        if(symbol){ try{ localStorage.removeItem(`parseMode_${symbol}`); localStorage.removeItem(`dropIncomplete_${symbol}`); }catch(e){} }
+        loadList();
+      });
+    </script>
+  </body>
+</html>

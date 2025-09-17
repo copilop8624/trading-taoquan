@@ -1,23 +1,4 @@
-﻿import os
-import sys
-
-# Ensure repository root is on sys.path so local package imports like
-# `from src.tradelist_manager import ...` work in CI where PYTHONPATH
-# or the process working-directory may not be inherited by background jobs.
-repo_root = os.path.dirname(os.path.abspath(__file__))
-if repo_root not in sys.path:
-    sys.path.insert(0, repo_root)
-
-# Ensure console uses UTF-8 for stdout/stderr to avoid UnicodeEncodeError on Windows
-try:
-    # Python 3.7+: reconfigure stdout/stderr encoding
-    sys.stdout.reconfigure(encoding='utf-8')
-    sys.stderr.reconfigure(encoding='utf-8')
-except Exception:
-    # If reconfigure is not available, set PYTHONIOENCODING environment fallback
-    os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
-
-from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_file
 import pandas as pd
 import numpy as np
 import json
@@ -27,667 +8,64 @@ import math
 import random
 import tempfile
 import os
-import sqlite3
 import traceback
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import datetime, timedelta
 import optuna
-import threading
 from src.tradelist_manager import TradelistManager
-from data_manager import DataManager, get_data_manager
-from results_manager import ResultsManager, get_results_manager
-from strategy_manager import StrategyManager, get_strategy_manager
 
-# Data management imports
+# Import logic từ file gốc với fallback
 try:
-    from csv_to_db import migrate_csv_to_db, show_database_status
-    from binance_fetcher import BinanceFetcher
-    DATA_MANAGEMENT_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Data management modules not available: {e}")
-    DATA_MANAGEMENT_AVAILABLE = False
-
-# Import logic tá»« file gá»‘c vá»›i fallback
-ADVANCED_MODE = False
-_advanced_import_error = None
-try:
-    # Try package import first (preferred if module is inside web_backtest package)
-    from web_backtest.backtest_gridsearch_slbe_ts_Version3 import (
+    # ƯU TIÊN: Sử dụng engine Version3 đã được kiểm chứng
+    from backtest_gridsearch_slbe_ts_Version3 import (
         simulate_trade, grid_search_parallel,
         load_trade_csv as load_trade_csv_file,
-        load_candle_csv as load_candle_csv_file,
+        load_candle_csv as load_candle_csv_file, 
         get_trade_pairs as get_trade_pairs_file
     )
-    print("âœ… CHáº¾ Äá»˜ NÃ‚NG CAO ÄÃƒ KÃCH HOáº T (web_backtest): MÃ´ phá»ng Ä‘áº§y Ä‘á»§ BE + TS from Version3")
+    print("✅ CHẾ ĐỘ NÂNG CAO ĐÃ KÍCH HOẠT: Mô phỏng đầy đủ BE + TS từ Version3")
+    print("🔥 ENGINE THỰC CHIẾN: Logic SL + Breakeven + Trailing Stop đã sẵn sàng")
     ADVANCED_MODE = True
-except Exception as e_pkg:
-    try:
-        # Fallback to top-level module if package import failed
-        from backtest_gridsearch_slbe_ts_Version3 import (
-            simulate_trade, grid_search_parallel,
-            load_trade_csv as load_trade_csv_file,
-            load_candle_csv as load_candle_csv_file,
-            get_trade_pairs as get_trade_pairs_file
-        )
-        print("âœ… CHáº¾ Äá»˜ NÃ‚NG CAO ÄÃƒ KÃCH HOáº T: MÃ´ phá»ng Ä‘áº§y Ä‘á»§ BE + TS from top-level Version3")
-        ADVANCED_MODE = True
-    except Exception as e_top:
-        _advanced_import_error = e_top
-        print(f"âš ï¸ KhÃ´ng thá»ƒ táº£i module nÃ¢ng cao (package and top-level failed): {e_top}")
-        print("ðŸ”„ Chuyá»ƒn sang cháº¿ Ä‘á»™ chá»‰ SL...")
-        ADVANCED_MODE = False
-
-        # Fallback functions
-        def simulate_trade(*args, **kwargs):
-            return None, ["MÃ´ phá»ng nÃ¢ng cao khÃ´ng kháº£ dá»¥ng"]
-
-        def grid_search_parallel(trade_pairs, df_candle, sl_list, be_list, ts_trig_list, ts_step_list, opt_type):
-            """
-            Triá»ƒn khai dá»± phÃ²ng khi module nÃ¢ng cao khÃ´ng kháº£ dá»¥ng.
-            Thay vÃ¬ tráº£ vá» máº£ng rá»—ng, sá»­ dá»¥ng dá»± phÃ²ng chá»‰ SL vá»›i tham sá»‘ BE/TS máº·c Ä‘á»‹nh.
-            """
-            print("âš ï¸ grid_search_parallel: Module nÃ¢ng cao khÃ´ng kháº£ dá»¥ng, sá»­ dá»¥ng dá»± phÃ²ng chá»‰ SL")
-            print("ðŸš¨ Cáº¢NH BÃO: ÄÃ¢y lÃ  cháº¿ Ä‘á»™ CHá»ˆ SL, khÃ´ng pháº£i mÃ´ phá»ng thá»±c táº¿ BE+TS!")
-
-            # Sá»­ dá»¥ng giÃ¡ trá»‹ trung bÃ¬nh tá»« cÃ¡c dáº£i BE/TS lÃ m tham sá»‘ cá»‘ Ä‘á»‹nh
-            be_default = be_list[len(be_list)//2] if be_list else 0.5
-            ts_trig_default = ts_trig_list[len(ts_trig_list)//2] if ts_trig_list else 0.5
-            ts_step_default = ts_step_list[len(ts_step_list)//2] if ts_step_list else 0.5
-
-            # Gá»i hÃ m dá»± phÃ²ng chá»‰ SL vá»›i tham sá»‘ BE/TS máº·c Ä‘á»‹nh
-            sl_min = min(sl_list) if sl_list else 0
-            sl_max = max(sl_list) if sl_list else 0
-            sl_step = sl_list[1] - sl_list[0] if len(sl_list) > 1 else 1.0
-
-            return grid_search_sl_fallback(trade_pairs, df_candle, sl_min, sl_max, sl_step, opt_type,
-                                          be_default, ts_trig_default, ts_step_default)
-
-        def load_trade_csv_file(*args, **kwargs):
-            raise ImportError("Táº£i file trade khÃ´ng kháº£ dá»¥ng")
-
-        def load_candle_csv_file(*args, **kwargs):
-            raise ImportError("Táº£i file náº¿n khÃ´ng kháº£ dá»¥ng")
-
-        def get_trade_pairs_file(*args, **kwargs):
-            raise ImportError("Tạo cặp trade không khả dụng")
-
-def safe_int(value):
-    """Safely convert to int, handling infinity and NaN"""
-    try:
-        val = float(value)
-        if np.isinf(val):
-            print(f"⚠️ WARNING: Infinity value detected in safe_int: {value}")
-            return 0  # Return 0 instead of 999999 for better data quality
-        elif np.isnan(val):
-            return 0
-        return int(val)
-    except (TypeError, ValueError):
-        return 0
+            
+except ImportError as e:
+    print(f"⚠️ Không thể tải module nâng cao: {e}")
+    print("🔄 Chuyển sang chế độ chỉ SL...")
+    ADVANCED_MODE = False
+    
+    # Fallback functions
+    def simulate_trade(*args, **kwargs):
+        return None, ["Mô phỏng nâng cao không khả dụng"]
+    
+    def grid_search_parallel(trade_pairs, df_candle, sl_list, be_list, ts_trig_list, ts_step_list, opt_type):
+        """
+        Triển khai dự phòng khi module nâng cao không khả dụng.
+        Thay vì trả về mảng rỗng, sử dụng dự phòng chỉ SL với tham số BE/TS mặc định.
+        """
+        print("⚠️ grid_search_parallel: Module nâng cao không khả dụng, sử dụng dự phòng chỉ SL")
+        print("🚨 CẢNH BÁO: Đây là chế độ CHỈ SL, không phải mô phỏng thực tế BE+TS!")
+        
+        # Sử dụng giá trị trung bình từ các dải BE/TS làm tham số cố định
+        be_default = be_list[len(be_list)//2] if be_list else 0.5
+        ts_trig_default = ts_trig_list[len(ts_trig_list)//2] if ts_trig_list else 0.5  
+        ts_step_default = ts_step_list[len(ts_step_list)//2] if ts_step_list else 0.5
+        
+        # Gọi hàm dự phòng chỉ SL với tham số BE/TS mặc định
+        sl_min = min(sl_list) if sl_list else 0
+        sl_max = max(sl_list) if sl_list else 0
+        sl_step = sl_list[1] - sl_list[0] if len(sl_list) > 1 else 1.0
+        
+        return grid_search_sl_fallback(trade_pairs, df_candle, sl_min, sl_max, sl_step, opt_type,
+                                      be_default, ts_trig_default, ts_step_default)
+        
+    def load_trade_csv_file(*args, **kwargs):
+        raise ImportError("Tải file trade không khả dụng")
+    
+    def load_candle_csv_file(*args, **kwargs):
+        raise ImportError("Tải file nến không khả dụng")
+    
+    def get_trade_pairs_file(*args, **kwargs):
+        raise ImportError("Tạo cặp trade không khả dụng")
 
 app = Flask(__name__)
-
-# Data Management for Binance Updates
-class WebDataManager:
-    """Data manager for web app Binance updates"""
-    def __init__(self):
-        if DATA_MANAGEMENT_AVAILABLE:
-            self.fetcher = BinanceFetcher()
-        else:
-            self.fetcher = None
-        self.update_status = {
-            'running': False,
-            'progress': 0,
-            'current_symbol': '',
-            'log': []
-        }
-
-# Global data manager instance
-web_data_manager = WebDataManager() if DATA_MANAGEMENT_AVAILABLE else None
-
-def load_candle_data_from_db(symbol_name):
-    """Load candle data from database table"""
-    try:
-        import sqlite3
-        conn = sqlite3.connect('candles.db')
-        table_name = f"BINANCE_{symbol_name}"
-        
-        query = f"SELECT * FROM `{table_name}` ORDER BY datetime"
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        
-        return df
-    except Exception as e:
-        raise Exception(f"Error loading from database: {str(e)}")
-
-def discover_available_symbols():
-    """Tự động phát hiện symbols và timeframes từ thư mục candles/"""
-    import glob
-    import os
-    import re
-    
-    candles_dir = os.path.join(os.path.dirname(__file__), 'candles')
-    if not os.path.exists(candles_dir):
-        # Fallback to root directory if candles/ doesn't exist
-        candles_dir = os.path.dirname(__file__)
-    
-    symbols_data = {}
-    
-    # Scan candle files
-    candle_pattern = os.path.join(candles_dir, '*.csv')
-    candle_files = glob.glob(candle_pattern)
-    
-    for file_path in candle_files:
-        filename = os.path.basename(file_path)
-        
-        # Skip tradelist files
-        if 'tradelist' in filename.lower():
-            continue
-            
-        # Parse BINANCE format: BINANCE_SYMBOL.P, timeframe.csv or BINANCE_SYMBOL, timeframe.csv
-        match = re.match(r'BINANCE_([A-Z]+)\.?P?,?\s*(\d+)\.csv', filename)
-        if match:
-            symbol = f"BINANCE_{match.group(1)}"
-            timeframe = match.group(2)
-            
-            if symbol not in symbols_data:
-                symbols_data[symbol] = []
-            if timeframe not in symbols_data[symbol]:
-                symbols_data[symbol].append(timeframe)
-    
-    # Sort timeframes
-    for symbol in symbols_data:
-        symbols_data[symbol] = sorted(symbols_data[symbol], key=int)
-    
-    return symbols_data
-
-# ============================================================================
-# ðŸŽ¯ NEW ROUTES - BATCH PROCESSING & ANALYTICS  
-# ============================================================================
-
-@app.route('/batch')
-def batch_dashboard():
-    """🚀 Batch processing dashboard with full functionality"""
-    # Automatically discover symbols from candles/ directory
-    symbols_data = discover_available_symbols()
-    
-    try:
-        return render_template('batch_dashboard.html', 
-                             available_symbols=symbols_data,
-                             available_timeframes=symbols_data)
-    except Exception as e:
-        return f"""
-        <html>
-        <head>
-            <title>ðŸš€ Multi-Symbol Batch Processing</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }}
-                .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }}
-                .data-card {{ background: #e8f4f8; padding: 15px; border-radius: 8px; margin: 10px 0; }}
-                .symbol {{ background: #d4edda; padding: 8px; margin: 5px; border-radius: 5px; display: inline-block; }}
-                .nav {{ background: #007bff; color: white; padding: 10px; border-radius: 5px; margin-bottom: 20px; }}
-                .nav a {{ color: white; text-decoration: none; margin-right: 15px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="nav">
-                    <a href="/">ðŸ  Home</a>
-                    <a href="/compare">ðŸ“Š Compare</a>  
-                    <a href="/analytics">ðŸ“ˆ Analytics</a>
-                </div>
-                
-                <h1>ðŸš€ Multi-Symbol Batch Processing Dashboard</h1>
-                
-                <div class="data-card">
-                    <h2>ðŸ“Š Available Trading Data:</h2>
-                    <div>
-                        <div class="symbol">
-                            <strong>BINANCE_BOMEUSDT:</strong> 240min timeframe
-                        </div>
-                        <div class="symbol">
-                            <strong>BINANCE_BTCUSDT:</strong> 60min, 30min, 5min timeframes  
-                        </div>
-                        <div class="symbol">
-                            <strong>BINANCE_SAGAUSDT:</strong> 30min timeframe
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="data-card">
-                    <h2>ðŸŽ¯ Batch Processing Features:</h2>
-                    <ul>
-                        <li>âœ… Multi-symbol parallel optimization</li>
-                        <li>âœ… Real-time progress tracking</li>
-                        <li>âœ… Comprehensive result analysis</li>
-                        <li>âœ… Export & comparison tools</li>
-                    </ul>
-                </div>
-                
-                <div class="data-card">
-                    <h3>âš ï¸ Status:</h3>
-                    <p>Template system loading... ({str(e)})</p>
-                    <p><strong>System:</strong> Multi-Symbol Processor Ready</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-
-@app.route('/compare')
-def comparison_dashboard():
-    """ðŸ” Result comparison dashboard"""
-    return """
-    <html>
-    <head>
-        <title>ðŸ” Result Comparison Dashboard</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-            .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
-            .nav { background: #28a745; color: white; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
-            .nav a { color: white; text-decoration: none; margin-right: 15px; }
-            .feature-card { background: #e9f7ef; padding: 15px; border-radius: 8px; margin: 10px 0; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="nav">
-                <a href="/">ðŸ  Home</a>
-                <a href="/batch">ï¿½ Batch Processing</a>  
-                <a href="/analytics">ðŸ“ˆ Analytics</a>
-            </div>
-            
-            <h1>ðŸ” Multi-Symbol Result Comparison</h1>
-            
-            <div class="feature-card">
-                <h2>ðŸ“Š Available Comparisons:</h2>
-                <ul>
-                    <li>âœ… Side-by-side parameter optimization results</li>
-                    <li>âœ… Performance metrics comparison across symbols</li>
-                    <li>âœ… Risk-return analysis visualization</li>
-                    <li>âœ… Strategy effectiveness evaluation</li>
-                </ul>
-            </div>
-            
-            <div class="feature-card">
-                <h3>ðŸŽ¯ Ready for Integration</h3>
-                <p>Comparison engine ready to analyze optimization results</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-
-@app.route('/analytics')  
-def analytics_dashboard():
-    """ðŸ“ˆ Advanced analytics dashboard with Chart.js integration"""
-    return """
-    <html>
-    <head>
-        <title>ðŸ“ˆ Advanced Analytics Dashboard</title>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-            .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
-            .nav { background: #ffc107; color: black; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
-            .nav a { color: black; text-decoration: none; margin-right: 15px; }
-            .chart-container { background: #fff3cd; padding: 20px; border-radius: 8px; margin: 15px 0; }
-            .chart-row { display: flex; justify-content: space-between; margin: 20px 0; }
-            .chart-box { width: 48%; height: 300px; background: white; border: 1px solid #ddd; border-radius: 5px; padding: 10px; }
-            .analytics-stats { background: #e2e3e5; padding: 15px; border-radius: 8px; margin: 10px 0; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="nav">
-                <a href="/">ðŸ  Home</a>
-                <a href="/batch">ðŸš€ Batch Processing</a>  
-                <a href="/compare">ðŸ” Compare Results</a>
-            </div>
-            
-            <h1>ðŸ“ˆ Advanced Analytics Dashboard</h1>
-            
-            <div class="analytics-stats">
-                <h2>ðŸ“Š Chart.js Integration Ready</h2>
-                <ul>
-                    <li>âœ… Performance Radar Charts</li>
-                    <li>âœ… Risk-Return Scatter Plots</li>
-                    <li>âœ… Parameter Optimization Heat Maps</li>
-                    <li>âœ… Comparative Bar Charts</li>
-                    <li>âœ… Time Series Analysis</li>
-                    <li>âœ… Bubble Charts for Multi-Dimensional Analysis</li>
-                </ul>
-            </div>
-            
-            <div class="chart-row">
-                <div class="chart-box">
-                    <h3>ðŸ“ˆ Performance Overview</h3>
-                    <canvas id="perfChart"></canvas>
-                </div>
-                <div class="chart-box">
-                    <h3>ðŸŽ¯ Risk Analysis</h3>
-                    <canvas id="riskChart"></canvas>
-                </div>
-            </div>
-            
-            <div class="chart-container">
-                <h3>ðŸš€ Multi-Symbol Analytics Ready</h3>
-                <p>Advanced Chart.js visualization system prepared for:</p>
-                <p><strong>Symbols:</strong> BINANCE_BOMEUSDT, BINANCE_BTCUSDT, BINANCE_SAGAUSDT</p>
-                <p><strong>Capabilities:</strong> Real-time data visualization, interactive controls, export features</p>
-            </div>
-        </div>
-        
-        <script>
-            // Sample Chart.js initialization
-            const ctx1 = document.getElementById('perfChart').getContext('2d');
-            new Chart(ctx1, {
-                type: 'line',
-                data: {
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
-                    datasets: [{
-                        label: 'Performance',
-                        data: [12, 19, 3, 5, 2],
-                        borderColor: '#007bff',
-                        tension: 0.1
-                    }]
-                }
-            });
-            
-            const ctx2 = document.getElementById('riskChart').getContext('2d');
-            new Chart(ctx2, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Low Risk', 'Medium Risk', 'High Risk'],
-                    datasets: [{
-                        data: [30, 50, 20],
-                        backgroundColor: ['#28a745', '#ffc107', '#dc3545']
-                    }]
-                }
-            });
-        </script>
-    </body>
-    </html>
-    """
-
-# ============================================================================
-# ðŸŽ¯ API ROUTES FOR BATCH PROCESSING
-# ============================================================================
-
-@app.route('/api/batch_optimize', methods=['GET', 'POST'])
-def api_batch_optimize():
-    """🚀 API endpoint for batch optimization"""
-    if request.method == 'GET':
-        # Return API documentation for GET requests
-        return jsonify({
-            'endpoint': '/api/batch_optimize',
-            'method': 'POST',
-            'description': 'Start batch optimization for multiple symbols',
-            'required_payload': {
-                'symbols': ['BINANCE_BTCUSDT', 'BINANCE_BOMEUSDT'],
-                'timeframes': ['30', '60', '240']
-            },
-            'optional_payload': {
-                'parameters': {
-                    'sl_min': 1.0,
-                    'sl_max': 5.0,
-                    'be_min': 0.5,
-                    'be_max': 2.0,
-                    'ts_min': 0.3,
-                    'ts_max': 1.5
-                }
-            },
-            'example_curl': 'curl -X POST "http://127.0.0.1:5000/api/batch_optimize" -H "Content-Type: application/json" -d \'{"symbols": ["BINANCE_BTCUSDT"], "timeframes": ["30"]}\''
-        })
-    
-    # Handle POST requests
-    try:
-        data = request.get_json()
-        symbols = data.get('symbols', [])
-        timeframes = data.get('timeframes', {})
-        parameters = data.get('parameters', {})
-        
-        # Basic validation
-        if not symbols:
-            return jsonify({'success': False, 'error': 'No symbols selected'}), 400
-            
-        # Return sample response for now
-        return jsonify({
-            'success': True,
-            'message': 'Batch optimization started',
-            'job_id': 'batch_001',
-            'symbols': symbols,
-            'estimated_time': len(symbols) * 30  # seconds
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/batch_status/<job_id>', methods=['GET'])
-def api_batch_status(job_id):
-    """ðŸ“Š Get batch optimization progress"""
-    # Sample progress data
-    return jsonify({
-        'job_id': job_id,
-        'status': 'running',
-        'progress': 65,
-        'completed_symbols': 2,
-        'total_symbols': 3,
-        'current_symbol': 'BINANCE_BTCUSDT',
-        'estimated_remaining': 45
-    })
-
-@app.route('/api/batch_results/<job_id>', methods=['GET'])
-def api_batch_results(job_id):
-    """ðŸ“ˆ Get batch optimization results"""
-    # Sample results data
-    return jsonify({
-        'job_id': job_id,
-        'status': 'completed',
-        'results': [
-            {
-                'symbol': 'BINANCE_BTCUSDT',
-                'timeframe': '30',
-                'best_params': {'sl': 2.5, 'be': 1.2, 'ts_trig': 0.8, 'ts_step': 0.3},
-                'performance': {'pnl': 15.67, 'winrate': 68.5, 'sharpe': 1.24}
-            },
-            {
-                'symbol': 'BINANCE_BOMEUSDT', 
-                'timeframe': '240',
-                'best_params': {'sl': 3.0, 'be': 1.5, 'ts_trig': 1.0, 'ts_step': 0.4},
-                'performance': {'pnl': 12.34, 'winrate': 72.1, 'sharpe': 1.18}
-            }
-        ]
-    })
-
-
-@app.route('/health', methods=['GET'])
-def health():
-    info = {'status': 'ok', 'time': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'), 'advanced_mode': bool(ADVANCED_MODE)}
-    if _advanced_import_error is not None:
-        info['advanced_import_error'] = str(_advanced_import_error)
-    return jsonify(info), 200
-
-@app.route('/test_filter_debug.html', methods=['GET'])
-def test_filter_debug():
-    """Serve test filter debug page"""
-    try:
-        test_file_path = os.path.join(os.path.dirname(__file__), 'test_filter_debug.html')
-        return send_file(test_file_path)
-    except Exception as e:
-        return f"Error loading test file: {e}", 404
-
-
-# ========== DATA MANAGEMENT API ENDPOINTS ==========
-
-@app.route('/api/status')
-def api_status():
-    """API endpoint for update status"""
-    if not DATA_MANAGEMENT_AVAILABLE or web_data_manager is None:
-        return jsonify({'success': False, 'error': 'Data management not available'})
-    return jsonify(web_data_manager.update_status)
-
-@app.route('/api/csv/migrate', methods=['POST'])
-def api_csv_migrate():
-    """API endpoint to migrate CSV files to database"""
-    if not DATA_MANAGEMENT_AVAILABLE or web_data_manager is None:
-        return jsonify({'success': False, 'error': 'Data management not available'})
-    
-    try:
-        def run_migration():
-            web_data_manager.update_status['running'] = True
-            web_data_manager.update_status['current_symbol'] = 'Migrating CSV files...'
-            web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Starting CSV migration")
-            
-            try:
-                migrate_csv_to_db()
-                web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] CSV migration completed successfully")
-            except Exception as e:
-                web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Migration error: {e}")
-            finally:
-                web_data_manager.update_status['running'] = False
-                web_data_manager.update_status['current_symbol'] = ''
-        
-        thread = threading.Thread(target=run_migration)
-        thread.start()
-        
-        return jsonify({'success': True, 'message': 'CSV migration started'})
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-@app.route('/api/binance/update', methods=['POST'])
-def api_binance_update():
-    """API endpoint to update data from Binance"""
-    if not DATA_MANAGEMENT_AVAILABLE or web_data_manager is None:
-        return jsonify({'success': False, 'error': 'Data management not available'})
-    
-    try:
-        data = request.get_json()
-        symbol = data.get('symbol', 'all') if data else 'all'
-        timeframe = data.get('timeframe', '') if data else ''
-        
-        def run_update():
-            web_data_manager.update_status['running'] = True
-            web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Starting Binance update")
-            
-            try:
-                if symbol == 'all':
-                    web_data_manager.fetcher.update_all_symbols()
-                else:
-                    web_data_manager.update_status['current_symbol'] = f"{symbol} {timeframe}"
-                    web_data_manager.fetcher.update_symbol(symbol, timeframe)
-                
-                web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Binance update completed")
-            except Exception as e:
-                web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Update error: {e}")
-            finally:
-                web_data_manager.update_status['running'] = False
-                web_data_manager.update_status['current_symbol'] = ''
-        
-        thread = threading.Thread(target=run_update)
-        thread.start()
-        
-        return jsonify({'success': True, 'message': 'Binance update started'})
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-@app.route('/api/binance/add', methods=['POST'])
-def api_binance_add():
-    """API endpoint to add new symbol from Binance"""
-    if not DATA_MANAGEMENT_AVAILABLE or web_data_manager is None:
-        return jsonify({'success': False, 'error': 'Data management not available'})
-    
-    try:
-        data = request.get_json()
-        symbol = data.get('symbol', '').upper() if data else ''
-        timeframe = data.get('timeframe', '30m') if data else '30m'
-        days = int(data.get('days', 365)) if data and data.get('days') else 365
-        
-        def run_add():
-            web_data_manager.update_status['running'] = True
-            web_data_manager.update_status['current_symbol'] = f"Adding {symbol} {timeframe}"
-            web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Adding new symbol {symbol} {timeframe}")
-            
-            try:
-                if web_data_manager.fetcher:
-                    # Add logic here for fetching new symbol data
-                    web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Successfully added {symbol} {timeframe}")
-            except Exception as e:
-                web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Add error: {e}")
-            finally:
-                web_data_manager.update_status['running'] = False
-                web_data_manager.update_status['current_symbol'] = ''
-        
-        thread = threading.Thread(target=run_add)
-        thread.start()
-        
-        return jsonify({'success': True, 'message': f'Adding {symbol} {timeframe}'})
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-# ===================================================
-
-
-# Simple artifacts UI
-@app.route('/reports', methods=['GET'])
-def reports_index():
-    base = Path('reports')
-    if not base.exists():
-        return render_template('reports_list.html', runs=[])
-    runs = []
-    for d in sorted(base.iterdir(), reverse=True):
-        if d.is_dir():
-            files = [f.name for f in d.iterdir() if f.is_file()]
-            runs.append({'tag': d.name, 'files': files})
-    return render_template('reports_list.html', runs=runs)
-
-
-@app.route('/reports/<tag>/file/<path:filename>', methods=['GET'])
-def reports_file(tag, filename):
-    p = Path('reports') / tag / filename
-    if not p.exists():
-        return jsonify({'error': 'not found'}), 404
-    return send_file(str(p), as_attachment=True)
-
-
-@app.route('/screenshots/<tag>/file/<path:filename>', methods=['GET'])
-def screenshots_file(tag, filename):
-    p = Path('screenshots') / tag / filename
-    if not p.exists():
-        return jsonify({'error': 'not found'}), 404
-    return send_file(str(p), as_attachment=False)
-
-
-# Demo endpoint to run SmartRangeFinder quickly and return JSON
-@app.route('/run_demo', methods=['GET', 'POST'])
-def run_demo():
-    """Run SmartRangeFinder on the sample tradelist and return range_analysis.json.
-    Query params:
-      - tradelist: path to tradelist CSV (optional, defaults to sample_tradelist.csv)
-    """
-    try:
-        tradelist = request.args.get('tradelist', 'sample_tradelist.csv')
-        out_dir = Path('output_demo')
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        # Import SmartRangeFinder lazily so endpoint works even if module missing
-        try:
-            from smart_range_finder import SmartRangeFinder
-        except Exception as e:
-            return jsonify({'status': 'error', 'error': f'SmartRangeFinder import failed: {e}'}), 500
-
-        srf = SmartRangeFinder(tradelist_path=tradelist)
-        analysis = srf.analyze_price_movement_patterns()
-
-        out_file = out_dir / 'range_analysis.json'
-        with out_file.open('w', encoding='utf-8') as fh:
-            json.dump(analysis, fh, ensure_ascii=False, indent=2)
-
-        return jsonify({'status': 'ok', 'output': str(out_file), 'analysis': analysis}), 200
-    except Exception as exc:
-        tb = traceback.format_exc()
-        return jsonify({'status': 'error', 'error': str(exc), 'traceback': tb}), 500
 
 # Global variable to track optimization progress
 optimization_status = {
@@ -703,15 +81,13 @@ def convert_to_serializable(obj):
     """Convert numpy/pandas types to native Python types for JSON serialization"""
     if isinstance(obj, np.integer):
         return int(obj)
-    elif isinstance(obj, np.bool_):
-        return bool(obj)
     elif isinstance(obj, np.floating):
         val = float(obj)
         # Handle infinity values for JSON serialization
         if np.isinf(val):
             # For advanced metrics, allow reasonable infinity values
             if abs(val) > 1e6:
-                print(f"âš ï¸ WARNING: Very large infinity in convert_to_serializable: {val}")
+                print(f"⚠️ WARNING: Very large infinity in convert_to_serializable: {val}")
                 return 999999.0 if val > 0 else -999999.0
             else:
                 return val  # Keep reasonable infinity values for metrics
@@ -722,7 +98,7 @@ def convert_to_serializable(obj):
         # Handle Python float infinity/nan
         if np.isinf(obj):
             if abs(obj) > 1e6:
-                print(f"âš ï¸ WARNING: Very large Python float infinity: {obj}")
+                print(f"⚠️ WARNING: Very large Python float infinity: {obj}")
                 return 999999.0 if obj > 0 else -999999.0
             else:
                 return obj  # Keep reasonable infinity values
@@ -752,188 +128,42 @@ def safe_float_parse(form_data, key, default):
     except (ValueError, TypeError):
         return float(default)
 
-# Defensive helper: safe_float
-
-def safe_float(x, default=0.0):
+def safe_float(value):
+    """Safely convert to float, handling infinity and NaN"""
     try:
-        if x is None:
-            return float(default)
-        if isinstance(x, str):
-            x = x.strip()
-            if x == '':
-                return float(default)
-        val = float(x)
-        if not np.isfinite(val):
-            return float(default)
+        val = float(value)
+        if np.isinf(val):
+            # For advanced metrics, infinity might be valid (e.g., recovery factor when DD=0)
+            # Only convert very large values that could break JSON
+            if abs(val) > 1e6:
+                print(f"⚠️ WARNING: Very large infinity value detected in safe_float: {value}")
+                return 999999.0 if val > 0 else -999999.0
+            else:
+                return val  # Keep reasonable infinity values
+        elif np.isnan(val):
+            return 0.0
         return val
-    except Exception:
-        return float(default)
+    except (TypeError, ValueError):
+        return 0.0
 
-
-# Robust candle index finder with tolerant matching
-
-def find_candle_idx(dt, df_candle):
+def safe_int(value):
+    """Safely convert to int, handling infinity and NaN"""
     try:
-        if pd.isna(dt) or df_candle is None or not hasattr(df_candle, 'columns'):
-            return -1
-        if 'time' not in df_candle.columns:
-            return -1
-        arr = df_candle['time'].values
-        try:
-            target_dt = np.datetime64(dt)
-        except Exception:
-            try:
-                target_dt = np.datetime64(pd.to_datetime(dt))
-            except Exception:
-                return -1
-        # bounds
-        if len(arr) == 0:
-            return -1
-        try:
-            if target_dt < arr[0] or target_dt > arr[-1]:
-                return -1
-        except Exception:
-            pass
-        # exact match
-        idx = np.where(arr == target_dt)[0]
-        if len(idx) > 0:
-            return int(idx[0])
-        # nearest within tolerance (120s)
-        try:
-            diffs = np.abs((arr - target_dt).astype('timedelta64[s]')).astype('int64')
-            nearest = int(np.argmin(diffs))
-            if int(diffs[nearest]) <= 120:
-                return nearest
-        except Exception:
-            pass
-        return -1
-    except Exception:
-        return -1
+        val = float(value)
+        if np.isinf(val):
+            print(f"⚠️ WARNING: Infinity value detected in safe_int: {value}")
+            return 0  # Return 0 instead of 999999 for better data quality
+        elif np.isnan(val):
+            return 0
+        return int(val)
+    except (TypeError, ValueError):
+        return 0
 
-
-# Defensive SL-only simulation fallback
-
-def simulate_trade_sl_only(pair, df_candle, sl_percent):
-    entryPrice = safe_float(pair.get('entryPrice', 0))
-    exitPriceOrigin = safe_float(pair.get('exitPrice', entryPrice))
-    side = pair.get('side', 'LONG') or 'LONG'
-    # If no valid candles, compute from given pair prices
-    if df_candle is None or not hasattr(df_candle, 'columns') or 'time' not in df_candle.columns or len(df_candle) == 0:
-        try:
-            if side == 'LONG':
-                pnlPct = (exitPriceOrigin - entryPrice) / entryPrice * 100.0 if entryPrice != 0 else 0.0
-            else:
-                pnlPct = (entryPrice - exitPriceOrigin) / entryPrice * 100.0 if entryPrice != 0 else 0.0
-            if not np.isfinite(pnlPct):
-                pnlPct = 0.0
-        except Exception:
-            pnlPct = 0.0
-        return {
-            'num': pair.get('num'),
-            'side': side,
-            'entryPrice': float(entryPrice),
-            'exitPrice': float(exitPriceOrigin),
-            'exitType': 'Original',
-            'pnlPct': float(pnlPct),
-            'pnlPctOrigin': float(pnlPct),
-            'entryDt': pair.get('entryDt'),
-            'exitDt': pair.get('exitDt'),
-            'sl': sl_percent,
-            'be': 0,
-            'ts_trig': 0,
-            'ts_step': 0
-        }
-    # find indexes
-    entryIdx = find_candle_idx(pair.get('entryDt'), df_candle)
-    exitIdx = find_candle_idx(pair.get('exitDt'), df_candle)
-    if entryIdx == -1 or exitIdx == -1 or exitIdx <= entryIdx:
-        # attempt approximate mapping
-        try:
-            arr = df_candle['time'].values
-            if pair.get('entryDt') is not None:
-                target_entry = np.datetime64(pair.get('entryDt'))
-                diffs = np.abs((arr - target_entry).astype('timedelta64[s]')).astype('int64')
-                entryIdx = int(np.argmin(diffs))
-                if int(diffs[entryIdx]) > 300:
-                    return None
-            else:
-                return None
-            if pair.get('exitDt') is not None:
-                target_exit = np.datetime64(pair.get('exitDt'))
-                diffs2 = np.abs((arr - target_exit).astype('timedelta64[s]')).astype('int64')
-                exitIdx = int(np.argmin(diffs2))
-                if int(diffs2[exitIdx]) > 300:
-                    return None
-            else:
-                return None
-            if exitIdx <= entryIdx:
-                return None
-        except Exception:
-            return None
-    # fallback to candle prices if pair prices invalid
-    try:
-        if not (entryPrice and np.isfinite(entryPrice)):
-            if 'open' in df_candle.columns and 0 <= entryIdx < len(df_candle):
-                entryPrice = safe_float(df_candle.iloc[entryIdx].get('open', entryPrice))
-        finalExitPrice = safe_float(exitPriceOrigin)
-        if not (finalExitPrice and np.isfinite(finalExitPrice)):
-            if 'close' in df_candle.columns and 0 <= exitIdx < len(df_candle):
-                finalExitPrice = safe_float(df_candle.iloc[exitIdx].get('close', finalExitPrice))
-    except Exception:
-        entryPrice = safe_float(entryPrice)
-        finalExitPrice = safe_float(exitPriceOrigin)
-    exitType = 'Original'
-    # SL check
-    if sl_percent and sl_percent != 0:
-        try:
-            if side == 'LONG':
-                slPrice = entryPrice * (1 - sl_percent / 100.0)
-                for i in range(entryIdx, min(exitIdx + 1, len(df_candle))):
-                    low = safe_float(df_candle.iloc[i].get('low', np.nan), default=np.nan)
-                    if not np.isnan(low) and low <= slPrice:
-                        finalExitPrice = low
-                        exitType = 'SL'
-                        break
-            else:
-                slPrice = entryPrice * (1 + sl_percent / 100.0)
-                for i in range(entryIdx, min(exitIdx + 1, len(df_candle))):
-                    high = safe_float(df_candle.iloc[i].get('high', np.nan), default=np.nan)
-                    if not np.isnan(high) and high >= slPrice:
-                        finalExitPrice = high
-                        exitType = 'SL'
-                        break
-        except Exception:
-            pass
-    try:
-        if side == 'LONG':
-            pnlPct = (finalExitPrice - entryPrice) / entryPrice * 100.0 if entryPrice != 0 else 0.0
-        else:
-            pnlPct = (entryPrice - finalExitPrice) / entryPrice * 100.0 if entryPrice != 0 else 0.0
-        if not np.isfinite(pnlPct):
-            pnlPct = 0.0
-    except Exception:
-        pnlPct = 0.0
-    return {
-        'num': pair.get('num'),
-        'side': side,
-        'entryPrice': float(entryPrice),
-        'exitPrice': float(finalExitPrice),
-        'exitType': exitType,
-        'pnlPct': float(pnlPct),
-        'pnlPctOrigin': float(pnlPct),
-        'entryDt': pair.get('entryDt'),
-        'exitDt': pair.get('exitDt'),
-        'sl': sl_percent,
-        'be': 0,
-        'ts_trig': 0,
-        'ts_step': 0
-    }
-
-# Import cÃ¡c functions tá»« script gá»‘c
+# Import các functions từ script gốc
 def normalize_trade_date(s):
     """Normalize trade date with support for multiple formats"""
     try:
-        # Thá»­ format 1: YYYY-MM-DD HH:MM (ACEUSDT/TradingView/BOME format)
+        # Thử format 1: YYYY-MM-DD HH:MM (ACEUSDT/TradingView/BOME format)
         dt = pd.to_datetime(s, format='%Y-%m-%d %H:%M', errors='coerce')
         if not pd.isna(dt):
             # For simplicity, treat all YYYY-MM-DD format as UTC
@@ -944,7 +174,7 @@ def normalize_trade_date(s):
         pass
     
     try:
-        # Thá»­ format 2: MM/DD/YYYY HH:MM (Legacy BTC format)
+        # Thử format 2: MM/DD/YYYY HH:MM (Legacy BTC format)
         dt = pd.to_datetime(s, format='%m/%d/%Y %H:%M', errors='coerce')
         if not pd.isna(dt):
             # Assume Bangkok timezone for old MM/DD/YYYY format, convert to UTC
@@ -988,7 +218,7 @@ def normalize_candle_date(s):
     return pd.NaT
 
 def smart_read_csv(file_content):
-    """Äá»c CSV tá»« ná»™i dung file"""
+    """Đọc CSV từ nội dung file"""
     try:
         df = pd.read_csv(io.StringIO(file_content), sep=",")
         if len(df.columns) == 1:
@@ -1003,31 +233,10 @@ def smart_read_csv(file_content):
     return df
 
 def load_trade_csv_from_content(content):
-    """Universal trade CSV loader using Version3 functions with file reference support"""
+    """Universal trade CSV loader using Version3 functions"""
     temp_path = None
-    
-    # 🔍 CHECK: Is this content just a file reference?
-    content_lines = content.strip().split('\n')
-    if len(content_lines) == 1 and content_lines[0].strip().endswith('.csv'):
-        # This might be a file reference, try to load the referenced file
-        ref_path = content_lines[0].strip()
-        print(f"🔍 Detected file reference: {ref_path}")
-        
-        # Try to find and load the referenced file
-        if os.path.exists(ref_path):
-            print(f"✅ Loading referenced file: {ref_path}")
-            with open(ref_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        elif os.path.exists(os.path.join('tradelist', ref_path)):
-            full_path = os.path.join('tradelist', ref_path)
-            print(f"✅ Loading referenced file from tradelist: {full_path}")
-            with open(full_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        else:
-            print(f"⚠️ Referenced file not found: {ref_path}")
-    
     try:
-        # ðŸ”§ FORCE USE VERSION3 FUNCTIONS (with date format fix)
+        # 🔧 FORCE USE VERSION3 FUNCTIONS (with date format fix)
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', encoding='utf-8') as temp_file:
             temp_file.write(content)
             temp_path = temp_file.name
@@ -1041,11 +250,11 @@ def load_trade_csv_from_content(content):
         
         trades = len(df['trade'].unique())
         records = len(df)
-        print(f"âœ… Version3 trade loading: {records} records from {trades} trades")
+        print(f"✅ Version3 trade loading: {records} records from {trades} trades")
         return df
         
     except Exception as e:
-        print(f"âš ï¸ Version3 parser failed: {e}, falling back to legacy methods")
+        print(f"⚠️ Version3 parser failed: {e}, falling back to legacy methods")
         return load_trade_csv_from_content_legacy(content)
     
     finally:
@@ -1127,7 +336,7 @@ def load_trade_csv_from_content_legacy(content):
             date_candidates = [col for col in df.columns if 'date' in col.lower() or 'time' in col.lower()]
             if date_candidates:
                 df['date'] = df[date_candidates[0]]
-                print(f"ðŸ” LEGACY ROUTING: Created 'date' column from '{date_candidates[0]}'")
+                print(f"🔍 LEGACY ROUTING: Created 'date' column from '{date_candidates[0]}'")
             else:
                 raise ValueError(f"No date column found for legacy format! Available: {df.columns.tolist()}")
         return load_legacy_format(df)
@@ -1238,14 +447,14 @@ def load_legacy_format(df):
     df = df[df['type'].str.lower().str.contains('entry') | df['type'].str.lower().str.contains('exit')]
     df = df.dropna(subset=['date', 'price'])
     
-    print(f"âœ… Legacy format processed: {len(df)} valid trade rows")
+    print(f"✅ Legacy format processed: {len(df)} valid trade rows")
     return df
 
 def load_candle_csv_from_content(content):
     """Load candle CSV using Version3 functions"""
     temp_path = None
     try:
-        # ðŸ”§ FORCE USE VERSION3 FUNCTIONS (with date format fix)
+        # 🔧 FORCE USE VERSION3 FUNCTIONS (with date format fix)
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', encoding='utf-8') as temp_file:
             temp_file.write(content)
             temp_path = temp_file.name
@@ -1257,12 +466,12 @@ def load_candle_csv_from_content(content):
         if len(df) == 0:
             raise ValueError('No valid candle data found after Version3 parsing')
         
-        print(f"âœ… Version3 candle loading: {len(df)} candles loaded")
-        print(f"   Time range: {df['time'].min()} â†’ {df['time'].max()}")
+        print(f"✅ Version3 candle loading: {len(df)} candles loaded")
+        print(f"   Time range: {df['time'].min()} → {df['time'].max()}")
         return df
         
     except Exception as e:
-        print(f"âš ï¸ Version3 candle parser failed: {e}")
+        print(f"⚠️ Version3 candle parser failed: {e}")
         raise
     
     finally:
@@ -1273,11 +482,11 @@ def load_candle_csv_from_content(content):
 def get_trade_pairs(df_trade):
     """Get trade pairs using Version3 function"""
     try:
-        # ðŸ”§ FORCE USE VERSION3 get_trade_pairs
+        # 🔧 FORCE USE VERSION3 get_trade_pairs
         from backtest_gridsearch_slbe_ts_Version3 import get_trade_pairs as get_pairs_v3
         pairs, log = get_pairs_v3(df_trade)
         
-        print(f"âœ… Version3 trade pairs: {len(pairs)} pairs generated")
+        print(f"✅ Version3 trade pairs: {len(pairs)} pairs generated")
         if log:
             for msg in log[:5]:  # Show first 5 log messages
                 print(f"   Log: {msg}")
@@ -1285,7 +494,7 @@ def get_trade_pairs(df_trade):
         return pairs, log
         
     except Exception as e:
-        print(f"âš ï¸ Version3 get_trade_pairs failed: {e}")
+        print(f"⚠️ Version3 get_trade_pairs failed: {e}")
         # Fallback to original logic if needed
         return get_trade_pairs_legacy(df_trade)
 
@@ -1293,9 +502,9 @@ def get_trade_pairs_legacy(df_trade):
     log = []
     pairs = []
     
-    print(f"ðŸ” DEBUG: Processing {len(df_trade)} trade rows")
-    print(f"ðŸ” DEBUG: Columns: {df_trade.columns.tolist()}")
-    print(f"ðŸ” DEBUG: First 5 rows:")
+    print(f"🔍 DEBUG: Processing {len(df_trade)} trade rows")
+    print(f"🔍 DEBUG: Columns: {df_trade.columns.tolist()}")
+    print(f"🔍 DEBUG: First 5 rows:")
     print(df_trade.head().to_string())
     
     # Detect data format
@@ -1316,17 +525,17 @@ def get_trade_pairs_legacy(df_trade):
         except:
             pass
     
-    print(f"ðŸ” FORMAT DETECTION: signal={has_signal}, p&l_usdt={has_pnl_usdt}, quantity={has_quantity}, small_prices={has_small_prices}")
+    print(f"🔍 FORMAT DETECTION: signal={has_signal}, p&l_usdt={has_pnl_usdt}, quantity={has_quantity}, small_prices={has_small_prices}")
     
     if has_tradingview_cols:
         if has_small_prices:
-            print(f"ðŸ” FORMAT: BOME (TradingView with small prices)")
+            print(f"🔍 FORMAT: BOME (TradingView with small prices)")
             return get_bome_trade_pairs(df_trade)
         else:
-            print(f"ðŸ” FORMAT: ACEUSDT (TradingView)")
+            print(f"🔍 FORMAT: ACEUSDT (TradingView)")
             return get_aceusdt_trade_pairs(df_trade)
     else:
-        print(f"ðŸ” FORMAT: Legacy (BTC/BOME)")
+        print(f"🔍 FORMAT: Legacy (BTC/BOME)")
         return get_legacy_trade_pairs(df_trade)
 
 def get_aceusdt_trade_pairs(df_trade):
@@ -1334,7 +543,7 @@ def get_aceusdt_trade_pairs(df_trade):
     log = []
     pairs = []
     
-    print(f"ðŸ”„ Processing ACEUSDT format with {len(df_trade)} rows")
+    print(f"🔄 Processing ACEUSDT format with {len(df_trade)} rows")
     
     for trade_num in df_trade['trade'].unique():
         group = df_trade[df_trade['trade'] == trade_num]
@@ -1342,7 +551,7 @@ def get_aceusdt_trade_pairs(df_trade):
         exit = group[group['type'].str.lower().str.contains('exit')]
         
         if len(entry) == 0 or len(exit) == 0:
-            log.append(f"ACEUSDT Trade {trade_num}: thiáº¿u Entry hoáº·c Exit, bá» qua")
+            log.append(f"ACEUSDT Trade {trade_num}: thiếu Entry hoặc Exit, bỏ qua")
             continue
             
         entry_row = entry.iloc[0]
@@ -1362,7 +571,7 @@ def get_aceusdt_trade_pairs(df_trade):
         
         # Debug first few trades
         if trade_num <= 3:
-            print(f"ðŸ” ACEUSDT TRADE {trade_num} DEBUG:")
+            print(f"🔍 ACEUSDT TRADE {trade_num} DEBUG:")
             print(f"   Entry row: {entry_row.to_dict()}")
             print(f"   Exit row: {exit_row.to_dict()}")
             print(f"   Entry type: {entry_row['type']}")
@@ -1380,7 +589,7 @@ def get_aceusdt_trade_pairs(df_trade):
             'exitPrice': exit_row['price']
         })
         
-    print(f"âœ… ACEUSDT pairs extracted: {len(pairs)} valid pairs")
+    print(f"✅ ACEUSDT pairs extracted: {len(pairs)} valid pairs")
     return pairs, log
 
 def get_bome_trade_pairs(df_trade):
@@ -1388,7 +597,7 @@ def get_bome_trade_pairs(df_trade):
     log = []
     pairs = []
     
-    print(f"ðŸ”„ Processing BOME format with {len(df_trade)} rows")
+    print(f"🔄 Processing BOME format with {len(df_trade)} rows")
     
     for trade_num in df_trade['trade'].unique():
         group = df_trade[df_trade['trade'] == trade_num]
@@ -1396,7 +605,7 @@ def get_bome_trade_pairs(df_trade):
         exit = group[group['type'].str.lower().str.contains('exit')]
         
         if len(entry) == 0 or len(exit) == 0:
-            log.append(f"BOME Trade {trade_num}: thiáº¿u Entry hoáº·c Exit, bá» qua")
+            log.append(f"BOME Trade {trade_num}: thiếu Entry hoặc Exit, bỏ qua")
             continue
             
         entry_row = entry.iloc[0]
@@ -1415,7 +624,7 @@ def get_bome_trade_pairs(df_trade):
         
         # Debug first few trades with high precision for BOME
         if trade_num <= 3:
-            print(f"ðŸ” BOME TRADE {trade_num} DEBUG:")
+            print(f"🔍 BOME TRADE {trade_num} DEBUG:")
             print(f"   Entry row: {entry_row.to_dict()}")
             print(f"   Exit row: {exit_row.to_dict()}")
             print(f"   Entry type: {entry_row['type']}")
@@ -1433,7 +642,7 @@ def get_bome_trade_pairs(df_trade):
             'exitPrice': exit_row['price']
         })
         
-    print(f"âœ… BOME pairs extracted: {len(pairs)} valid pairs")
+    print(f"✅ BOME pairs extracted: {len(pairs)} valid pairs")
     return pairs, log
 
 def get_legacy_trade_pairs(df_trade):
@@ -1441,14 +650,14 @@ def get_legacy_trade_pairs(df_trade):
     log = []
     pairs = []
     
-    print(f"ðŸ”„ Processing legacy format with {len(df_trade)} rows")
+    print(f"🔄 Processing legacy format with {len(df_trade)} rows")
     
     for trade_num in df_trade['trade'].unique():
         group = df_trade[df_trade['trade']==trade_num]
         entry = group[group['type'].str.lower().str.contains('entry')]
         exit = group[group['type'].str.lower().str.contains('exit')]
         if len(entry)==0 or len(exit)==0:
-            log.append(f"Legacy TradeNum {trade_num}: thiáº¿u Entry hoáº·c Exit, bá» qua")
+            log.append(f"Legacy TradeNum {trade_num}: thiếu Entry hoặc Exit, bỏ qua")
             continue
         entry_row = entry.iloc[0]
         exit_row = exit.iloc[0]
@@ -1456,7 +665,7 @@ def get_legacy_trade_pairs(df_trade):
         
         # Debug first few trades to see actual data
         if trade_num <= 3:
-            print(f"ðŸ” LEGACY TRADE {trade_num} DEBUG:")
+            print(f"🔍 LEGACY TRADE {trade_num} DEBUG:")
             print(f"   Entry row: {entry_row.to_dict()}")
             print(f"   Exit row: {exit_row.to_dict()}")
             print(f"   Entry price: {entry_row['price']}")
@@ -1472,11 +681,11 @@ def get_legacy_trade_pairs(df_trade):
             'exitPrice': exit_row['price']
         })
         
-    print(f"âœ… Legacy pairs extracted: {len(pairs)} valid pairs")
+    print(f"✅ Legacy pairs extracted: {len(pairs)} valid pairs")
     return pairs, log
 
 def calculate_original_performance(pairs):
-    """TÃ­nh toÃ¡n hiá»‡u suáº¥t gá»‘c cá»§a dá»¯ liá»‡u trade vá»›i cÃ¡c chá»‰ sá»‘ nÃ¢ng cao"""
+    """Tính toán hiệu suất gốc của dữ liệu trade với các chỉ số nâng cao"""
     if not pairs:
         return None
     
@@ -1490,7 +699,7 @@ def calculate_original_performance(pairs):
     loss_amounts = []
     pnl_list = []
     
-    # Sort trades theo thá»i gian Ä‘á»ƒ tÃ­nh drawdown
+    # Sort trades theo thời gian để tính drawdown
     sorted_pairs = sorted(pairs, key=lambda x: x['entryDt'])
     
     for pair in sorted_pairs:
@@ -1511,12 +720,12 @@ def calculate_original_performance(pairs):
             gross_loss += abs(pnl_pct)
             loss_amounts.append(pnl_pct)
     
-    # TÃ­nh cÃ¡c chá»‰ sá»‘ cÆ¡ báº£n
+    # Tính các chỉ số cơ bản
     winrate = (win_trades / total_trades * 100) if total_trades > 0 else 0
     profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else float('inf') if gross_profit > 0 else 0
     avg_trade = total_pnl / total_trades if total_trades > 0 else 0
     
-    # TÃ­nh Max Drawdown
+    # Tính Max Drawdown
     cumulative_pnl = []
     running_total = 0
     for pnl in pnl_list:
@@ -1532,11 +741,11 @@ def calculate_original_performance(pairs):
         if drawdown > max_drawdown:
             max_drawdown = drawdown
     
-    # TÃ­nh Average Win/Loss
+    # Tính Average Win/Loss
     avg_win = sum(win_amounts) / len(win_amounts) if win_amounts else 0
     avg_loss = sum(loss_amounts) / len(loss_amounts) if loss_amounts else 0
     
-    # TÃ­nh Consecutive Wins/Losses
+    # Tính Consecutive Wins/Losses
     max_consecutive_wins = 0
     max_consecutive_losses = 0
     current_win_streak = 0
@@ -1552,14 +761,14 @@ def calculate_original_performance(pairs):
             current_win_streak = 0
             max_consecutive_losses = max(max_consecutive_losses, current_loss_streak)
     
-    # TÃ­nh Sharpe Ratio (Ä‘Æ¡n giáº£n hoÃ¡)
+    # Tính Sharpe Ratio (đơn giản hoá)
     if len(pnl_list) > 1:
         std_dev = math.sqrt(sum([(x - avg_trade) ** 2 for x in pnl_list]) / (len(pnl_list) - 1))
         sharpe_ratio = avg_trade / std_dev if std_dev > 0 else 0
     else:
         sharpe_ratio = 0
     
-    # TÃ­nh Recovery Factor
+    # Tính Recovery Factor
     recovery_factor = total_pnl / max_drawdown if max_drawdown > 0 else float('inf') if total_pnl > 0 else 0
     
     return {
@@ -1606,7 +815,7 @@ def create_original_baseline_details(trade_pairs):
     return baseline_details
 
 def filter_trades_by_selection(pairs, max_trades=0, start_trade=1, selection_mode='sequence'):
-    """Lá»c trades theo tham sá»‘ ngÆ°á»i dÃ¹ng chá»n"""
+    """Lọc trades theo tham số người dùng chọn"""
     if not pairs:
         return pairs
     
@@ -1623,11 +832,11 @@ def filter_trades_by_selection(pairs, max_trades=0, start_trade=1, selection_mod
     total_count = len(sorted_pairs)
     
     if start_trade < 0:
-        # Sá»‘ Ã¢m = báº¯t Ä‘áº§u tá»« cuá»‘i (vÃ­ dá»¥: -10 = 10 lá»‡nh cuá»‘i)
+        # Số âm = bắt đầu từ cuối (ví dụ: -10 = 10 lệnh cuối)
         start_idx = max(0, total_count + start_trade)
         sorted_pairs = sorted_pairs[start_idx:]
     elif start_trade > 1:
-        # Sá»‘ dÆ°Æ¡ng = báº¯t Ä‘áº§u tá»« Ä‘áº§u (vÃ­ dá»¥: 5 = tá»« lá»‡nh thá»© 5)
+        # Số dương = bắt đầu từ đầu (ví dụ: 5 = từ lệnh thứ 5)
         sorted_pairs = sorted_pairs[start_trade-1:]
     
     # Apply max_trades filter
@@ -1637,12 +846,17 @@ def filter_trades_by_selection(pairs, max_trades=0, start_trade=1, selection_mod
     return sorted_pairs
 
 def find_candle_idx(dt, df_candle):
+    # Defensive: if no candle data or missing 'time' column, bail out
+    if df_candle is None or not hasattr(df_candle, 'columns') or 'time' not in df_candle.columns:
+        return -1
     if pd.isna(dt):
         return -1
     arr = df_candle['time'].values
+    if len(arr) == 0:
+        return -1
     target_dt = np.datetime64(dt)
     min_time = arr[0]
-    max_time = arr[-1] 
+    max_time = arr[-1]
     if target_dt < min_time or target_dt > max_time:
         return -1
     idx = np.where(arr == target_dt)[0]
@@ -1650,16 +864,46 @@ def find_candle_idx(dt, df_candle):
 
 def simulate_trade_sl_only(pair, df_candle, sl_percent):
     """
-    âš¡ Tá»I Æ¯U: SL-only simulation, tá»‘i giáº£n log, tÄƒng tá»‘c Ä‘á»™
+    ⚡ TỐI ƯU: SL-only simulation, tối giản log, tăng tốc độ
     """
     entryIdx = find_candle_idx(pair['entryDt'], df_candle)
     exitIdx = find_candle_idx(pair['exitDt'], df_candle)
-    if entryIdx == -1 or exitIdx == -1 or exitIdx <= entryIdx:
-        return None
+    # If candle data not available, fallback to using tradelist entry/exit prices
+    if entryIdx == -1 or exitIdx == -1 or (isinstance(df_candle, pd.DataFrame) and len(df_candle) == 0):
+        # Coerce entry/exit prices safely to numeric
+        entry_raw = pair.get('entryPrice', pair.get('price', 0))
+        exit_raw = pair.get('exitPrice', entry_raw)
+        entryPrice = safe_float(entry_raw)
+        finalExitPrice = safe_float(exit_raw) if exit_raw is not None else entryPrice
+        side = pair.get('side', 'LONG')
+        exitType = 'Original'
+        if sl_percent > 0:
+            # Cannot apply SL without candles; assume original exit
+            exitType = 'Original'
+        if side == 'LONG':
+            pnlPct = (finalExitPrice - entryPrice) / entryPrice * 100.0 if entryPrice != 0 else 0.0
+        else:
+            pnlPct = (entryPrice - finalExitPrice) / entryPrice * 100.0 if entryPrice != 0 else 0.0
+        return {
+            'num': pair.get('num'),
+            'side': side,
+            'entryPrice': entryPrice,
+            'exitPrice': finalExitPrice,
+            'exitType': exitType,
+            'pnlPct': float(pnlPct),
+            'pnlPctOrigin': float(pnlPct),
+            'entryDt': pair.get('entryDt'),
+            'exitDt': pair.get('exitDt'),
+            'sl': sl_percent,
+            'be': 0,
+            'ts_trig': 0,
+            'ts_step': 0
+        }
     prices = df_candle.iloc[entryIdx:exitIdx+1]
-    side = pair['side']
-    entryPrice = float(pair['entryPrice'])
-    finalExitPrice = float(pair['exitPrice'])
+    side = pair.get('side', 'LONG')
+    # Ensure entry/exit prices are numeric when using candles slice
+    entryPrice = safe_float(pair.get('entryPrice', pair.get('price', 0)))
+    finalExitPrice = safe_float(pair.get('exitPrice', entryPrice))
     exitType = 'Original'
     if sl_percent > 0:
         if side == 'LONG':
@@ -1705,7 +949,7 @@ def simulate_trade_sl_only(pair, df_candle, sl_percent):
 
 def calculate_advanced_metrics(details):
     """
-    âš¡ Tá»I Æ¯U: TÃ­nh toÃ¡n cÃ¡c chá»‰ sá»‘ nÃ¢ng cao, tá»‘i giáº£n log, tÄƒng tá»‘c Ä‘á»™
+    ⚡ TỐI ƯU: Tính toán các chỉ số nâng cao, tối giản log, tăng tốc độ
     """
     if not details:
         return {
@@ -1758,11 +1002,11 @@ def calculate_advanced_metrics(details):
 def grid_search_sl_fallback(pairs, df_candle, sl_min, sl_max, sl_step, opt_type, 
                            be_min=0.5, ts_trig_min=0.5, ts_step_min=0.5):
     """
-    âš¡ Tá»I Æ¯U: Grid search fallback, tá»‘i giáº£n log, tÄƒng tá»‘c Ä‘á»™
+    ⚡ TỐI ƯU: Grid search fallback, tối giản log, tăng tốc độ
     """
     global optimization_status
-    print(f"âš¡ OPTIMIZED GRID SEARCH STARTED!")
-    print(f"ðŸ“Š {len(pairs)} pairs, SL: {sl_min}-{sl_max} step {sl_step}")
+    print(f"⚡ OPTIMIZED GRID SEARCH STARTED!")
+    print(f"📊 {len(pairs)} pairs, SL: {sl_min}-{sl_max} step {sl_step}")
     results = []
     sl_list = list(np.arange(sl_min, sl_max + sl_step/2, sl_step))
     total_combinations = len(sl_list)
@@ -1770,7 +1014,7 @@ def grid_search_sl_fallback(pairs, df_candle, sl_min, sl_max, sl_step, opt_type,
     for i, sl in enumerate(sl_list):
         optimization_status['current_progress'] = i + 1
         if i % progress_interval == 0 or i < 2 or i == total_combinations - 1:
-            print(f"âš¡ Progress: {i+1}/{total_combinations} ({(i+1)/total_combinations*100:.1f}%) - SL: {sl:.1f}%")
+            print(f"⚡ Progress: {i+1}/{total_combinations} ({(i+1)/total_combinations*100:.1f}%) - SL: {sl:.1f}%")
         details = []
         win_count = 0
         gain_sum = 0
@@ -1790,7 +1034,7 @@ def grid_search_sl_fallback(pairs, df_candle, sl_min, sl_max, sl_step, opt_type,
         pf = (gain_sum / loss_sum) if loss_sum > 0 else float('inf') if gain_sum > 0 else 0
         pnl_total = sum([x['pnlPct'] for x in details])
         if i == 0:
-            print(f"âœ… Verification SL={sl:.1f}%: {total_trades} trades, PnL={pnl_total:.4f}%, WR={winrate:.2f}%")
+            print(f"✅ Verification SL={sl:.1f}%: {total_trades} trades, PnL={pnl_total:.4f}%, WR={winrate:.2f}%")
         advanced_metrics = calculate_advanced_metrics(details)
         results.append({
             'sl': float(sl),
@@ -1821,29 +1065,29 @@ def grid_search_sl_fallback(pairs, df_candle, sl_min, sl_max, sl_step, opt_type,
     results.sort(key=lambda x: x[sort_key], reverse=reverse_order)
     if results:
         best = results[0]
-        print(f"ðŸ† BEST RESULT: SL={best['sl']:.1f}% -> PnL={best['pnl_total']:.4f}%, WR={best['winrate']:.2f}%")
+        print(f"🏆 BEST RESULT: SL={best['sl']:.1f}% -> PnL={best['pnl_total']:.4f}%, WR={best['winrate']:.2f}%")
     return results
 
 def grid_search_realistic_full(pairs, df_candle, sl_list, be_list, ts_trig_list, ts_step_list, opt_type):
     """
-    TÃŒM KIáº¾M LÆ¯á»šI TOÃ€N DIá»†N vá»›i mÃ´ phá»ng Ä‘áº§y Ä‘á»§ SL + BE + TS
-    HÃ m nÃ y Ä‘áº£m báº£o MÃ” PHá»ŽNG GIAO Dá»ŠCH THá»°C Táº¾ cho táº¥t cáº£ tá»• há»£p tham sá»‘
+    TÌM KIẾM LƯỚI TOÀN DIỆN với mô phỏng đầy đủ SL + BE + TS
+    Hàm này đảm bảo MÔ PHỎNG GIAO DỊCH THỰC TẾ cho tất cả tổ hợp tham số
     """
     global optimization_status
     
-    print(f"ðŸš€ TÃŒM KIáº¾M LÆ¯á»šI THá»°C Táº¾ TOÃ€N DIá»†N Báº®T Äáº¦U!")
-    print(f"ðŸ“Š CHáº¾ Äá»˜ MÃ” PHá»ŽNG: SL + Breakeven + Trailing Stop Ä‘áº§y Ä‘á»§")
-    print(f"ðŸ”¢ Tham sá»‘: SL={len(sl_list)}, BE={len(be_list)}, TS_TRIG={len(ts_trig_list)}, TS_STEP={len(ts_step_list)}")
+    print(f"🚀 TÌM KIẾM LƯỚI THỰC TẾ TOÀN DIỆN BẮT ĐẦU!")
+    print(f"📊 CHẾ ĐỘ MÔ PHỎNG: SL + Breakeven + Trailing Stop đầy đủ")
+    print(f"🔢 Tham số: SL={len(sl_list)}, BE={len(be_list)}, TS_TRIG={len(ts_trig_list)}, TS_STEP={len(ts_step_list)}")
     
     results = []
     total_combinations = len(sl_list) * len(be_list) * len(ts_trig_list) * len(ts_step_list)
     combination_count = 0
     
-    print(f"ðŸ”„ CHáº¾ Äá»˜ THá»°C Táº¾: Thá»­ nghiá»‡m {total_combinations:,} tá»• há»£p tham sá»‘...")
-    print(f"ðŸ’¡ Má»—i lá»‡nh sáº½ Ä‘Æ°á»£c mÃ´ phá»ng vá»›i:")
-    print(f"   - Stop Loss: Báº£o vá»‡ vá»‘n Ä‘á»™ng")
-    print(f"   - Breakeven: Di chuyá»ƒn SL vá» hÃ²a vá»‘n khi Ä‘áº¡t má»¥c tiÃªu lá»£i nhuáº­n")  
-    print(f"   - Trailing Stop: Báº£o vá»‡ lá»£i nhuáº­n Ä‘á»™ng vá»›i tiáº¿n trÃ¬nh tá»«ng bÆ°á»›c")
+    print(f"🔄 CHẾ ĐỘ THỰC TẾ: Thử nghiệm {total_combinations:,} tổ hợp tham số...")
+    print(f"💡 Mỗi lệnh sẽ được mô phỏng với:")
+    print(f"   - Stop Loss: Bảo vệ vốn động")
+    print(f"   - Breakeven: Di chuyển SL về hòa vốn khi đạt mục tiêu lợi nhuận")  
+    print(f"   - Trailing Stop: Bảo vệ lợi nhuận động với tiến trình từng bước")
     
     for sl in sl_list:
         for be in be_list:
@@ -1851,11 +1095,11 @@ def grid_search_realistic_full(pairs, df_candle, sl_list, be_list, ts_trig_list,
                 for ts_step in ts_step_list:
                     combination_count += 1
                     
-                    # Cáº­p nháº­t tiáº¿n Ä‘á»™ cho giao diá»‡n web
+                    # Cập nhật tiến độ cho giao diện web
                     optimization_status['current_progress'] = combination_count
                     
                     if combination_count % 100 == 0 or combination_count <= 10:
-                        print(f"Tiáº¿n Ä‘á»™: {combination_count}/{total_combinations} - Thá»­ nghiá»‡m SL:{sl:.1f}% BE:{be:.1f}% TS:{ts_trig:.1f}%/{ts_step:.1f}%")
+                        print(f"Tiến độ: {combination_count}/{total_combinations} - Thử nghiệm SL:{sl:.1f}% BE:{be:.1f}% TS:{ts_trig:.1f}%/{ts_step:.1f}%")
                     
                     # Simulate all trades with current parameter set
                     details = []
@@ -1864,11 +1108,11 @@ def grid_search_realistic_full(pairs, df_candle, sl_list, be_list, ts_trig_list,
                     loss_sum = 0
                     
                     for pair in pairs:
-                        # Sá»­ dá»¥ng hÃ m simulate_trade NÃ‚NG CAO vá»›i logic BE+TS Ä‘áº§y Ä‘á»§
+                        # Sử dụng hàm simulate_trade NÂNG CAO với logic BE+TS đầy đủ
                         if ADVANCED_MODE:
                             result, log = simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step)
                         else:
-                            # Dá»± phÃ²ng mÃ´ phá»ng chá»‰ SL  
+                            # Dự phòng mô phỏng chỉ SL  
                             result = simulate_trade_sl_only(pair, df_candle, sl)
                             result.update({'be': be, 'ts_trig': ts_trig, 'ts_step': ts_step})
                         
@@ -1881,27 +1125,27 @@ def grid_search_realistic_full(pairs, df_candle, sl_list, be_list, ts_trig_list,
                             else: 
                                 loss_sum += abs(pnl)
                     
-                    # TÃ­nh toÃ¡n cÃ¡c chá»‰ sá»‘ hiá»‡u suáº¥t
+                    # Tính toán các chỉ số hiệu suất
                     total_trades = len(details)
                     winrate = (win_count / total_trades * 100) if total_trades > 0 else 0
                     pf = (gain_sum / loss_sum) if loss_sum > 0 else float('inf') if gain_sum > 0 else 0
                     pnl_total = sum([x['pnlPct'] for x in details])
                     
-                    # TÃ­nh toÃ¡n chá»‰ sá»‘ nÃ¢ng cao sá»­ dá»¥ng káº¿t quáº£ thá»±c táº¿
+                    # Tính toán chỉ số nâng cao sử dụng kết quả thực tế
                     advanced_metrics = calculate_advanced_metrics(details)
                     
-                    # Debug vÃ i tá»• há»£p Ä‘áº§u Ä‘á»ƒ xÃ¡c minh mÃ´ phá»ng thá»±c táº¿
+                    # Debug vài tổ hợp đầu để xác minh mô phỏng thực tế
                     if combination_count <= 3:
-                        print(f"ðŸ” DEBUG THá»°C Táº¾ Tá»• há»£p #{combination_count}:")
+                        print(f"🔍 DEBUG THỰC TẾ Tổ hợp #{combination_count}:")
                         print(f"   SL={sl:.1f}% BE={be:.1f}% TS_TRIG={ts_trig:.1f}% TS_STEP={ts_step:.1f}%")
-                        print(f"   Tá»•ng lá»‡nh: {total_trades}")
-                        print(f"   Lá»‡nh tháº¯ng: {win_count}")
-                        print(f"   Tá»•ng PnL: {pnl_total:.4f}%")
-                        print(f"   Tá»· lá»‡ tháº¯ng: {winrate:.2f}%")
-                        print(f"   Chá»‰ sá»‘ nÃ¢ng cao: Max DD={advanced_metrics['max_drawdown']:.4f}%, Sharpe={advanced_metrics['sharpe_ratio']:.4f}")
+                        print(f"   Tổng lệnh: {total_trades}")
+                        print(f"   Lệnh thắng: {win_count}")
+                        print(f"   Tổng PnL: {pnl_total:.4f}%")
+                        print(f"   Tỷ lệ thắng: {winrate:.2f}%")
+                        print(f"   Chỉ số nâng cao: Max DD={advanced_metrics['max_drawdown']:.4f}%, Sharpe={advanced_metrics['sharpe_ratio']:.4f}")
                         if len(details) > 0:
                             sample_detail = details[0]
-                            print(f"   Lá»‡nh máº«u: #{sample_detail['num']} {sample_detail['side']} -> {sample_detail['exitType']} -> {sample_detail['pnlPct']:.4f}%")
+                            print(f"   Lệnh mẫu: #{sample_detail['num']} {sample_detail['side']} -> {sample_detail['exitType']} -> {sample_detail['pnlPct']:.4f}%")
                     
                     # Store result with full parameter set
                     result_dict = {
@@ -1940,8 +1184,8 @@ def grid_search_realistic_full(pairs, df_candle, sl_list, be_list, ts_trig_list,
     else:
         results.sort(key=lambda x: x['pnl_total'], reverse=True)
     
-    print(f"ðŸ” Káº¾T QUáº¢ THá»°C Táº¾: Káº¿t quáº£ tá»‘t nháº¥t -> SL:{results[0]['sl']:.1f}% BE:{results[0]['be']:.1f}% TS:{results[0]['ts_trig']:.1f}%/{results[0]['ts_step']:.1f}%")
-    print(f"   Hiá»‡u suáº¥t: PnL={results[0]['pnl_total']:.4f}% Tá»· lá»‡ tháº¯ng={results[0]['winrate']:.2f}% Sharpe={results[0]['sharpe_ratio']:.4f}")
+    print(f"🔍 KẾT QUẢ THỰC TẾ: Kết quả tốt nhất -> SL:{results[0]['sl']:.1f}% BE:{results[0]['be']:.1f}% TS:{results[0]['ts_trig']:.1f}%/{results[0]['ts_step']:.1f}%")
+    print(f"   Hiệu suất: PnL={results[0]['pnl_total']:.4f}% Tỷ lệ thắng={results[0]['winrate']:.2f}% Sharpe={results[0]['sharpe_ratio']:.4f}")
     
     return results
 
@@ -1951,7 +1195,7 @@ def optuna_search(trade_pairs, df_candle, sl_min, sl_max, be_min, be_max, ts_tri
         be = trial.suggest_float('be', be_min, be_max)
         ts_trig = trial.suggest_float('ts_trig', ts_trig_min, ts_trig_max)
         ts_step = trial.suggest_float('ts_step', ts_step_min, ts_step_max)
-        # Sá»­ dá»¥ng simulate_trade cho tá»«ng pair
+        # Sử dụng simulate_trade cho từng pair
         details = []
         win_count = 0
         gain_sum = 0
@@ -1970,7 +1214,7 @@ def optuna_search(trade_pairs, df_candle, sl_min, sl_max, be_min, be_max, ts_tri
         winrate = (win_count / total_trades * 100) if total_trades > 0 else 0
         pf = (gain_sum / loss_sum) if loss_sum > 0 else float('inf') if gain_sum > 0 else 0
         pnl_total = sum([x['pnlPct'] for x in details])
-        # Chá»n hÃ m tá»‘i Æ°u hÃ³a
+        # Chọn hàm tối ưu hóa
         if opt_type == 'winrate':
             return winrate
         elif opt_type == 'pf':
@@ -1979,7 +1223,7 @@ def optuna_search(trade_pairs, df_candle, sl_min, sl_max, be_min, be_max, ts_tri
             advanced_metrics = calculate_advanced_metrics(details)
             return -advanced_metrics['max_drawdown']
         else:
-            return pnl_total  # Máº·c Ä‘á»‹nh tá»‘i Æ°u hÃ³a pnl_total
+            return pnl_total  # Mặc định tối ưu hóa pnl_total
 
     study = optuna.create_study(direction='maximize')
     study.optimize(objective, n_trials=n_trials)
@@ -1990,27 +1234,27 @@ def optuna_search(trade_pairs, df_candle, sl_min, sl_max, be_min, be_max, ts_tri
 
 def grid_search_realistic_full_v2(pairs, df_candle, sl_list, be_list, ts_trig_list, ts_step_list, opt_type):
     """
-    OPTUNA: Sá»¬ Dá»¤NG OPTUNA Äá»‚ Tá»I Æ¯U HÃ“A THAM Sá» SL + BE + TS
+    OPTUNA: SỬ DỤNG OPTUNA ĐỂ TỐI ƯU HÓA THAM SỐ SL + BE + TS
     
         """
     global optimization_status
     
-    print(f"ðŸš€ TÃŒM KIáº¾M LÆ¯á»šI THá»°C Táº¾ TOÃ€N DIá»†N Báº®T Äáº¦U!")
-    print(f"ðŸ“Š CHáº¾ Äá»˜ MÃ” PHá»ŽNG: SL + Breakeven + Trailing Stop Ä‘áº§y Ä‘á»§")
-    print(f"ðŸ”¢ Tham sá»‘: SL={len(sl_list)}, BE={len(be_list)}, TS_TRIG={len(ts_trig_list)}, TS_STEP={len(ts_step_list)}")
+    print(f"🚀 TÌM KIẾM LƯỚI THỰC TẾ TOÀN DIỆN BẮT ĐẦU!")
+    print(f"📊 CHẾ ĐỘ MÔ PHỎNG: SL + Breakeven + Trailing Stop đầy đủ")
+    print(f"🔢 Tham số: SL={len(sl_list)}, BE={len(be_list)}, TS_TRIG={len(ts_trig_list)}, TS_STEP={len(ts_step_list)}")
     
     results = []
     total_combinations = len(sl_list) * len(be_list) * len(ts_trig_list) * len(ts_step_list)
     combination_count = 0
     
-    print(f"ðŸ”„ CHáº¾ Äá»˜ THá»°C Táº¾: Thá»­ nghiá»‡m {total_combinations:,} tá»• há»£p tham sá»‘...")
-    print(f"ðŸ’¡ Má»—i lá»‡nh sáº½ Ä‘Æ°á»£c mÃ´ phá»ng vá»›i:")
-    print(f"   - Stop Loss: Báº£o vá»‡ vá»‘n Ä‘á»™ng")
-    print(f"   - Breakeven: Di chuyá»ƒn SL vá» hÃ²a vá»‘n khi Ä‘áº¡t má»¥c tiÃªu lá»£i nhuáº­n")  
-    print(f"   - Trailing Stop: Báº£o vá»‡ lá»£i nhuáº­n Ä‘á»™ng vá»›i tiáº¿n trÃ¬nh tá»«ng bÆ°á»›c")
+    print(f"🔄 CHẾ ĐỘ THỰC TẾ: Thử nghiệm {total_combinations:,} tổ hợp tham số...")
+    print(f"💡 Mỗi lệnh sẽ được mô phỏng với:")
+    print(f"   - Stop Loss: Bảo vệ vốn động")
+    print(f"   - Breakeven: Di chuyển SL về hòa vốn khi đạt mục tiêu lợi nhuận")  
+    print(f"   - Trailing Stop: Bảo vệ lợi nhuận động với tiến trình từng bước")
     
-    # Cháº¡y Optuna Ä‘á»ƒ tÃ¬m tham sá»‘ tá»‘i Æ°u nháº¥t
-    print(f"ðŸ” CHáº Y OPTUNA Äá»‚ TÃŒM THAM Sá» Tá»I Æ¯U NHáº¤T")
+    # Chạy Optuna để tìm tham số tối ưu nhất
+    print(f"🔍 CHẠY OPTUNA ĐỂ TÌM THAM SỐ TỐI ƯU NHẤT")
     opt_params, opt_value = optuna_search(pairs, df_candle, 
                                           min(sl_list), max(sl_list), 
                                           min(be_list), max(be_list), 
@@ -2023,10 +1267,10 @@ def grid_search_realistic_full_v2(pairs, df_candle, sl_list, be_list, ts_trig_li
     ts_trig_opt = opt_params['ts_trig']
     ts_step_opt = opt_params['ts_step']
     
-    print(f"ðŸ† THAM Sá» Tá»I Æ¯U: SL={sl_opt:.1f}%, BE={be_opt:.1f}%, TS_TRIG={ts_trig_opt:.1f}%, TS_STEP={ts_step_opt:.1f}%")
-    print(f"   GiÃ¡ trá»‹ tá»‘i Æ°u: {opt_value}")
+    print(f"🏆 THAM SỐ TỐI ƯU: SL={sl_opt:.1f}%, BE={be_opt:.1f}%, TS_TRIG={ts_trig_opt:.1f}%, TS_STEP={ts_step_opt:.1f}%")
+    print(f"   Giá trị tối ưu: {opt_value}")
     
-    # Cháº¡y mÃ´ phá»ng vá»›i tham sá»‘ tá»‘i Æ°u
+    # Chạy mô phỏng với tham số tối ưu
     details_opt = []
     win_count_opt = 0
     gain_sum_opt = 0
@@ -2048,10 +1292,10 @@ def grid_search_realistic_full_v2(pairs, df_candle, sl_list, be_list, ts_trig_li
     pf_opt = (gain_sum_opt / loss_sum_opt) if loss_sum_opt > 0 else float('inf') if gain_sum_opt > 0 else 0
     pnl_total_opt = sum([x['pnlPct'] for x in details_opt])
     
-    # TÃ­nh cÃ¡c chá»‰ sá»‘ nÃ¢ng cao cho káº¿t quáº£ tá»‘i Æ°u
+    # Tính các chỉ số nâng cao cho kết quả tối ưu
     advanced_metrics_opt = calculate_advanced_metrics(details_opt)
     
-    # ÄÃ³ng gÃ³i káº¿t quáº£
+    # Đóng gói kết quả
     result_dict_opt = {
         'sl': float(sl_opt),
         'be': float(be_opt),
@@ -2072,7 +1316,7 @@ def grid_search_realistic_full_v2(pairs, df_candle, sl_list, be_list, ts_trig_li
     
     results.append(result_dict_opt)
     
-    # Sort káº¿t quáº£ tá»‘i Æ°u
+    # Sort kết quả tối ưu
     if opt_type == 'pnl':
         results.sort(key=lambda x: x['pnl_total'], reverse=True)
     elif opt_type == 'winrate':
@@ -2088,14 +1332,14 @@ def grid_search_realistic_full_v2(pairs, df_candle, sl_list, be_list, ts_trig_li
     else:
         results.sort(key=lambda x: x['pnl_total'], reverse=True)
     
-    print(f"ðŸ” Káº¾T QUáº¢ Tá»I Æ¯U: Káº¿t quáº£ tá»‘t nháº¥t -> SL:{results[0]['sl']:.1f}% BE:{results[0]['be']:.1f}% TS:{results[0]['ts_trig']:.1f}%/{results[0]['ts_step']:.1f}%")
-    print(f"   Hiá»‡u suáº¥t: PnL={results[0]['pnl_total']:.4f}% Tá»· lá»‡ tháº¯ng={results[0]['winrate']:.2f}% Sharpe={results[0]['sharpe_ratio']:.4f}")
+    print(f"🔍 KẾT QUẢ TỐI ƯU: Kết quả tốt nhất -> SL:{results[0]['sl']:.1f}% BE:{results[0]['be']:.1f}% TS:{results[0]['ts_trig']:.1f}%/{results[0]['ts_step']:.1f}%")
+    print(f"   Hiệu suất: PnL={results[0]['pnl_total']:.4f}% Tỷ lệ thắng={results[0]['winrate']:.2f}% Sharpe={results[0]['sharpe_ratio']:.4f}")
     
     return results
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index_enhanced.html')
 
 
 @app.route('/upload_tradelist', methods=['POST'])
@@ -2108,6 +1352,7 @@ def upload_tradelist():
             return jsonify({'success': False, 'error': 'Missing file'}), 400
 
         content = trade_file.read().decode('utf-8')
+        # Use existing loader to parse into DataFrame
         df = load_trade_csv_from_content(content)
         tm = TradelistManager('tradelists')
         added = tm.merge_tradelist(strategy, symbol, df)
@@ -2125,74 +1370,83 @@ def simulate_route():
         payload = request.get_json(force=True)
         symbol = payload.get('symbol', 'TEST')
         strategy = payload.get('strategy', 'demo')
-        sl = float(payload.get('sl', 0) or 0)
+        sl = float(payload.get('sl', 0))
         be = float(payload.get('break_even_trigger', 0) or 0)
         ts_trig = float(payload.get('trailing_stop', 0) or 0)
         ts_step = float(payload.get('ts_step', 0) or 0)
-        candle_path = payload.get('candle_path')
 
         tm = TradelistManager('tradelists')
         df_trade = tm.load_tradelist(strategy, symbol)
         if df_trade.empty:
             return jsonify({'success': False, 'error': 'No tradelist found for symbol/strategy'}), 404
 
-        # Try Version3 get_trade_pairs first
+        # Get trade pairs (prefer file-based function if available)
         try:
             pairs, log = get_trade_pairs_file(df_trade)
         except Exception:
             pairs, log = get_trade_pairs(df_trade)
 
-        # Load candle data from database only
+        # Try to locate a candle file for the symbol
         df_candle = None
-        
-        # Parse database format from candle_path: SYMBOL_TIMEFRAME.db
-        if candle_path and candle_path.endswith('.db'):
-            db_name = candle_path.replace('.db', '')
-            if '_' in db_name:
-                db_symbol, db_timeframe = db_name.rsplit('_', 1)
-                print(f"🔄 [SIMULATE] Loading from database: symbol={db_symbol}, timeframe={db_timeframe}")
-                
-                # Load from candlestick_data.db
-                conn = sqlite3.connect('candlestick_data.db')
-                query = "SELECT * FROM candlestick_data WHERE symbol = ? AND timeframe = ? ORDER BY open_time"
-                df_candle = pd.read_sql_query(query, conn, params=(db_symbol, db_timeframe))
-                conn.close()
-                
-                if df_candle.empty:
-                    raise ValueError(f"No candle data found in database for {db_symbol} {db_timeframe}")
-                
-                # Convert database format to standard format
-                df_candle = df_candle.rename(columns={
-                    'open_time': 'time',
-                    'open_price': 'open', 
-                    'high_price': 'high',
-                    'low_price': 'low',
-                    'close_price': 'close'
-                })
-                df_candle['time'] = pd.to_datetime(df_candle['time'], unit='s')  # Database uses seconds
-        else:
-            # No valid database candle path provided
-            print(f"❌ Invalid or missing database candle path: {candle_path}")
-            raise ValueError("Database candle path required (format: SYMBOL_TIMEFRAME.db)")
+        try:
+            # Prefer exact filenames the user mentioned, then search workspace and tradelists
+            preferred = [f"{symbol}", f"{symbol}.csv", f"{symbol.replace(' ', '')}.csv", f"{symbol.upper()}.csv"]
+            # Also include common user-provided filenames for SAGA tests
+            extra = ["BINANCE_SAGAUSDT.P, 30.csv", "BINANCE_SAGAUSDT.P-TRADELIST, 30.csv", "TEST_SAGA_30.csv"]
+            candidates = preferred + extra
+            # Search in workspace root and tradelists folder
+            search_paths = ['.', os.path.join('.', 'tradelists')]
+            found = False
+            for sp in search_paths:
+                for c in candidates:
+                    path = os.path.join(sp, c)
+                    if os.path.exists(path):
+                        try:
+                            df_candle = load_candle_csv_from_content(open(path, 'r', encoding='utf-8').read())
+                            found = True
+                            break
+                        except Exception:
+                            continue
+                if found:
+                    break
+            # If still not found, try a more lenient filename search for files containing symbol
+            if df_candle is None:
+                for root, dirs, files in os.walk('.'):
+                    for fn in files:
+                        if symbol.lower() in fn.lower() and fn.lower().endswith('.csv'):
+                            try:
+                                full = os.path.join(root, fn)
+                                df_candle = load_candle_csv_from_content(open(full, 'r', encoding='utf-8').read())
+                                found = True
+                                break
+                            except Exception:
+                                continue
+                    if found:
+                        break
+        except Exception:
+            df_candle = None
 
+        results = []
         details = []
         for pair in pairs:
             if df_candle is not None and ADVANCED_MODE:
                 try:
-                    res, lg = simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step)
+                    res, lg = simulate_trade(pair, df_candle, abs(sl), be, ts_trig, ts_step)
                     if res:
                         details.append(res)
                 except Exception:
+                    # fallback to SL-only
                     res = simulate_trade_sl_only(pair, df_candle if df_candle is not None else pd.DataFrame(), abs(sl))
                     if res:
                         details.append(res)
             else:
+                # run SL-only simulation without candle data (best-effort)
                 res = simulate_trade_sl_only(pair, df_candle if df_candle is not None else pd.DataFrame(), abs(sl))
                 if res:
                     details.append(res)
 
-        total_pnl = sum([d.get('pnlPct', 0) for d in details]) if details else 0
-        winrate = (len([d for d in details if d.get('pnlPct', 0) > 0]) / len(details) * 100) if details else 0
+        total_pnl = sum([d['pnlPct'] for d in details]) if details else 0
+        winrate = (len([d for d in details if d['pnlPct'] > 0]) / len(details) * 100) if details else 0
 
         resp = {
             'success': True,
@@ -2208,177 +1462,12 @@ def simulate_route():
 def classic():
     return render_template('index.html')
 
-@app.route('/quick_summary_strategy', methods=['POST'])
-def quick_summary_strategy():
-    """Quick summary for strategy selection mode"""
-    try:
-        print("=== STRATEGY-BASED QUICK SUMMARY START ===")
-        
-        strategy_value = request.form.get('strategy')
-        candle_data_value = request.form.get('candle_data')
-        
-        if not strategy_value or not candle_data_value:
-            return jsonify({'success': False, 'error': 'Missing strategy or candle data'})
-        
-        print(f"📊 Strategy: {strategy_value}")
-        print(f"📊 Candle: {candle_data_value}")
-        
-        # Parse strategy selection
-        strategy_parts = strategy_value.split('_')
-        if len(strategy_parts) >= 4:
-            symbol = strategy_parts[0]
-            timeframe = strategy_parts[1]  
-            strategy_name = '_'.join(strategy_parts[2:-1])
-            version = strategy_parts[-1]
-            
-            print(f"🎯 Parsed - Symbol: {symbol}, Timeframe: {timeframe}, Strategy: {strategy_name}, Version: {version}")
-        else:
-            return jsonify({'success': False, 'error': 'Invalid strategy format'})
-        
-        # Load strategy data
-        sm = get_strategy_manager()
-        strategy_info = sm.get_strategy(symbol, timeframe, strategy_name, version)
-        if not strategy_info:
-            return jsonify({'success': False, 'error': 'Strategy not found'})
-        
-        # Load trade data from strategy file
-        if not os.path.exists(strategy_info.file_path):
-            return jsonify({'success': False, 'error': f'Strategy file not found: {strategy_info.file_path}'})
-            
-        with open(strategy_info.file_path, 'r', encoding='utf-8') as f:
-            trade_content = f.read().strip()
-        
-        # Check if it's legacy format (file contains only file path)
-        if len(trade_content.split('\n')) <= 2 and not trade_content.startswith('Date,') and not trade_content.startswith('date,'):
-            # Legacy format - file contains path to actual trade file
-            legacy_trade_file = trade_content.strip()
-            print(f"🔄 Legacy format detected: {legacy_trade_file}")
-            
-            if os.path.exists(legacy_trade_file):
-                with open(legacy_trade_file, 'r', encoding='utf-8') as f:
-                    trade_content = f.read()
-                print(f"✅ Loaded legacy trade file: {legacy_trade_file}")
-            else:
-                return jsonify({'success': False, 'error': f'Legacy trade file not found: {legacy_trade_file}'})
-        
-        # Load candle data from database only
-        candle_data_value = request.form.get('candle_data')
-        print(f"📊 Candle source: {candle_data_value}")
-        
-        # Parse database format: SYMBOL_TIMEFRAME.db
-        try:
-            if not candle_data_value or not candle_data_value.endswith('.db'):
-                raise ValueError("Only database candle sources are supported")
-                
-            db_name = candle_data_value.replace('.db', '')
-            if '_' not in db_name:
-                raise ValueError(f"Invalid database format: {candle_data_value}")
-                
-            parts = db_name.split('_')
-            if len(parts) < 2:
-                raise ValueError(f"Invalid database format: {candle_data_value}")
-                
-            db_symbol = '_'.join(parts[:-1])
-            db_timeframe = parts[-1]
-            
-            print(f"🔄 Loading from database: symbol={db_symbol}, timeframe={db_timeframe}")
-            
-            # Load from candlestick_data.db
-            conn = sqlite3.connect('candlestick_data.db')
-            query = "SELECT * FROM candlestick_data WHERE symbol = ? AND timeframe = ? ORDER BY open_time"
-            df_candle = pd.read_sql_query(query, conn, params=[db_symbol, db_timeframe])
-            conn.close()
-            
-            if df_candle.empty:
-                raise ValueError(f"No candle data found in database for {db_symbol} {db_timeframe}")
-            
-            # Convert database format to standard format
-            df_candle = df_candle.rename(columns={
-                'open_time': 'time',
-                'open_price': 'open', 
-                'high_price': 'high',
-                'low_price': 'low',
-                'close_price': 'close'
-            })
-            df_candle['time'] = pd.to_datetime(df_candle['time'], unit='s')  # Database uses seconds, not milliseconds
-            
-            print(f"✅ Loaded from database: {len(df_candle)} candles")
-                
-        except Exception as e:
-            return jsonify({'success': False, 'error': f'Error loading candle data: {str(e)}'})
-        
-        print(f"✅ Loaded strategy: {strategy_info.filename}")
-        print(f"✅ Loaded candle data: {len(df_candle)} candles")
-        
-        # Load and process trade data
-        df_trade = load_trade_csv_from_content(trade_content)
-        
-        print(f"Data loaded: Trade={len(df_trade)}, Candle={len(df_candle)}")
-        
-        # Enhanced validation and info
-        unique_trades = len(df_trade['trade'].unique()) if 'trade' in df_trade.columns else 0
-        print(f"Trade validation: {len(df_trade)} records from {unique_trades} unique trades")
-        
-        # Get trade pairs for proper PnL calculation
-        trade_pairs, log_init = get_trade_pairs(df_trade)
-        print(f"📊 Trade pairs extracted: {len(trade_pairs)} pairs from {len(df_trade)} records")
-        
-        # Calculate performance using trade pairs (like backup_old)
-        if trade_pairs:
-            performance = calculate_original_performance(trade_pairs)
-            if performance:
-                total_pnl = performance['total_pnl']
-                win_trades = performance['win_trades']
-                lose_trades = performance['loss_trades']
-                total_trades = performance['total_trades']
-                win_rate = performance['winrate']
-                profit_factor = performance['profit_factor']
-                print(f"📊 Performance calculated: PnL={total_pnl:.2f}%, Win Rate={win_rate:.2f}%, Trades={total_trades}")
-            else:
-                total_pnl = win_trades = lose_trades = total_trades = win_rate = profit_factor = 0
-                print("⚠️ Performance calculation returned None")
-        else:
-            total_pnl = win_trades = lose_trades = total_trades = win_rate = profit_factor = 0
-            print("⚠️ No trade pairs extracted")
-            
-        # Get date range from trade data
-        if 'date' in df_trade.columns:
-            start_date = df_trade['date'].min().strftime('%Y-%m-%d') if pd.notna(df_trade['date'].min()) else 'N/A'
-            end_date = df_trade['date'].max().strftime('%Y-%m-%d') if pd.notna(df_trade['date'].max()) else 'N/A'
-        else:
-            start_date = end_date = 'N/A'
-        
-        # Create response data
-        summary_data = {
-            'strategy_name': f"{symbol} {timeframe} {strategy_name} {version}",
-            'total_trades': total_trades,
-            'total_pnl': round(total_pnl, 2),
-            'win_rate': round(win_rate, 2),
-            'profit_factor': round(profit_factor, 2),
-            'win_trades': win_trades,
-            'lose_trades': lose_trades,
-            'start_date': start_date,
-            'end_date': end_date,
-            'candle_count': len(df_candle)
-        }
-        
-        return jsonify({
-            'success': True,
-            'data': summary_data
-        })
-            
-    except Exception as e:
-        print(f"❌ Error in quick summary: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)})
-
 @app.route('/quick_summary', methods=['POST'])
 def quick_summary():
     try:
         print("=== ENHANCED QUICK SUMMARY START ===")
         
-        # Láº¥y dá»¯ liá»‡u tá»« form
+        # Lấy dữ liệu từ form
         trade_file = request.files.get('trade_file')
         candle_file = request.files.get('candle_file')
         
@@ -2387,13 +1476,13 @@ def quick_summary():
         
         print(f"Files: {trade_file.filename}, {candle_file.filename}")
         
-        # Äá»c files trá»±c tiáº¿p khÃ´ng qua tempfile Ä‘á»ƒ trÃ¡nh treo
+        # Đọc files trực tiếp không qua tempfile để tránh treo
         trade_content = trade_file.read().decode('utf-8')
         candle_content = candle_file.read().decode('utf-8')
         
         print(f"Content lengths: Trade={len(trade_content)}, Candle={len(candle_content)}")
         
-        # Load vÃ  process data - chá»‰ dÃ¹ng content-based functions
+        # Load và process data - chỉ dùng content-based functions
         df_trade = load_trade_csv_from_content(trade_content)
         df_candle = load_candle_csv_from_content(candle_content)
         
@@ -2414,30 +1503,30 @@ def quick_summary():
                 format_info = "ACE/mid-range format detected"
             print(f"Format info: {format_info}")
         
-        # Filter data theo thá»i gian vá»›i debug
+        # Filter data theo thời gian với debug
         min_candle = df_candle['time'].min()
         max_candle = df_candle['time'].max()
-        print(f"ðŸ• SUMMARY DEBUG: Candle time range: {min_candle} to {max_candle}")
+        print(f"🕐 SUMMARY DEBUG: Candle time range: {min_candle} to {max_candle}")
         
         min_trade = df_trade['date'].min()
         max_trade = df_trade['date'].max()
-        print(f"ðŸ• SUMMARY DEBUG: Trade time range: {min_trade} to {max_trade}")
+        print(f"🕐 SUMMARY DEBUG: Trade time range: {min_trade} to {max_trade}")
         
         df_trade_filtered = df_trade[(df_trade['date'] >= min_candle) & (df_trade['date'] <= max_candle)]
-        print(f"ðŸ• SUMMARY DEBUG: Trades after time filter: {len(df_trade_filtered)} (original: {len(df_trade)})")
+        print(f"🕐 SUMMARY DEBUG: Trades after time filter: {len(df_trade_filtered)} (original: {len(df_trade)})")
         
-        # Láº¥y trade pairs - chá»‰ dÃ¹ng local function
+        # Lấy trade pairs - chỉ dùng local function
         trade_pairs, log_init = get_trade_pairs(df_trade_filtered)
         
-        # TÃ­nh toÃ¡n hiá»‡u suáº¥t gá»‘c báº±ng 2 cÃ¡ch Ä‘á»ƒ so sÃ¡nh
-        # CÃ¡ch 1: Direct calculation tá»« trade pairs
+        # Tính toán hiệu suất gốc bằng 2 cách để so sánh
+        # Cách 1: Direct calculation từ trade pairs
         performance_direct = calculate_original_performance(trade_pairs)
         
-        # CÃ¡ch 2: Simulation-based calculation Ä‘á»ƒ so sÃ¡nh
+        # Cách 2: Simulation-based calculation để so sánh
         performance_simulated = None
         simulated_details = []
         try:
-            for pair in trade_pairs[:10]:  # Test vá»›i 10 lá»‡nh Ä‘áº§u Ä‘á»ƒ khÃ´ng cháº­m
+            for pair in trade_pairs[:10]:  # Test với 10 lệnh đầu để không chậm
                 if ADVANCED_MODE:
                     result, log = simulate_trade(pair, df_candle, 0, 0, 0, 0)
                     if result is not None:
@@ -2455,7 +1544,7 @@ def quick_summary():
                     'winrate': sim_winrate,
                     'trade_count': len(simulated_details)
                 }
-                print(f"ðŸ” COMPARISON: Direct vs Simulated PnL for first 10 trades")
+                print(f"🔍 COMPARISON: Direct vs Simulated PnL for first 10 trades")
                 print(f"   Direct method: {performance_direct['total_pnl']/len(trade_pairs)*10:.4f}% (10 trades)")
                 print(f"   Simulated method: {sim_pnl_total:.4f}% (10 trades)")
                 
@@ -2467,7 +1556,7 @@ def quick_summary():
         
         print(f"Trade pairs: {len(trade_pairs)}")
         
-        # ThÃ´ng tin vá» candle data
+        # Thông tin về candle data
         candle_count = len(df_candle)
         date_range = f"{min_candle.strftime('%m/%d %H:%M')} - {max_candle.strftime('%m/%d %H:%M')}"
         
@@ -2495,7 +1584,7 @@ def quick_summary():
             'comparison': {
                 'direct_method': performance_direct['total_pnl'] if performance_direct else 0,
                 'simulated_method': performance_simulated['total_pnl'] if performance_simulated else 'N/A',
-                'method_note': 'Direct = tá»« trade pairs, Simulated = qua engine mÃ´ phá»ng'
+                'method_note': 'Direct = từ trade pairs, Simulated = qua engine mô phỏng'
             } if performance_simulated else None
         }
         
@@ -2536,7 +1625,7 @@ def suggest_parameters():
         if len(trade_pairs) < 10:
             return jsonify({
                 'success': False, 
-                'error': f'KhÃ´ng Ä‘á»§ dá»¯ liá»‡u Ä‘á»ƒ phÃ¢n tÃ­ch thÃ´ng minh. Cáº§n Ã­t nháº¥t 10 trades, hiá»‡n táº¡i chá»‰ cÃ³ {len(trade_pairs)} trades.'
+                'error': f'Không đủ dữ liệu để phân tích thông minh. Cần ít nhất 10 trades, hiện tại chỉ có {len(trade_pairs)} trades.'
             })
         
         # Import and run Smart Range Finder
@@ -2554,14 +1643,14 @@ def suggest_parameters():
                 from smart_range_finder import SmartRangeFinder
                 from dynamic_step_calculator import DynamicStepCalculator
                 
-                print("ðŸ” Running Smart Range Finder analysis...")
+                print("🔍 Running Smart Range Finder analysis...")
                 
                 # Initialize and run Smart Range Finder
                 finder = SmartRangeFinder(temp_path)
                 analysis_results = finder.analyze_price_movement_patterns()
                 recommendations = finder.generate_final_recommendations()
                 
-                print("ðŸ” Running Dynamic Step Calculator...")
+                print("🔍 Running Dynamic Step Calculator...")
                 
                 # Initialize and run Dynamic Step Calculator
                 calculator = DynamicStepCalculator(temp_path)
@@ -2631,13 +1720,13 @@ def suggest_parameters():
                 
                 # Build explanation
                 explanation = {
-                    'data_analysis': f"PhÃ¢n tÃ­ch {len(trade_pairs)} trades vá»›i {total_trades_analyzed} exit records",
-                    'strategy_selected': f"Chiáº¿n lÆ°á»£c Balanced Ä‘Æ°á»£c chá»n tá»± Ä‘á»™ng (cÃ¢n báº±ng rá»§i ro/lá»£i nhuáº­n)",
+                    'data_analysis': f"Phân tích {len(trade_pairs)} trades với {total_trades_analyzed} exit records",
+                    'strategy_selected': f"Chiến lược Balanced được chọn tự động (cân bằng rủi ro/lợi nhuận)",
                     'statistical_foundation': [
-                        f"SL Range: {param_ranges['sl']['min']:.1f}%-{param_ranges['sl']['max']:.1f}% dá»±a trÃªn phÃ¢n tÃ­ch drawdown patterns",
-                        f"BE Range: {param_ranges['be']['min']:.2f}%-{param_ranges['be']['max']:.2f}% dá»±a trÃªn early run-up patterns", 
-                        f"TS Trigger: {param_ranges['ts_trigger']['min']:.2f}%-{param_ranges['ts_trigger']['max']:.2f}% dá»±a trÃªn profit development patterns",
-                        f"TS Step: {param_ranges['ts_step']['min']:.2f}%-{param_ranges['ts_step']['max']:.2f}% dá»±a trÃªn volatility adjustment"
+                        f"SL Range: {param_ranges['sl']['min']:.1f}%-{param_ranges['sl']['max']:.1f}% dựa trên phân tích drawdown patterns",
+                        f"BE Range: {param_ranges['be']['min']:.2f}%-{param_ranges['be']['max']:.2f}% dựa trên early run-up patterns", 
+                        f"TS Trigger: {param_ranges['ts_trigger']['min']:.2f}%-{param_ranges['ts_trigger']['max']:.2f}% dựa trên profit development patterns",
+                        f"TS Step: {param_ranges['ts_step']['min']:.2f}%-{param_ranges['ts_step']['max']:.2f}% dựa trên volatility adjustment"
                     ],
                     'step_logic': [
                         f"SL Step ({step_data['sl_steps']['balanced']}): {step_data['sl_steps']['base_calculation']}",
@@ -2745,7 +1834,7 @@ def suggest_parameters():
                     }
                 }
                 
-                print(f"âœ… Smart parameter suggestion complete!")
+                print(f"✅ Smart parameter suggestion complete!")
                 print(f"   SL: {suggested_params['sl_min']:.1f}%-{suggested_params['sl_max']:.1f}% (step: {suggested_params['sl_step']})")
                 print(f"   BE: {suggested_params['be_min']:.2f}%-{suggested_params['be_max']:.2f}% (step: {suggested_params['be_step']})")
                 print(f"   Efficiency: {efficiency_gain:.1f}x improvement")
@@ -2758,119 +1847,29 @@ def suggest_parameters():
                     os.unlink(temp_path)
                     
         except ImportError as e:
-            print(f"âš ï¸ Smart Range Finder not available: {e}")
+            print(f"⚠️ Smart Range Finder not available: {e}")
             return jsonify({
                 'success': False,
-                'error': 'Smart Range Finder module khÃ´ng cÃ³ sáºµn. Vui lÃ²ng kiá»ƒm tra smart_range_finder.py vÃ  dynamic_step_calculator.py files.'
+                'error': 'Smart Range Finder module không có sẵn. Vui lòng kiểm tra smart_range_finder.py và dynamic_step_calculator.py files.'
             })
         
     except Exception as e:
         print(f"=== SMART PARAMETER SUGGESTION ERROR: {str(e)} ===")
-        return jsonify({'success': False, 'error': f'Lá»—i phÃ¢n tÃ­ch thÃ´ng sá»‘: {str(e)}'})
+        return jsonify({'success': False, 'error': f'Lỗi phân tích thông số: {str(e)}'})
 
 @app.route('/optimize', methods=['POST'])
 def optimize():
     global optimization_status
-    print("🔥🔥🔥 OPTIMIZE FUNCTION ENTERED 🔥🔥🔥")
-    print(f"Request method: {request.method}")
-    print(f"Request form keys: {list(request.form.keys())}")
     try:
         print("🚨🚨🚨 OPTIMIZE ROUTE HIT! 🚨🚨🚨")
         print("=== ENHANCED OPTIMIZATION START ===")
         
-        # Check if using selected data or uploaded files
-        use_selected_data = request.form.get('use_selected_data', 'false').lower() == 'true'
+        # Lấy dữ liệu từ form
+        trade_file = request.files['trade_file']
+        candle_file = request.files['candle_file']
         
-        if use_selected_data:
-            print("📊 Using SELECTED DATA from Strategy Management")
-            
-            # Get strategy info
-            strategy_symbol = request.form.get('strategy_symbol')
-            strategy_timeframe = request.form.get('strategy_timeframe') 
-            strategy_name = request.form.get('strategy_name')
-            strategy_version = request.form.get('strategy_version')
-            selected_candle = request.form.get('selected_candle')
-            
-            print(f"📈 Strategy: {strategy_symbol} {strategy_timeframe} {strategy_name} v{strategy_version}")
-            print(f"🕯️ Candle: {selected_candle}")
-            
-            # Load strategy data
-            sm = get_strategy_manager()
-            try:
-                strategy_info = sm.get_strategy(strategy_symbol, strategy_timeframe, strategy_name, strategy_version)
-                if not strategy_info:
-                    raise ValueError("Strategy not found in database")
-                    
-                trade_file_path = strategy_info.file_path
-                if not os.path.exists(trade_file_path):
-                    raise ValueError(f"Strategy file not found: {trade_file_path}")
-                    
-                print(f"✅ Strategy file: {trade_file_path}")
-                
-                # Load trade data using proper function with column mapping
-                with open(trade_file_path, 'r', encoding='utf-8') as f:
-                    trade_content = f.read()
-                df_trade = load_trade_csv_from_content(trade_content)
-                
-            except Exception as e:
-                return jsonify({
-                    'success': False,
-                    'error': f'Error loading strategy: {str(e)}'
-                })
-            
-            # Load candle data from database only
-            candle_source = selected_candle
-            print(f"✅ Candle source: {candle_source}")
-            
-            try:
-                # Parse database format: SYMBOL_TIMEFRAME.db
-                if not candle_source or not candle_source.endswith('.db'):
-                    raise ValueError("Only database candle sources are supported")
-                
-                db_name = candle_source.replace('.db', '')
-                if '_' not in db_name:
-                    raise ValueError(f"Invalid database format: {candle_source}")
-                    
-                db_symbol, db_timeframe = db_name.rsplit('_', 1)
-                if not db_symbol or not db_timeframe:
-                    raise ValueError(f"Invalid database format: {candle_source}")
-                
-                print(f"🔄 [OPTIMIZE] Loading from database: symbol={db_symbol}, timeframe={db_timeframe}")
-                
-                # Load from candlestick_data.db
-                conn = sqlite3.connect('candlestick_data.db')
-                query = "SELECT * FROM candlestick_data WHERE symbol = ? AND timeframe = ? ORDER BY open_time"
-                df_candle = pd.read_sql_query(query, conn, params=(db_symbol, db_timeframe))
-                conn.close()
-                
-                if df_candle.empty:
-                    raise ValueError(f"No candle data found in database for {db_symbol} {db_timeframe}")
-                
-                # Convert database format to standard format
-                df_candle = df_candle.rename(columns={
-                    'open_time': 'time',
-                    'open_price': 'open', 
-                    'high_price': 'high',
-                    'low_price': 'low',
-                    'close_price': 'close'
-                })
-                df_candle['time'] = pd.to_datetime(df_candle['time'], unit='s')  # Database uses seconds
-                print(f"✅ Loaded candle data: {len(df_candle)} rows")
-                
-            except Exception as e:
-                return jsonify({
-                    'success': False,
-                    'error': f'Error loading candle data: {str(e)}'
-                })
-            
-        else:
-            print("📁 Using UPLOADED FILES (legacy mode)")
-            # Lấy dữ liệu từ form
-            trade_file = request.files['trade_file']
-            candle_file = request.files['candle_file']
-        
-        # ðŸš¨ DEBUG: Print raw form data to see what browser is actually sending
-        print(f"ðŸ” RAW FORM DATA DEBUG:")
+        # 🚨 DEBUG: Print raw form data to see what browser is actually sending
+        print(f"🔍 RAW FORM DATA DEBUG:")
         for key, value in request.form.items():
             print(f"   {key} = '{value}'")
         
@@ -2909,12 +1908,12 @@ def optimize():
                 else:
                     optimize_params = {"sl": True, "be": True, "ts": True}
             except Exception as e:
-                print(f"âš ï¸ Failed to parse optimize_params: {e}")
+                print(f"⚠️ Failed to parse optimize_params: {e}")
                 optimize_params = {"sl": True, "be": True, "ts": True}
         else:
             optimize_params = {"sl": True, "be": True, "ts": True}
 
-        # Build parameter lists: náº¿u khÃ´ng chá»n thÃ¬ truyá»n 0 (táº¯t logic), náº¿u chá»n thÃ¬ build range
+        # Build parameter lists: nếu không chọn thì truyền 0 (tắt logic), nếu chọn thì build range
         if optimize_params.get("sl", True):
             sl_list = list(np.arange(sl_min, sl_max + sl_step/2, sl_step))
         else:
@@ -2930,7 +1929,7 @@ def optimize():
             else:
                 be_list = list(np.arange(be_min, be_max + be_step/2, be_step))
         else:
-            be_list = [0]  # KhÃ´ng chá»n BE thÃ¬ truyá»n 0 (táº¯t logic BE)
+            be_list = [0]  # Không chọn BE thì truyền 0 (tắt logic BE)
 
         if optimize_params.get("ts", True):
             if ts_trig_min == ts_trig_max == 0:
@@ -2946,11 +1945,11 @@ def optimize():
             else:
                 ts_step_list = list(np.arange(ts_step_min, ts_step_max + ts_step_step/2, ts_step_step))
         else:
-            ts_trig_list = [0]  # KhÃ´ng chá»n TS thÃ¬ truyá»n 0 (táº¯t logic TS)
+            ts_trig_list = [0]  # Không chọn TS thì truyền 0 (tắt logic TS)
             ts_step_list = [0]
 
         # Print debug info
-        print(f"ðŸ” SERVER RECEIVED PARAMETERS:")
+        print(f"🔍 SERVER RECEIVED PARAMETERS:")
         print(f"   SL: min={sl_min}, max={sl_max}, step={sl_step}, list={sl_list}")
         print(f"   BE: min={be_min}, max={be_max}, step={be_step}, list={be_list}")
         print(f"   TS_TRIG: min={ts_trig_min}, max={ts_trig_max}, step={ts_trig_step}, list={ts_trig_list}")
@@ -2965,61 +1964,59 @@ def optimize():
         
         print(f"Enhanced Parameters: SL {sl_min}-{sl_max}, BE {be_min}-{be_max}, TS {ts_trig_min}-{ts_trig_max}/{ts_step_min}-{ts_step_max}, opt={opt_type}")
         
-        # Äá»c files trá»±c tiáº¿p Ä‘á»ƒ trÃ¡nh treo
-        if not use_selected_data:
-            trade_content = trade_file.read().decode("utf-8")
-            candle_content = candle_file.read().decode("utf-8")
-            print(f"Files loaded: Trade={len(trade_content)} chars, Candle={len(candle_content)} chars")
-        else:
-            print("📊 Selected data mode - files already loaded above")
-        if not use_selected_data:
-            # Upload mode - load from content
-            try:
-                df_trade = load_trade_csv_from_content(trade_content)
-                df_candle = load_candle_csv_from_content(candle_content)
-                print("Using content-based loading (safer)")
-            except Exception as content_error:
-                print(f"Content loading failed: {content_error}")
-                # Fallback to file-based náº¿u cáº§n
-                try:
-                    # Táº¡o temp files
-                    trade_temp = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False)
-                    candle_temp = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False)
-                
-                    trade_temp.write(trade_content)
-                    candle_temp.write(candle_content)
-                    trade_temp.close()
-                    candle_temp.close()
-                
-                    # Load using file-based functions
-                    df_trade = load_trade_csv_file(trade_temp.name)
-                    df_candle = load_candle_csv_file(candle_temp.name)
-                
-                    # Clean up temp files
-                    os.unlink(trade_temp.name)
-                    os.unlink(candle_temp.name)
-                    print("Using file-based loading (fallback)")
-                
-                except Exception as file_error:
-                    print(f"File loading also failed: {file_error}")
-                    raise content_error
+        # Đọc files trực tiếp để tránh treo
+        trade_content = trade_file.read().decode('utf-8')
+        candle_content = candle_file.read().decode('utf-8')
         
-        # Filter data theo thá»i gian
+        print(f"Files loaded: Trade={len(trade_content)} chars, Candle={len(candle_content)} chars")
+        
+        # Load và process data - ưu tiên content-based để tránh treo
+        try:
+            df_trade = load_trade_csv_from_content(trade_content)
+            df_candle = load_candle_csv_from_content(candle_content)
+            print("Using content-based loading (safer)")
+        except Exception as content_error:
+            print(f"Content loading failed: {content_error}")
+            # Fallback to file-based nếu cần
+            try:
+                # Tạo temp files
+                trade_temp = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False)
+                candle_temp = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False)
+                
+                trade_temp.write(trade_content)
+                candle_temp.write(candle_content)
+                trade_temp.close()
+                candle_temp.close()
+                
+                # Load using file-based functions
+                df_trade = load_trade_csv_file(trade_temp.name)
+                df_candle = load_candle_csv_file(candle_temp.name)
+                
+                # Clean up temp files
+                os.unlink(trade_temp.name)
+                os.unlink(candle_temp.name)
+                print("Using file-based loading (fallback)")
+                
+            except Exception as file_error:
+                print(f"File loading also failed: {file_error}")
+                raise content_error
+        
+        # Filter data theo thời gian
         min_candle = df_candle['time'].min()
         max_candle = df_candle['time'].max()
-        print(f"ðŸ• DEBUG: Candle time range: {min_candle} to {max_candle}")
+        print(f"🕐 DEBUG: Candle time range: {min_candle} to {max_candle}")
         
         min_trade = df_trade['date'].min()
         max_trade = df_trade['date'].max()
-        print(f"ðŸ• DEBUG: Trade time range: {min_trade} to {max_trade}")
+        print(f"🕐 DEBUG: Trade time range: {min_trade} to {max_trade}")
         
         df_trade = df_trade[(df_trade['date'] >= min_candle) & (df_trade['date'] <= max_candle)]
-        print(f"ðŸ• DEBUG: Trades after time filter: {len(df_trade)} (original: {len(df_trade) + len(df_trade[(df_trade['date'] < min_candle) | (df_trade['date'] > max_candle)])})")
+        print(f"🕐 DEBUG: Trades after time filter: {len(df_trade)} (original: {len(df_trade) + len(df_trade[(df_trade['date'] < min_candle) | (df_trade['date'] > max_candle)])})")
         
         if len(df_trade) == 0:
-            return jsonify({'error': f'KhÃ´ng cÃ³ trade nÃ o náº±m trong khoáº£ng thá»i gian cá»§a dá»¯ liá»‡u náº¿n! Candle: {min_candle} to {max_candle}, Trade: {min_trade} to {max_trade}. Hint: Kiá»ƒm tra xem báº¡n cÃ³ upload Ä‘Ãºng cáº·p file trade/candle khÃ´ng (VD: BOME trade vá»›i BOME candle, BTC trade vá»›i BTC candle)'})
+            return jsonify({'error': f'Không có trade nào nằm trong khoảng thời gian của dữ liệu nến! Candle: {min_candle} to {max_candle}, Trade: {min_trade} to {max_trade}. Hint: Kiểm tra xem bạn có upload đúng cặp file trade/candle không (VD: BOME trade với BOME candle, BTC trade với BTC candle)'})
         
-        # Láº¥y trade pairs - Æ°u tiÃªn local function
+        # Lấy trade pairs - ưu tiên local function
         try:
             trade_pairs, log_init = get_trade_pairs(df_trade)
             print("Using content-based trade pairs")
@@ -3028,28 +2025,28 @@ def optimize():
                 trade_pairs, log_init = get_trade_pairs_file(df_trade)
                 print("Using file-based trade pairs")
             except Exception as e:
-                return jsonify({'error': f'Lá»—i xá»­ lÃ½ trade pairs: {str(e)}'})
+                return jsonify({'error': f'Lỗi xử lý trade pairs: {str(e)}'})
         
         if len(trade_pairs) == 0:
-            return jsonify({'error': 'KhÃ´ng cÃ³ trade pairs há»£p lá»‡!'})
+            return jsonify({'error': 'Không có trade pairs hợp lệ!'})
         
-        # Filter trades theo tham sá»‘ ngÆ°á»i dÃ¹ng
+        # Filter trades theo tham số người dùng
         original_count = len(trade_pairs)
         trade_pairs = filter_trades_by_selection(trade_pairs, max_trades, start_trade, selection_mode)
         filtered_count = len(trade_pairs)
         
         if len(trade_pairs) == 0:
-            return jsonify({'error': f'KhÃ´ng cÃ³ trade nÃ o sau khi lá»c! (Gá»‘c: {original_count} lá»‡nh)'})
+            return jsonify({'error': f'Không có trade nào sau khi lọc! (Gốc: {original_count} lệnh)'})
         
-        # Log thÃ´ng tin lá»c
-        filter_info = f"Enhanced: ÄÃ£ lá»c tá»« {original_count} xuá»‘ng {filtered_count} lá»‡nh"
+        # Log thông tin lọc
+        filter_info = f"Enhanced: Đã lọc từ {original_count} xuống {filtered_count} lệnh"
         if max_trades > 0:
-            filter_info += f" (tá»‘i Ä‘a {max_trades})"
+            filter_info += f" (tối đa {max_trades})"
         if start_trade < 0:
-            filter_info += f" (tá»« {abs(start_trade)} lá»‡nh cuá»‘i)"
+            filter_info += f" (từ {abs(start_trade)} lệnh cuối)"
         elif start_trade > 1:
-            filter_info += f" (tá»« lá»‡nh #{start_trade})"
-        filter_info += f" (cháº¿ Ä‘á»™: {selection_mode})"
+            filter_info += f" (từ lệnh #{start_trade})"
+        filter_info += f" (chế độ: {selection_mode})"
         
         print(filter_info)
         
@@ -3057,21 +2054,21 @@ def optimize():
         total_combinations = len(sl_list) * len(be_list) * len(ts_trig_list) * len(ts_step_list)
         print(f"Total combinations to test: {total_combinations}")
         
-        # Cho phÃ©p user override limit náº¿u muá»‘n test nhiá»u combinations
+        # Cho phép user override limit nếu muốn test nhiều combinations
         force_advanced = request.form.get('force_advanced_mode', 'false').lower() == 'true'
-        combinations_limit = 1000000 if force_advanced else 100000  # NÃ¢ng limit cao hÆ¡n nhiá»u
+        combinations_limit = 1000000 if force_advanced else 100000  # Nâng limit cao hơn nhiều
         
-        # ðŸ” DEBUG MODE SELECTION
-        print(f"ðŸ” MODE SELECTION DEBUG:")
+        # 🔍 DEBUG MODE SELECTION
+        print(f"🔍 MODE SELECTION DEBUG:")
         print(f"   ADVANCED_MODE = {ADVANCED_MODE}")
         print(f"   total_combinations = {total_combinations}")
         print(f"   force_advanced = {force_advanced}")
         print(f"   combinations_limit = {combinations_limit:,}")
         print(f"   Condition (ADVANCED_MODE and total_combinations <= {combinations_limit}): {ADVANCED_MODE and total_combinations <= combinations_limit}")
         
-        # Cháº¡y grid search vá»›i nháº­n diá»‡n cháº¿ Ä‘á»™
+        # Chạy grid search với nhận diện chế độ
         method_type = request.form.get('method_type', 'grid')
-        print(f"ðŸ” CHáº Y OPTUNA" if method_type == "optuna" else "ðŸ” CHáº Y GRID SEARCH")
+        print(f"🔍 CHẠY OPTUNA" if method_type == "optuna" else "🔍 CHẠY GRID SEARCH")
 
         if method_type == "optuna":
             results = grid_search_realistic_full_v2(
@@ -3085,10 +2082,10 @@ def optimize():
         # Mark optimization as complete
         optimization_status.update({
             'running': False,
-            'status_message': f'HoÃ n táº¥t: Táº¡o ra {len(results)} káº¿t quáº£'
+            'status_message': f'Hoàn tất: Tạo ra {len(results)} kết quả'
         })
         
-        # Convert results Ä‘á»ƒ JSON serializable
+        # Convert results để JSON serializable
         for result in results:
             result['sl'] = float(result['sl'])
             result['be'] = float(result['be'])
@@ -3106,19 +2103,19 @@ def optimize():
                 detail['pnlPct'] = float(detail['pnlPct'])
                 detail['pnlPctOrigin'] = float(detail['pnlPctOrigin'])
         
-        # TÃ­nh baseline vá»›i enhanced error handling vÃ  debug
+        # Tính baseline với enhanced error handling và debug
         baseline_details = []
         baseline_logs = []
         baseline_debug_count = 0
         
-        print(f"ðŸ” BASELINE DEBUG: Processing {len(trade_pairs)} trade pairs...")
+        print(f"🔍 BASELINE DEBUG: Processing {len(trade_pairs)} trade pairs...")
         
         for pair in trade_pairs:
             try:
                 if ADVANCED_MODE:
                     result, log = simulate_trade(pair, df_candle, 0, 0, 0, 0)  # No optimization
                     if result is not None:
-                        # Convert Ä‘á»ƒ Ä‘áº£m báº£o JSON serializable
+                        # Convert để đảm bảo JSON serializable
                         result_clean = {
                             'num': safe_int(result['num']),
                             'side': str(result['side']),
@@ -3145,21 +2142,21 @@ def optimize():
                         
                         # Debug first few trades to verify calculation
                         if baseline_debug_count < 5:
-                            print(f"ðŸ” BASELINE Trade {res['num']}: Entry={res['entryPrice']:.8f}, Exit={res['exitPrice']:.8f}, Side={res['side']}, PnL={res['pnlPct']:.4f}%")
+                            print(f"🔍 BASELINE Trade {res['num']}: Entry={res['entryPrice']:.8f}, Exit={res['exitPrice']:.8f}, Side={res['side']}, PnL={res['pnlPct']:.4f}%")
                             
                             # Also show manual calculation for comparison
                             if res['side'] == 'LONG':
                                 manual_pnl = (res['exitPrice'] - res['entryPrice']) / res['entryPrice'] * 100
                             else:
                                 manual_pnl = (res['entryPrice'] - res['exitPrice']) / res['entryPrice'] * 100
-                            print(f"ðŸ” MANUAL Trade {res['num']}: Manual PnL={manual_pnl:.4f}%, Simulated PnL={res['pnlPct']:.4f}%")
+                            print(f"🔍 MANUAL Trade {res['num']}: Manual PnL={manual_pnl:.4f}%, Simulated PnL={res['pnlPct']:.4f}%")
                             baseline_debug_count += 1
                             
             except Exception as e:
                 print(f"Warning: Error processing baseline for trade {pair['num']}: {str(e)}")
                 continue
         
-        print(f"ðŸ” BASELINE DEBUG: Generated {len(baseline_details)} baseline results")
+        print(f"🔍 BASELINE DEBUG: Generated {len(baseline_details)} baseline results")
         
         # CRITICAL FIX: Calculate baseline stats from ORIGINAL trade pairs instead of simulation
         # This ensures baseline comparison uses real tradelist data
@@ -3179,14 +2176,14 @@ def optimize():
         baseline_winrate = (original_baseline_wins / len(trade_pairs) * 100) if trade_pairs else 0
         baseline_pnl = original_baseline_pnl
         
-        print(f"ðŸ” BASELINE CORRECTED: Using ORIGINAL data - PnL={baseline_pnl:.4f}%, Winrate={baseline_winrate:.2f}%")
+        print(f"🔍 BASELINE CORRECTED: Using ORIGINAL data - PnL={baseline_pnl:.4f}%, Winrate={baseline_winrate:.2f}%")
         
-        # Format káº¿t quáº£
+        # Format kết quả
         best_result = results[0] if results else None
         
-        # ðŸš¨ DEBUG: Check best_result structure and advanced metrics values
+        # 🚨 DEBUG: Check best_result structure and advanced metrics values
         if best_result:
-            print(f"ðŸ” BEST RESULT DEBUG (BEFORE CONVERSION):")
+            print(f"🔍 BEST RESULT DEBUG (BEFORE CONVERSION):")
             print(f"   PnL Total: {best_result.get('pnl_total', 'MISSING')}")
             print(f"   Max Drawdown: {best_result.get('max_drawdown', 'MISSING')}")
             print(f"   Avg Win: {best_result.get('avg_win', 'MISSING')}")
@@ -3204,9 +2201,9 @@ def optimize():
                     zero_metrics.append(f"{metric}={value}")
             
             if zero_metrics:
-                print(f"   âš ï¸ ZERO METRICS DETECTED: {zero_metrics}")
+                print(f"   ⚠️ ZERO METRICS DETECTED: {zero_metrics}")
             else:
-                print(f"   âœ… NO ZERO METRICS")
+                print(f"   ✅ NO ZERO METRICS")
             print(f"   Avg Win: {best_result.get('avg_win', 'MISSING')}")
             print(f"   Avg Loss: {best_result.get('avg_loss', 'MISSING')}")
             print(f"   Sharpe Ratio: {best_result.get('sharpe_ratio', 'MISSING')}")
@@ -3215,13 +2212,13 @@ def optimize():
             print(f"   Max Consecutive Losses: {best_result.get('max_consecutive_losses', 'MISSING')}")
             print(f"   Available keys: {list(best_result.keys())}")
         
-        # TÃ­nh cumulative PnL cho so sÃ¡nh
+        # Tính cumulative PnL cho so sánh
         def calculate_cumulative_pnl(details):
-            """TÃ­nh PnL tÃ­ch lÅ©y theo thá»i gian"""
+            """Tính PnL tích lũy theo thời gian"""
             if not details:
                 return [], []
             
-            # Sort theo entry datetime Ä‘á»ƒ cÃ³ thá»© tá»± thá»i gian chÃ­nh xÃ¡c
+            # Sort theo entry datetime để có thứ tự thời gian chính xác
             sorted_details = sorted(details, key=lambda x: x['entryDt'])
             
             cumulative_pnl = []
@@ -3237,7 +2234,7 @@ def optimize():
             
             return trade_labels, cumulative_pnl
         
-        # TÃ­nh cumulative cho baseline vÃ  best result
+        # Tính cumulative cho baseline và best result
         # CRITICAL FIX: Use ORIGINAL trade pairs for baseline cumulative PnL calculation
         # instead of simulation results to ensure accuracy
         original_baseline_details = create_original_baseline_details(trade_pairs)
@@ -3248,19 +2245,19 @@ def optimize():
         else:
             best_labels, best_cumulative = [], []
         
-        # Táº¡o trade comparison logs cho top 50 trades gáº§n Ä‘Ã¢y nháº¥t
+        # Tạo trade comparison logs cho top 50 trades gần đây nhất
         trade_comparison = []
         if best_result and best_result['details']:
             baseline_dict = {t['num']: t for t in baseline_details}
             optimized_dict = {t['num']: t for t in best_result['details']}
             
-            # CRITICAL FIX: Táº¡o dictionary tá»« trade_pairs gá»‘c Ä‘á»ƒ cÃ³ entry/exit price tháº­t
+            # CRITICAL FIX: Tạo dictionary từ trade_pairs gốc để có entry/exit price thật
             original_pairs_dict = {p['num']: p for p in trade_pairs}
             
-            # Láº¥y táº¥t cáº£ trade nums cÃ³ trong cáº£ baseline vÃ  optimized
+            # Lấy tất cả trade nums có trong cả baseline và optimized
             all_trade_nums = sorted(set(baseline_dict.keys()) & set(optimized_dict.keys()))
             
-            # Sort theo entry time Ä‘á»ƒ láº¥y 50 lá»‡nh gáº§n Ä‘Ã¢y nháº¥t (má»›i nháº¥t)
+            # Sort theo entry time để lấy 50 lệnh gần đây nhất (mới nhất)
             trade_with_time = []
             for trade_num in all_trade_nums:
                 baseline_trade = baseline_dict[trade_num]
@@ -3268,7 +2265,7 @@ def optimize():
                 improvement = optimized_trade['pnlPct'] - baseline_trade['pnlPct']
                 trade_with_time.append((baseline_trade['entryDt'], trade_num, improvement))
             
-            # Sort theo thá»i gian giáº£m dáº§n (má»›i nháº¥t trÆ°á»›c) vÃ  láº¥y top 50
+            # Sort theo thời gian giảm dần (mới nhất trước) và lấy top 50
             trade_with_time.sort(key=lambda x: x[0], reverse=True)
             top_trades = [(abs(improvement), trade_num, improvement) for _, trade_num, improvement in trade_with_time[:50]]
             
@@ -3282,12 +2279,12 @@ def optimize():
                     # Use original entry/exit prices from tradelist for baseline
                     entry_price = float(original_pair['entryPrice'])
                     baseline_exit_price = float(original_pair['exitPrice'])
-                    print(f"ðŸ” TRADE {trade_num}: Using ORIGINAL prices - Entry={entry_price:.8f}, Exit={baseline_exit_price:.8f}")
+                    print(f"🔍 TRADE {trade_num}: Using ORIGINAL prices - Entry={entry_price:.8f}, Exit={baseline_exit_price:.8f}")
                 else:
                     # Fallback to simulation results if no original pair found
                     entry_price = float(baseline_trade['entryPrice'])
                     baseline_exit_price = float(baseline_trade['exitPrice'])
-                    print(f"âš ï¸ TRADE {trade_num}: Using SIMULATION prices - Entry={entry_price:.8f}, Exit={baseline_exit_price:.8f}")
+                    print(f"⚠️ TRADE {trade_num}: Using SIMULATION prices - Entry={entry_price:.8f}, Exit={baseline_exit_price:.8f}")
                 
                 optimized_exit_price = float(optimized_trade['exitPrice'])
                 
@@ -3299,7 +2296,7 @@ def optimize():
                         baseline_pnl_calculated = (baseline_exit_price - entry_price) / entry_price * 100
                     else:  # SHORT
                         baseline_pnl_calculated = (entry_price - baseline_exit_price) / entry_price * 100
-                    print(f"ðŸ” TRADE {trade_num}: Original PnL calculation - {baseline_pnl_calculated:.4f}% vs Simulation: {baseline_trade['pnlPct']:.4f}%")
+                    print(f"🔍 TRADE {trade_num}: Original PnL calculation - {baseline_pnl_calculated:.4f}% vs Simulation: {baseline_trade['pnlPct']:.4f}%")
                 else:
                     # Fallback to simulation PnL
                     baseline_pnl_calculated = baseline_trade['pnlPct']
@@ -3332,7 +2329,7 @@ def optimize():
                 
                 # Debug first few trades
                 if len(trade_comparison) < 5:
-                    print(f"ðŸ” BACKEND TRADE {trade_num} DATA:")
+                    print(f"🔍 BACKEND TRADE {trade_num} DATA:")
                     print(f"   Entry Price: {trade_info['entry_price']}")
                     print(f"   Baseline Exit Price: {trade_info['baseline_exit_price']}")
                     print(f"   Original entry from pair: {entry_price:.8f}")
@@ -3350,7 +2347,7 @@ def optimize():
                 'combinations_limit': combinations_limit,
                 'fallback_reason': f'Too many combinations ({total_combinations:,} > {combinations_limit:,})' if total_combinations > combinations_limit else None,
                 'optimization_scope': 'SL + BE + TS (Full Grid Search)' if (ADVANCED_MODE and total_combinations <= combinations_limit) else 'SL only (BE/TS fixed)',
-                'warning': f'ðŸš¨ BE/TS parameters NOT optimized - only {len(sl_list)} SL values tested!' if total_combinations > combinations_limit else None,
+                'warning': f'🚨 BE/TS parameters NOT optimized - only {len(sl_list)} SL values tested!' if total_combinations > combinations_limit else None,
                 'actual_tests_run': len(sl_list) if total_combinations > combinations_limit else total_combinations
             },
             'baseline': {
@@ -3381,8 +2378,8 @@ def optimize():
                 'labels': baseline_labels,
                 'baseline_cumulative': baseline_cumulative,
                 'optimized_cumulative': best_cumulative,
-                'baseline_label': 'Káº¿t quáº£ gá»‘c (No Optimization)',
-                'optimized_label': f'Enhanced Tá»‘i Æ°u (SL:{best_result["sl"]:.1f}% BE:{best_result["be"]:.1f}% TS:{best_result["ts_trig"]:.1f}%/{best_result["ts_step"]:.1f}%)' if best_result else 'N/A'
+                'baseline_label': 'Kết quả gốc (No Optimization)',
+                'optimized_label': f'Enhanced Tối ưu (SL:{best_result["sl"]:.1f}% BE:{best_result["be"]:.1f}% TS:{best_result["ts_trig"]:.1f}%/{best_result["ts_step"]:.1f}%)' if best_result else 'N/A'
             },
             'trade_comparison': trade_comparison,
             'total_combinations': len(results)
@@ -3420,14 +2417,14 @@ def optimize():
             }
             notes = request.form.get('notes', '')
             log_manager.log_optimization(user, project, symbol, timeframe, param_ranges, best_result_log, notes)
-            print(f"âœ… Optimization result logged for user={user}, project={project}, symbol={symbol}, timeframe={timeframe}")
+            print(f"✅ Optimization result logged for user={user}, project={project}, symbol={symbol}, timeframe={timeframe}")
         except Exception as log_exc:
-            print(f"âš ï¸ Logging optimization result failed: {log_exc}")
+            print(f"⚠️ Logging optimization result failed: {log_exc}")
         
-        # ðŸ” FINAL DEBUG: Log what's actually being sent to frontend
+        # 🔍 FINAL DEBUG: Log what's actually being sent to frontend
         if best_result:
             response_best = response_data['best_result']
-            print(f"ðŸ” FINAL API RESPONSE DEBUG:")
+            print(f"🔍 FINAL API RESPONSE DEBUG:")
             print(f"   Max Drawdown: {response_best['max_drawdown']} (best_result has: {best_result.get('max_drawdown', 'MISSING')})")
             print(f"   Avg Win: {response_best['avg_win']} (best_result has: {best_result.get('avg_win', 'MISSING')})")
             print(f"   Avg Loss: {response_best['avg_loss']} (best_result has: {best_result.get('avg_loss', 'MISSING')})")
@@ -3447,78 +2444,8 @@ def optimize():
         })
         
         print(f"=== ENHANCED OPTIMIZATION ERROR: {str(e)} ===")
-        print(f"=== ERROR TYPE: {type(e)} ===")
         print(traceback.format_exc())
-        return jsonify({'error': str(e), 'type': str(type(e))})
-
-@app.route('/optimize_ranges', methods=['POST'])
-def optimize_ranges():
-    """🔥 New Range-Based Optimization with Optuna/Grid Search Selection"""
-    try:
-        print("🚀 OPTIMIZE_RANGES ROUTE HIT!")
-        print("=== RANGE-BASED OPTIMIZATION WITH ENGINE SELECTION ===")
-        
-        # Parse JSON data from frontend
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No JSON data received'})
-        
-        # Get optimization engine
-        optimization_engine = data.get('optimization_engine', 'optuna')
-        print(f"🧠 Selected Optimization Engine: {optimization_engine}")
-        
-        # Get parameter ranges
-        strategy = data.get('strategy')
-        candle_data = data.get('candle_data')
-        sl_min = float(data.get('sl_min', 0.5))
-        sl_max = float(data.get('sl_max', 3.0))
-        sl_step = float(data.get('sl_step', 0.1))
-        be_min = float(data.get('be_min', 0.2))
-        be_max = float(data.get('be_max', 1.5))
-        be_step = float(data.get('be_step', 0.1))
-        ts_min = float(data.get('ts_min', 0.5))
-        ts_max = float(data.get('ts_max', 2.0))
-        ts_step = float(data.get('ts_step', 0.1))
-        
-        # Optional TP
-        tp_min = data.get('tp_min')
-        tp_max = data.get('tp_max')
-        tp_step = data.get('tp_step')
-        
-        print(f"📊 Strategy: {strategy}")
-        print(f"🕯️ Candle Data: {candle_data}")
-        print(f"🔧 SL Range: {sl_min}% → {sl_max}% (step {sl_step}%)")
-        print(f"⚖️ BE Range: {be_min}% → {be_max}% (step {be_step}%)")
-        print(f"📈 TS Range: {ts_min}% → {ts_max}% (step {ts_step}%)")
-        
-        # TODO: Add actual optimization logic here
-        # For now, return success to test integration
-        
-        result = {
-            'success': True,
-            'message': f'Range optimization completed with {optimization_engine}',
-            'engine': optimization_engine,
-            'parameters': {
-                'sl_range': f'{sl_min}-{sl_max}',
-                'be_range': f'{be_min}-{be_max}',
-                'ts_range': f'{ts_min}-{ts_max}'
-            },
-            'best_result': {
-                'sl': sl_min + (sl_max - sl_min) / 2,
-                'be': be_min + (be_max - be_min) / 2,
-                'ts_trig': ts_min + (ts_max - ts_min) / 2,
-                'pnl_total': 150.0,
-                'winrate': 65.5
-            }
-        }
-        
-        print("=== RANGE OPTIMIZATION SUCCESS ===")
-        return jsonify(result)
-        
-    except Exception as e:
-        print(f"=== RANGE OPTIMIZATION ERROR: {str(e)} ===")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e), 'success': False})
+        return jsonify({'error': str(e)})
 
 @app.route('/progress', methods=['GET'])
 def get_progress():
@@ -3577,7 +2504,7 @@ def status():
     </head>
     <body>
         <div class="container">
-            <h1>ðŸš€ Trading Optimization Progress Monitor</h1>
+            <h1>🚀 Trading Optimization Progress Monitor</h1>
             
             <div class="status-card">
                 <h2>Current Status</h2>
@@ -3607,8 +2534,8 @@ def status():
                 </div>
             </div>
             
-            <button class="refresh-btn" onclick="updateProgress()">ðŸ”„ Refresh Now</button>
-            <button class="refresh-btn" onclick="toggleAutoRefresh()">â¸ï¸ Toggle Auto-refresh</button>
+            <button class="refresh-btn" onclick="updateProgress()">🔄 Refresh Now</button>
+            <button class="refresh-btn" onclick="toggleAutoRefresh()">⏸️ Toggle Auto-refresh</button>
             <div style="margin-top: 10px; font-size: 12px; color: #888;">
                 Auto-refresh: <span id="auto-refresh-status">ON</span> | Last update: <span id="last-update">-</span>
             </div>
@@ -3624,7 +2551,7 @@ def status():
                     .then(data => {
                         if (data.running) {
                             document.getElementById('status-message').innerHTML = 
-                                `ðŸ”„ <strong>OPTIMIZATION RUNNING</strong><br>${data.status_message}`;
+                                `🔄 <strong>OPTIMIZATION RUNNING</strong><br>${data.status_message}`;
                             document.getElementById('progress-fill').style.width = data.progress_percent + '%';
                             document.getElementById('progress-text').textContent = data.progress_percent + '%';
                             document.getElementById('current-combination').textContent = data.current_combination.toLocaleString();
@@ -3633,7 +2560,7 @@ def status():
                             document.getElementById('eta').textContent = data.estimated_completion;
                         } else {
                             document.getElementById('status-message').innerHTML = 
-                                `âœ… <strong>READY</strong><br>${data.status_message}`;
+                                `✅ <strong>READY</strong><br>${data.status_message}`;
                             document.getElementById('progress-fill').style.width = '0%';
                             document.getElementById('progress-text').textContent = 'Ready';
                         }
@@ -3641,7 +2568,7 @@ def status():
                     })
                     .catch(error => {
                         document.getElementById('status-message').innerHTML = 
-                            `âŒ <strong>ERROR</strong><br>Cannot connect to server`;
+                            `❌ <strong>ERROR</strong><br>Cannot connect to server`;
                         console.error('Error:', error);
                     });
             }
@@ -3665,518 +2592,7 @@ def status():
     </html>
     '''
 
-# ============================================================================
-# 🎯 STRATEGY MANAGEMENT ROUTES
-# ============================================================================
-
-@app.route('/data_management')
-def data_management():
-    """📊 Data Management Dashboard"""
-    try:
-        print("🔍 DEBUG: Starting data_management route")
-        # Get database status - use candlestick_data.db
-        conn = sqlite3.connect('candlestick_data.db')
-        cursor = conn.cursor()
-        print("🔍 DEBUG: Connected to database")
-        
-        # Get symbols and their statistics
-        cursor.execute("""
-            SELECT 
-                symbol,
-                timeframe,
-                COUNT(*) as count,
-                MIN(open_time) as first_time,
-                MAX(open_time) as last_time
-            FROM candlestick_data 
-            GROUP BY symbol, timeframe 
-            ORDER BY symbol, timeframe
-        """)
-        
-        symbol_data = cursor.fetchall()
-        print(f"🔍 DEBUG: Query returned {len(symbol_data)} rows")
-        symbols = []
-        
-        for row in symbol_data:
-            symbol, timeframe, count, first_time, last_time = row
-            
-            # Convert timestamps to readable dates
-            try:
-                from datetime import datetime, timedelta
-                first_dt = datetime.fromtimestamp(first_time)
-                last_dt = datetime.fromtimestamp(last_time)
-                
-                first_date = first_dt.strftime('%Y-%m-%d')
-                last_date = last_dt.strftime('%Y-%m-%d')
-                
-                # Calculate days old
-                days_old = (datetime.now() - last_dt).days
-                
-                if days_old <= 1:
-                    status = 'recent'
-                elif days_old <= 7:
-                    status = 'outdated'
-                else:
-                    status = 'old'
-            except Exception as e:
-                print(f"Date conversion error: {e}")
-                first_date = 'Unknown'
-                last_date = 'Unknown'
-                days_old = 0
-                status = 'unknown'
-            
-            symbols.append({
-                'symbol': symbol,
-                'timeframe': timeframe,
-                'count': count,
-                'first_date': first_date,
-                'last_date': last_date,
-                'days_old': days_old,
-                'status': status
-            })
-        
-        # Get total candles
-        cursor.execute("SELECT COUNT(*) FROM candlestick_data")
-        total_candles = cursor.fetchone()[0]
-        
-        # Get strategy count
-        strategy_conn = sqlite3.connect('strategy_management.db')
-        strategy_cursor = strategy_conn.cursor()
-        strategy_cursor.execute("SELECT COUNT(*) FROM strategies")
-        total_strategies = strategy_cursor.fetchone()[0]
-        strategy_conn.close()
-            
-        conn.close()
-        
-        # Scan CSV files in current directory and candles/ directory
-        import glob
-        import os
-        
-        csv_files = []
-        search_dirs = ['.', 'candles']
-        
-        for directory in search_dirs:
-            if os.path.exists(directory):
-                csv_pattern = os.path.join(directory, '*.csv')
-                for file_path in glob.glob(csv_pattern):
-                    try:
-                        stat_info = os.stat(file_path)
-                        size_mb = round(stat_info.st_size / (1024 * 1024), 2)
-                        modified = datetime.fromtimestamp(stat_info.st_mtime).strftime('%Y-%m-%d %H:%M')
-                        
-                        csv_files.append({
-                            'filename': os.path.basename(file_path),
-                            'size_mb': size_mb,
-                            'modified': modified,
-                            'directory': directory
-                        })
-                    except Exception as e:
-                        print(f"Error reading file {file_path}: {e}")
-        
-        print(f"🔍 DEBUG: Found {len(csv_files)} CSV files")
-        
-        print(f"🔍 DEBUG: Final symbols array has {len(symbols)} items")
-        for i, sym in enumerate(symbols[:3]):  # Show first 3
-            print(f"  📊 Symbol {i+1}: {sym['symbol']} {sym['timeframe']} ({sym['count']} candles)")
-        
-        return render_template('data_management.html', 
-                             symbols=symbols,
-                             csv_files=csv_files,
-                             total_symbols=len(symbols),
-                             total_candles=total_candles,
-                             total_strategies=total_strategies)
-                             
-    except Exception as e:
-        print(f"❌ Error in data_management route: {e}")
-        return render_template('data_management.html', 
-                             symbols=[],
-                             csv_files=[],
-                             total_symbols=0,
-                             total_candles=0,
-                             total_strategies=0,
-                             error=str(e))
-
-@app.route('/test_frontend')
-def test_frontend():
-    """🧪 Frontend Functions Test Page"""
-    return send_from_directory('.', 'test_frontend.html')
-
-@app.route('/strategy_management')
-def strategy_management():
-    """🎯 Strategy Management Dashboard"""
-    try:
-        sm = get_strategy_manager()
-        
-        # Get summary statistics
-        summary = sm.get_strategy_summary()
-        
-        # Get all strategies
-        strategies = sm.list_strategies()
-        
-        # Group strategies by symbol
-        strategies_by_symbol = {}
-        for strategy in strategies:
-            symbol = strategy.symbol
-            if symbol not in strategies_by_symbol:
-                strategies_by_symbol[symbol] = []
-            strategies_by_symbol[symbol].append(strategy)
-        
-        # Get available data for dropdowns
-        available_symbols = sm.get_available_symbols()
-        available_strategies = sm.get_available_strategies()
-        
-        return render_template('strategy_management.html', 
-                             summary=summary,
-                             strategies=strategies,
-                             strategies_by_symbol=strategies_by_symbol,
-                             available_symbols=available_symbols,
-                             available_strategies=available_strategies)
-    except Exception as e:
-        traceback.print_exc()
-        return f"Error loading strategy management: {e}", 500
-
-@app.route('/upload_strategy', methods=['POST'])
-def upload_strategy():
-    """📤 Upload new strategy với auto-detection"""
-    try:
-        # Get file và parameters
-        strategy_file = request.files.get('file')
-        if not strategy_file:
-            return jsonify({'success': False, 'error': 'No file provided'}), 400
-        
-        # Get optional overrides
-        symbol_override = request.form.get('symbol_override', '').strip() or None
-        strategy_override = request.form.get('strategy_override', '').strip() or None
-        
-        # Read file content
-        file_content = strategy_file.read().decode('utf-8')
-        filename = strategy_file.filename
-        
-        # Upload và organize với strategy manager
-        sm = get_strategy_manager()
-        strategy_info = sm.upload_strategy_file(
-            file_content=file_content,
-            filename=filename,
-            symbol_override=symbol_override,
-            strategy_override=strategy_override
-        )
-        
-        return jsonify({
-            'success': True,
-            'strategy_info': {
-                'filename': strategy_info.filename,
-                'symbol': strategy_info.symbol,
-                'timeframe': strategy_info.timeframe,
-                'strategy_name': strategy_info.strategy_name,
-                'version': strategy_info.version,
-                'trade_count': strategy_info.trade_count,
-                'date_range': strategy_info.date_range,
-                'organized_path': strategy_info.file_path
-            },
-            'message': f"Strategy uploaded successfully as {strategy_info.filename}"
-        })
-        
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/detect_strategy_info', methods=['POST'])
-def detect_strategy_info():
-    """🔍 Preview strategy detection từ filename"""
-    try:
-        filename = request.form.get('filename', '')
-        print(f"🔍 DEBUG: Detecting strategy info for filename: '{filename}'")
-        
-        if not filename:
-            return jsonify({'success': False, 'error': 'No filename provided'}), 400
-        
-        sm = get_strategy_manager()
-        strategy_info = sm.detect_strategy_info(filename)
-        
-        print(f"🔍 DEBUG: Detection result - Symbol: {strategy_info.symbol}, Timeframe: {strategy_info.timeframe}, Strategy: {strategy_info.strategy_name}")
-        
-        return jsonify({
-            'success': True,
-            'detected': {
-                'symbol': strategy_info.symbol,
-                'timeframe': strategy_info.timeframe,
-                'strategy_name': strategy_info.strategy_name,
-                'version': strategy_info.version,
-                'organized_filename': f"{strategy_info.symbol}_{strategy_info.timeframe}_{strategy_info.strategy_name}_{strategy_info.version}.csv"
-            }
-        })
-        
-    except Exception as e:
-        print(f"❌ ERROR in detect_strategy_info: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/test_detection/<filename>')
-def test_detection(filename):
-    """🧪 Test detection endpoint for debugging"""
-    try:
-        sm = get_strategy_manager()
-        strategy_info = sm.detect_strategy_info(filename)
-        
-        return jsonify({
-            'filename': filename,
-            'symbol': strategy_info.symbol,
-            'timeframe': strategy_info.timeframe,
-            'strategy_name': strategy_info.strategy_name,
-            'version': strategy_info.version
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/list_strategies')
-def list_strategies():
-    """📋 API endpoint để list strategies"""
-    try:
-        symbol = request.args.get('symbol')
-        strategy_name = request.args.get('strategy_name')
-        
-        sm = get_strategy_manager()
-        strategies = sm.list_strategies(symbol=symbol, strategy_name=strategy_name)
-        
-        strategy_list = []
-        for strategy in strategies:
-            strategy_list.append({
-                'filename': strategy.filename,
-                'symbol': strategy.symbol,
-                'timeframe': strategy.timeframe,
-                'strategy_name': strategy.strategy_name,
-                'version': strategy.version,
-                'upload_date': strategy.upload_date.isoformat(),
-                'trade_count': strategy.trade_count,
-                'date_range': strategy.date_range,
-                'file_path': strategy.file_path
-            })
-        
-        return jsonify({
-            'success': True,
-            'strategies': strategy_list,
-            'total': len(strategy_list)
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/list_candle_files')
-def list_candle_files():
-    """📊 List available candle data from database only"""
-    try:
-        # Get database symbols from candlestick_data.db
-        db_symbols = []
-        try:
-            conn = sqlite3.connect('candlestick_data.db')
-            cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT symbol, timeframe FROM candlestick_data ORDER BY symbol, timeframe")
-            symbols = cursor.fetchall()
-            db_symbols = [f"{symbol}_{timeframe}.db" for symbol, timeframe in symbols]
-            conn.close()
-            print(f"📊 Found {len(db_symbols)} candle data sources in database")
-        except Exception as e:
-            print(f"❌ Error accessing database: {e}")
-            db_symbols = []
-        
-        return jsonify({
-            'success': True,
-            'files': db_symbols,
-            'source': 'database_only'
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'files': []
-        })
-
-@app.route('/scan_manual_files', methods=['POST'])
-def scan_manual_files():
-    """🔍 Scan and import manual files from tradelist folder"""
-    try:
-        from tradelist_scanner import TradelistScanner
-        scanner = TradelistScanner()
-        imported_count = scanner.scan_and_import()
-        return jsonify({
-            "success": True, 
-            "message": f"Scanned successfully! Imported {imported_count} new strategies",
-            "imported_count": imported_count
-        })
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
-
-@app.route('/delete_strategy', methods=['POST'])
-def delete_strategy():
-    """🗑️ Delete strategy"""
-    try:
-        data = request.get_json()
-        symbol = data.get('symbol')
-        timeframe = data.get('timeframe')
-        strategy_name = data.get('strategy_name')
-        version = data.get('version')
-        
-        if not all([symbol, timeframe, strategy_name, version]):
-            return jsonify({'success': False, 'error': 'Missing required parameters'}), 400
-        
-        sm = get_strategy_manager()
-        success = sm.delete_strategy(symbol, timeframe, strategy_name, version)
-        
-        if success:
-            return jsonify({'success': True, 'message': 'Strategy deleted successfully'})
-        else:
-            return jsonify({'success': False, 'error': 'Strategy not found'}), 404
-            
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/get_strategy_details', methods=['POST'])
-def get_strategy_details():
-    """📝 Get strategy details for editing"""
-    try:
-        data = request.get_json()
-        symbol = data.get('symbol')
-        timeframe = data.get('timeframe')
-        strategy_name = data.get('strategy_name')
-        version = data.get('version')
-        
-        if not all([symbol, timeframe, strategy_name, version]):
-            return jsonify({'success': False, 'error': 'Missing required parameters'}), 400
-        
-        sm = get_strategy_manager()
-        strategy_data = sm.get_strategy_details(symbol, timeframe, strategy_name, version)
-        
-        if strategy_data:
-            return jsonify({'success': True, 'strategy': strategy_data})
-        else:
-            return jsonify({'success': False, 'error': 'Strategy not found'}), 404
-            
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/update_strategy', methods=['POST'])
-def update_strategy():
-    """✏️ Update strategy details"""
-    try:
-        data = request.get_json()
-        symbol = data.get('symbol')
-        timeframe = data.get('timeframe')
-        strategy_name = data.get('strategy_name')
-        version = data.get('version')
-        updates = data.get('updates', {})
-        
-        if not all([symbol, timeframe, strategy_name, version]):
-            return jsonify({'success': False, 'error': 'Missing required parameters'}), 400
-        
-        sm = get_strategy_manager()
-        success = sm.update_strategy(symbol, timeframe, strategy_name, version, updates)
-        
-        if success:
-            return jsonify({'success': True, 'message': 'Strategy updated successfully'})
-        else:
-            return jsonify({'success': False, 'error': 'Strategy not found or update failed'}), 404
-            
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/get_strategy_file/<symbol>/<timeframe>/<strategy_name>')
-def get_strategy_file(symbol, timeframe, strategy_name):
-    """📄 Get strategy file content for backtest"""
-    try:
-        version = request.args.get('version')
-        
-        sm = get_strategy_manager()
-        strategy = sm.get_strategy(symbol, timeframe, strategy_name, version)
-        
-        if not strategy:
-            return jsonify({'success': False, 'error': 'Strategy not found'}), 404
-        
-        # Read file content
-        if os.path.exists(strategy.file_path):
-            with open(strategy.file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            return jsonify({
-                'success': True,
-                'strategy_info': {
-                    'filename': strategy.filename,
-                    'symbol': strategy.symbol,
-                    'timeframe': strategy.timeframe,
-                    'strategy_name': strategy.strategy_name,
-                    'version': strategy.version,
-                    'trade_count': strategy.trade_count,
-                    'date_range': strategy.date_range
-                },
-                'content': content
-            })
-        else:
-            return jsonify({'success': False, 'error': 'Strategy file not found on disk'}), 404
-            
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/get_strategy_data')
-def get_strategy_data():
-    """📈 Get strategy data for preview"""
-    try:
-        symbol = request.args.get('symbol')
-        timeframe = request.args.get('timeframe')
-        strategy_name = request.args.get('strategy_name')
-        version = request.args.get('version')
-        
-        if not all([symbol, timeframe, strategy_name, version]):
-            return jsonify({
-                'success': False,
-                'error': 'Missing required parameters'
-            })
-            
-        sm = get_strategy_manager()
-        strategy = sm.get_strategy(symbol, timeframe, strategy_name, version)
-        
-        if not strategy:
-            return jsonify({
-                'success': False,
-                'error': 'Strategy not found'
-            })
-            
-        # Load and preview strategy data
-        file_path = strategy.file_path
-        if os.path.exists(file_path):
-            df = pd.read_csv(file_path)
-            
-            # Convert to list of dicts for JSON response
-            data = df.head(10).to_dict('records')  # First 10 rows for preview
-            
-            return jsonify({
-                'success': True,
-                'data': data,
-                'total_rows': len(df),
-                'columns': df.columns.tolist(),
-                'file_path': file_path
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'Strategy file not found'
-            })
-            
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@app.route('/debug_frontend.html')
-def debug_frontend():
-    """🔍 Frontend Debug Page"""
-    return send_from_directory('.', 'debug_frontend.html')
-
-@app.route('/simple_debug.html')
-def simple_debug():
-    """🐛 Simple Debug Page"""
-    return send_from_directory('.', 'simple_debug.html')
-
 if __name__ == '__main__':
-    print("ðŸš€ Starting Enhanced Trading Optimization Web App...")
-    print("ðŸŒ Access at: http://localhost:5000")
-    print("ðŸŽ¯ New Features: Multi-Symbol Batch Processing & Comparison Dashboard")
+    print("🚀 Starting Enhanced Trading Optimization Web App...")
+    print("🌐 Access at: http://localhost:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)
-

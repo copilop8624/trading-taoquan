@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🎯 Strategy Management System</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f5f5f5; }
+        
+        /* Navigation Menu */
+        .nav-menu {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .nav-item {
+            color: white;
+            text-decoration: none;
+            padding: 12px 20px;
+            margin: 0 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+        .nav-item:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+            color: white;
+        }
+        .nav-item.active {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 0 20px; }
+        .header { text-align: center; color: #333; margin-bottom: 30px; }
+        .card { background: white; padding: 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card h3 { margin-top: 0; color: #007bff; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .full-width { grid-column: 1 / -1; }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; font-weight: bold; }
+        tr:hover { background: #f8f9fa; }
+        
+        /* Status badges */
+        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .status-recent { background: #d4edda; color: #155724; }
+        .status-outdated { background: #fff3cd; color: #856404; }
+        .status-old { background: #f8d7da; color: #721c24; }
+        
+        /* Buttons */
+        .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; transition: all 0.3s; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        
+        /* Strategy specific styles */
+        .strategy-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            background: white;
+            transition: all 0.3s ease;
+        }
+        .strategy-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        .symbol-badge {
+            background: linear-gradient(45deg, #007bff, #28a745);
+            color: white;
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .version-badge {
+            background: #6c757d;
+            color: white;
+            font-size: 0.8em;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .upload-zone {
+            border: 2px dashed #007bff;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            background: #f8f9ff;
+            transition: all 0.3s ease;
+        }
+        .upload-zone:hover {
+            border-color: #0056b3;
+            background: #f0f4ff;
+        }
+        .upload-zone.dragover {
+            border-color: #28a745;
+            background: #f0fff4;
+        }
+        .detection-preview {
+            background: #e7f3ff;
+            border: 1px solid #b3d7ff;
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Menu -->
+    <div class="nav-menu">
+        <div class="container" style="text-align: center;">
+            <a href="/" class="nav-item">
+                <i class="fas fa-chart-line"></i> Backtest
+            </a>
+            <a href="/strategy_management" class="nav-item active">
+                <i class="fas fa-cogs"></i> Strategy Management
+            </a>
+            <a href="/data_management" class="nav-item">
+                <i class="fas fa-database"></i> Data Management
+            </a>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>
+                <i class="fas fa-cogs"></i>
+                🎯 Strategy Management System
+            </h1>
+            <p>Upload, organize, and manage your trading strategies systematically</p>
+        </div>
+        </div>
+
+        <!-- Summary Statistics - Compact -->
+        <div class="card">
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                <div style="text-align: center; padding: 10px;">
+                    <div style="color: #007bff; font-size: 1.8em; font-weight: bold;">{{ summary.total_strategies }}</div>
+                    <small><i class="fas fa-chart-bar"></i> Total Strategies</small>
+                </div>
+                <div style="text-align: center; padding: 10px;">
+                    <div style="color: #28a745; font-size: 1.8em; font-weight: bold;">{{ summary.total_symbols }}</div>
+                    <small><i class="fas fa-coins"></i> Symbols</small>
+                </div>
+                <div style="text-align: center; padding: 10px;">
+                    <div style="color: #6c757d; font-size: 1.8em; font-weight: bold;">{{ summary.total_strategy_types }}</div>
+                    <small><i class="fas fa-brain"></i> Strategy Types</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Strategy Section -->
+        <div class="card full-width">
+            <h3><i class="fas fa-upload"></i> Add New Strategy - Two Ways Available</h3>
+            
+            <!-- Two Methods Overview -->
+            <div class="grid" style="margin-bottom: 20px;">
+                <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; border-left: 4px solid #007bff;">
+                    <h4><i class="fas fa-cloud-upload-alt"></i> Method 1: Web Upload</h4>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Drag & drop files or click to upload</li>
+                        <li>Auto-organize with metadata tracking</li>
+                        <li>Instant database integration</li>
+                    </ul>
+                </div>
+                <div style="background: #f0f8f0; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745;">
+                    <h4><i class="fas fa-folder-open"></i> Method 2: Manual Copy</h4>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Copy CSV files to <code>tradelist/</code> folder</li>
+                        <li>Click <strong>Scan Manual Files</strong> to import</li>
+                        <li>Auto-detect strategy information</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Web Upload Section -->
+            <div style="border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                <h4><i class="fas fa-cloud-upload-alt"></i> Web Upload</h4>
+            <!-- File Upload Zone -->
+            <div class="upload-zone" id="uploadZone">
+                <i class="fas fa-cloud-upload-alt fa-3x" style="color: #007bff; margin-bottom: 15px;"></i>
+                <h4>Drag & Drop CSV file here or click to browse</h4>
+                <p style="color: #666;">Supported format: CSV files from TradingView</p>
+                <input type="file" id="strategyFile" accept=".csv" style="display: none;">
+                <button class="btn btn-primary" onclick="document.getElementById('strategyFile').click()">
+                    <i class="fas fa-folder-open"></i> Browse Files
+                </button>
+            </div>
+
+            <!-- Detection Preview -->
+            <div id="detectionPreview" style="display: none;"></div>
+
+            <!-- Upload Form -->
+            <form id="uploadForm" style="display: none;">
+                <div class="grid" style="margin-top: 15px;">
+                    <div>
+                        <label><strong>Symbol Override</strong></label>
+                        <input type="text" id="symbolOverride" placeholder="e.g., BTCUSDT" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-top: 5px;" oninput="updatePreviewFilename()">
+                        <small style="color: #666;">Auto-filled, you can edit before upload</small>
+                    </div>
+                    <div>
+                        <label><strong>Strategy Name Override</strong></label>
+                        <input type="text" id="strategyOverride" placeholder="e.g., MACD_RSI" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-top: 5px;" oninput="updatePreviewFilename()">
+                        <small style="color: #666;">Auto-filled, you can edit before upload</small>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 15px;">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-upload"></i> Upload Strategy
+                    </button>
+                </div>
+            </form>
+
+            <!-- Upload Result -->
+            <div id="uploadResult" style="margin-top: 15px;"></div>
+            </div>
+
+            <!-- Manual Files Section -->
+            <div style="border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; background: #f8f9fa;">
+                <h4><i class="fas fa-folder-open"></i> Manual Files Import</h4>
+                <p style="margin: 10px 0; color: #666;">
+                    <i class="fas fa-info-circle"></i> 
+                    Files copied to <code>tradelist/</code> folder can be imported using the button below:
+                </p>
+                <button class="btn btn-success" onclick="scanManualFiles()">
+                    <i class="fas fa-search"></i> Scan & Import Manual Files
+                </button>
+            </div>
+        </div>
+
+        <!-- Strategy List -->
+        <div class="card full-width">
+            <h3><i class="fas fa-list"></i> All Strategies</h3>
+            <div style="margin-bottom: 15px;">
+                <button class="btn btn-secondary" onclick="refreshStrategies()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+            
+            <!-- Filter Controls -->
+            <div class="grid" style="margin-bottom: 15px;">
+                <div>
+                    <label><strong>Filter by Symbol</strong></label>
+                    <select id="symbolFilter" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-top: 5px;">
+                        <option value="">All Symbols</option>
+                        {% for symbol in available_symbols %}
+                        <option value="{{ symbol }}">{{ symbol }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label><strong>Filter by Strategy</strong></label>
+                    <select id="strategyFilter" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-top: 5px;">
+                        <option value="">All Strategies</option>
+                        {% for strategy in available_strategies %}
+                        <option value="{{ strategy }}">{{ strategy }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label><strong>Search</strong></label>
+                    <input type="text" id="searchInput" placeholder="Search strategies..." style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-top: 5px;">
+                </div>
+            </div>
+
+                        <!-- Strategies Table -->
+            <!-- Strategies Table -->
+            <table id="strategiesTable">
+                <thead>
+                    <tr>
+                        <th>Strategy</th>
+                        <th>Symbol</th>
+                        <th>Timeframe</th>
+                        <th>Version</th>
+                        <th>Trades</th>
+                        <th>Date Range</th>
+                        <th>Upload Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="strategiesTableBody">
+                                    {% for strategy in strategies %}
+                                    <tr data-symbol="{{ strategy.symbol }}" data-strategy="{{ strategy.strategy_name }}">
+                                        <td>
+                                            <strong>{{ strategy.strategy_name }}</strong><br>
+                                            <small class="text-muted">{{ strategy.filename }}</small>
+                                        </td>
+                                        <td>
+                                            <span class="badge symbol-badge">{{ strategy.symbol }}</span>
+                                        </td>
+                                        <td>{{ strategy.timeframe }}</td>
+                                        <td>
+                                            <span class="badge version-badge">{{ strategy.version }}</span>
+                                        </td>
+                                        <td>{{ strategy.trade_count }}</td>
+                                        <td>
+                                            <small>{{ strategy.date_range or 'N/A' }}</small>
+                                        </td>
+                                        <td>
+                                            <small>{{ strategy.upload_date.strftime('%Y-%m-%d %H:%M') }}</small>
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-outline-primary" title="Run backtest on Home page"
+                                                        onclick="runBacktest('{{ strategy.symbol }}', '{{ strategy.timeframe }}', '{{ strategy.strategy_name }}', '{{ strategy.version }}')">
+                                                    <i class="fas fa-chart-line"></i> Test
+                                                </button>
+                                                <button class="btn btn-outline-info" title="View and edit strategy details"
+                                                        onclick="editStrategy('{{ strategy.symbol }}', '{{ strategy.timeframe }}', '{{ strategy.strategy_name }}', '{{ strategy.version }}')">
+                                                    <i class="fas fa-edit"></i> Edit
+                                                </button>
+                                                <button class="btn btn-outline-danger" title="Delete this strategy"
+                                                        onclick="deleteStrategy('{{ strategy.symbol }}', '{{ strategy.timeframe }}', '{{ strategy.strategy_name }}', '{{ strategy.version }}')">
+                                                    <i class="fas fa-trash-alt" style="color: #dc3545;"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        let selectedFile = null;
+        let currentStrategyData = null;
+
+        // File upload handling
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('strategyFile');
+        const uploadForm = document.getElementById('uploadForm');
+        const detectionPreview = document.getElementById('detectionPreview');
+        const uploadResult = document.getElementById('uploadResult');
+
+        if (uploadZone && fileInput) {
+            // Drag and drop events
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('dragover');
+            });
+
+            uploadZone.addEventListener('dragleave', () => {
+                uploadZone.classList.remove('dragover');
+            });
+
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileSelect(files[0]);
+                }
+            });
+
+            uploadZone.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                    return;
+                }
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileSelect(e.target.files[0]);
+                }
+            });
+        }
+
+        if (uploadForm) {
+            uploadForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                if (!selectedFile) {
+                    showError('Please select a file first');
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                
+                const symbolOverride = document.getElementById('symbolOverride').value.trim();
+                const strategyOverride = document.getElementById('strategyOverride').value.trim();
+                
+                if (symbolOverride) formData.append('symbol_override', symbolOverride);
+                if (strategyOverride) formData.append('strategy_override', strategyOverride);
+
+                try {
+                    const response = await fetch('/upload_strategy', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showSuccess(`Strategy uploaded successfully: ${result.filename}`);
+                        await refreshStrategies();
+                        
+                        // Reset form
+                        uploadForm.style.display = 'none';
+                        detectionPreview.style.display = 'none';
+                        uploadResult.innerHTML = '';
+                        selectedFile = null;
+                    } else {
+                        showError(result.error || 'Upload failed');
+                    }
+                } catch (error) {
+                    showError('Error uploading file: ' + error.message);
+                }
+            });
+        }
+
+        function handleFileSelect(file) {
+            selectedFile = file;
+            
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const content = e.target.result;
+                
+                try {
+                    const detected = await detectStrategyInfo(file.name);
+                    
+                    document.getElementById('symbolOverride').value = detected.symbol || '';
+                    document.getElementById('strategyOverride').value = detected.strategy || '';
+                    
+                    detectionPreview.innerHTML = `
+                        <div style="background: #e8f5e8; padding: 15px; border-radius: 5px; border-left: 4px solid #28a745;">
+                            <h5 style="color: #155724; margin: 0 0 10px 0;">
+                                <i class="fas fa-check-circle"></i> File Detection Results
+                            </h5>
+                            <p style="margin: 5px 0;"><strong>Filename:</strong> ${file.name}</p>
+                            <p style="margin: 5px 0;"><strong>Detected Symbol:</strong> ${detected.symbol || 'Not detected'}</p>
+                            <p style="margin: 5px 0;"><strong>Detected Strategy:</strong> ${detected.strategy || 'Not detected'}</p>
+                            <p style="margin: 5px 0;"><strong>File Size:</strong> ${(file.size / 1024).toFixed(2)} KB</p>
+                            <p style="color: #666; font-size: 0.9em; margin-top: 10px;">
+                                <i class="fas fa-info-circle"></i> 
+                                Values have been auto-filled below. You can edit them before uploading.
+                            </p>
+                        </div>
+                    `;
+                    detectionPreview.style.display = 'block';
+                    uploadForm.style.display = 'block';
+                    
+                } catch (error) {
+                    showError('Error processing file: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        async function detectStrategyInfo(filename) {
+            try {
+                const response = await fetch('/detect_strategy_info', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filename: filename })
+                });
+                
+                const result = await response.json();
+                return result;
+            } catch (error) {
+                console.error('Detection error:', error);
+                return { symbol: '', strategy: '' };
+            }
+        }
+
+        function showError(message) {
+            uploadResult.innerHTML = `<div style="color: #721c24; background: #f8d7da; padding: 10px; border-radius: 5px; border: 1px solid #f5c6cb;">${message}</div>`;
+        }
+
+        function showSuccess(message) {
+            uploadResult.innerHTML = `<div style="color: #155724; background: #d4edda; padding: 10px; border-radius: 5px; border: 1px solid #c3e6cb;">${message}</div>`;
+        }
+
+        async function scanManualFiles() {
+            try {
+                const response = await fetch('/scan_manual_files', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showSuccess(`Manual scan completed: ${result.imported_count} files imported`);
+                    await refreshStrategies();
+                } else {
+                    showError(result.error || 'Manual scan failed');
+                }
+            } catch (error) {
+                showError('Error scanning manual files: ' + error.message);
+            }
+        }
+
+        async function refreshStrategies() {
+            try {
+                const response = await fetch('/list_strategies');
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateStrategiesTable(result.strategies);
+                }
+            } catch (error) {
+                console.error('Error refreshing strategies:', error);
+            }
+        }
+
+        function updateStrategiesTable(strategies) {
+            const tableBody = document.getElementById('strategiesTableBody');
+            if (!tableBody) return;
+            
+            tableBody.innerHTML = strategies.map(strategy => `
+                <tr data-symbol="${strategy.symbol}" data-strategy="${strategy.strategy_name}">
+                    <td>
+                        <strong>${strategy.strategy_name}</strong><br>
+                        <small class="text-muted">${strategy.filename}</small>
+                    </td>
+                    <td>
+                        <span class="badge symbol-badge">${strategy.symbol}</span>
+                    </td>
+                    <td>${strategy.timeframe}</td>
+                    <td>
+                        <span class="badge version-badge">${strategy.version}</span>
+                    </td>
+                    <td>${strategy.trade_count}</td>
+                    <td>
+                        <small>${strategy.date_range || 'N/A'}</small>
+                    </td>
+                    <td>
+                        <small>${new Date(strategy.upload_date).toLocaleDateString()}</small>
+                    </td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" title="Run backtest on Home page"
+                                    onclick="runBacktest('${strategy.symbol}', '${strategy.timeframe}', '${strategy.strategy_name}', '${strategy.version}')">
+                                <i class="fas fa-chart-line"></i> Test
+                            </button>
+                            <button class="btn btn-outline-info" title="View and edit strategy details"
+                                    onclick="editStrategy('${strategy.symbol}', '${strategy.timeframe}', '${strategy.strategy_name}', '${strategy.version}')">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                            <button class="btn btn-outline-danger" title="Delete this strategy"
+                                    onclick="deleteStrategy('${strategy.symbol}', '${strategy.timeframe}', '${strategy.strategy_name}', '${strategy.version}')">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function runBacktest(symbol, timeframe, strategyName, version) {
+            const params = new URLSearchParams({
+                symbol: symbol,
+                timeframe: timeframe,
+                strategy: strategyName,
+                version: version
+            });
+            window.open('/?auto_load=' + encodeURIComponent(params.toString()), '_blank');
+        }
+
+        async function editStrategy(symbol, timeframe, strategyName, version) {
+            try {
+                // Get strategy details
+                const response = await fetch('/get_strategy_details', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        timeframe: timeframe,
+                        strategy_name: strategyName,
+                        version: version
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showEditModal(result.strategy);
+                } else {
+                    alert('Error loading strategy details: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error loading strategy details: ' + error.message);
+            }
+        }
+
+        function showEditModal(strategy) {
+            // Create modal HTML
+            const modalHtml = `
+                <div id="editModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+                    <div style="background: white; padding: 30px; border-radius: 10px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+                        <h3 style="margin: 0 0 20px 0; color: #333;">
+                            <i class="fas fa-edit"></i> Edit Strategy
+                        </h3>
+                        
+                        <form id="editForm">
+                            <div style="margin-bottom: 15px;">
+                                <label style="font-weight: bold; display: block; margin-bottom: 5px;">Symbol:</label>
+                                <input type="text" id="editSymbol" value="${strategy.symbol}" 
+                                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            
+                            <div style="margin-bottom: 15px;">
+                                <label style="font-weight: bold; display: block; margin-bottom: 5px;">Timeframe:</label>
+                                <select id="editTimeframe" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                    <option value="5" ${strategy.timeframe === '5' ? 'selected' : ''}>5m</option>
+                                    <option value="15" ${strategy.timeframe === '15' ? 'selected' : ''}>15m</option>
+                                    <option value="30" ${strategy.timeframe === '30' ? 'selected' : ''}>30m</option>
+                                    <option value="60" ${strategy.timeframe === '60' ? 'selected' : ''}>1h</option>
+                                    <option value="240" ${strategy.timeframe === '240' ? 'selected' : ''}>4h</option>
+                                    <option value="1440" ${strategy.timeframe === '1440' ? 'selected' : ''}>1D</option>
+                                </select>
+                            </div>
+                            
+                            <div style="margin-bottom: 15px;">
+                                <label style="font-weight: bold; display: block; margin-bottom: 5px;">Strategy Name:</label>
+                                <input type="text" id="editStrategyName" value="${strategy.strategy_name}" 
+                                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            
+                            <div style="margin-bottom: 15px;">
+                                <label style="font-weight: bold; display: block; margin-bottom: 5px;">Version:</label>
+                                <input type="text" id="editVersion" value="${strategy.version}" 
+                                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            
+                            <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+                                <h5 style="margin: 0 0 10px 0; color: #666;">Strategy Info:</h5>
+                                <p style="margin: 5px 0; font-size: 0.9em;"><strong>Filename:</strong> ${strategy.filename}</p>
+                                <p style="margin: 5px 0; font-size: 0.9em;"><strong>Trades:</strong> ${strategy.trade_count}</p>
+                                <p style="margin: 5px 0; font-size: 0.9em;"><strong>Date Range:</strong> ${strategy.date_range || 'N/A'}</p>
+                                <p style="margin: 5px 0; font-size: 0.9em;"><strong>Upload Date:</strong> ${new Date(strategy.upload_date).toLocaleDateString()}</p>
+                            </div>
+                            
+                            <div style="text-align: right;">
+                                <button type="button" onclick="closeEditModal()" 
+                                        style="padding: 8px 16px; margin-right: 10px; border: 1px solid #ccc; background: #f8f9fa; border-radius: 4px; cursor: pointer;">
+                                    Cancel
+                                </button>
+                                <button type="submit" 
+                                        style="padding: 8px 16px; border: none; background: #007bff; color: white; border-radius: 4px; cursor: pointer;">
+                                    <i class="fas fa-save"></i> Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Add form submit handler
+            document.getElementById('editForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await saveStrategyChanges(strategy);
+            });
+        }
+
+        function closeEditModal() {
+            const modal = document.getElementById('editModal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        async function saveStrategyChanges(originalStrategy) {
+            try {
+                const updates = {
+                    symbol: document.getElementById('editSymbol').value.trim().toUpperCase(),
+                    timeframe: document.getElementById('editTimeframe').value,
+                    strategy_name: document.getElementById('editStrategyName').value.trim().toUpperCase(),
+                    version: document.getElementById('editVersion').value.trim()
+                };
+
+                const response = await fetch('/update_strategy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        symbol: originalStrategy.symbol,
+                        timeframe: originalStrategy.timeframe,
+                        strategy_name: originalStrategy.strategy_name,
+                        version: originalStrategy.version,
+                        updates: updates
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    closeEditModal();
+                    await refreshStrategies();
+                    alert('Strategy updated successfully!');
+                } else {
+                    alert('Error updating strategy: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error updating strategy: ' + error.message);
+            }
+        }
+
+        async function deleteStrategy(symbol, timeframe, strategyName, version) {
+            if (!confirm(`Are you sure you want to delete ${symbol} ${timeframe} ${strategyName} ${version}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/delete_strategy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        timeframe: timeframe,
+                        strategy_name: strategyName,
+                        version: version
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    await refreshStrategies();
+                    alert('Strategy deleted successfully');
+                } else {
+                    alert('Error deleting strategy: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error deleting strategy: ' + error.message);
+            }
+        }
+
+        // Filter functionality
+        function filterStrategies() {
+            const symbolFilter = document.getElementById('symbolFilter');
+            const strategyFilter = document.getElementById('strategyFilter');
+            const searchInput = document.getElementById('searchInput');
+            const tableBody = document.getElementById('strategiesTableBody');
+
+            if (!symbolFilter || !tableBody) return;
+
+            const symbolValue = symbolFilter.value.toLowerCase();
+            const strategyValue = strategyFilter ? strategyFilter.value.toLowerCase() : '';
+            const searchValue = searchInput ? searchInput.value.toLowerCase() : '';
+
+            const rows = tableBody.querySelectorAll('tr');
+            
+            rows.forEach(row => {
+                const symbol = (row.getAttribute('data-symbol') || '').toLowerCase();
+                const strategy = (row.getAttribute('data-strategy') || '').toLowerCase();
+                const text = row.textContent.toLowerCase();
+
+                const symbolMatch = !symbolValue || symbol.includes(symbolValue);
+                const strategyMatch = !strategyValue || strategy.includes(strategyValue);
+                const searchMatch = !searchValue || text.includes(searchValue);
+
+                if (symbolMatch && strategyMatch && searchMatch) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        // Add filter event listeners when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const symbolFilter = document.getElementById('symbolFilter');
+            const strategyFilter = document.getElementById('strategyFilter');
+            const searchInput = document.getElementById('searchInput');
+
+            if (symbolFilter) {
+                symbolFilter.addEventListener('change', filterStrategies);
+            }
+            if (strategyFilter) {
+                strategyFilter.addEventListener('change', filterStrategies);
+            }
+            if (searchInput) {
+                searchInput.addEventListener('input', filterStrategies);
+            }
+
+            console.log('✅ Strategy Management initialized');
+        });
+    </script>
+</body>
+</html>

@@ -1,6 +1,8 @@
 from __future__ import with_statement
 import os
 from logging.config import fileConfig
+import sys
+from pathlib import Path
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -15,6 +17,8 @@ config = context.config
 fileConfig(config.config_file_name)
 
 # Import models to have metadata available
+repo_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(repo_root))
 import src.models as models
 
 target_metadata = models.Base.metadata

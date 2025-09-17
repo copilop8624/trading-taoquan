@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🎯 Backtest Strategy Optimization System</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f5f5f5; }
+        
+        /* Navigation Menu */
+        .nav-menu {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .nav-item {
+            color: white;
+            text-decoration: none;
+            padding: 12px 20px;
+            margin: 0 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+        .nav-item:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+            color: white;
+        }
+        .nav-item.active {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 0 20px; }
+        .header { text-align: center; color: #333; margin-bottom: 30px; }
+        .card { background: white; padding: 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card h3 { margin-top: 0; color: #007bff; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .full-width { grid-column: 1 / -1; }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; font-weight: bold; }
+        tr:hover { background: #f8f9fa; }
+        
+        /* Status badges */
+        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .status-recent { background: #d4edda; color: #155724; }
+        .status-outdated { background: #fff3cd; color: #856404; }
+        .status-old { background: #f8d7da; color: #721c24; }
+        
+        /* Buttons */
+        .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn:hover { opacity: 0.8; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* Forms */
+        .form-group { margin: 15px 0; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        
+        /* Progress */
+        .progress-bar { width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; margin: 10px 0; }
+        .progress-fill { height: 100%; background: #007bff; border-radius: 10px; transition: width 0.3s; }
+        
+        /* Log */
+        .log-container { background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 4px; font-family: monospace; height: 200px; overflow-y: scroll; }
+        .log-line { margin: 2px 0; }
+        
+        /* Status indicators */
+        .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        .status-running { background: #ffc107; animation: pulse 2s infinite; }
+        .status-idle { background: #28a745; }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        /* Optimization Engine Radio Buttons */
+        .form-group input[type="radio"]:checked + strong {
+            text-shadow: 0 0 5px rgba(255,255,255,0.8);
+        }
+        .form-group label:hover {
+            background: rgba(255,255,255,0.2) !important;
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Menu -->
+    <div class="nav-menu">
+        <div class="container">
+            <div class="d-flex justify-content-center align-items-center flex-wrap" style="display: flex; justify-content: center; align-items: center; flex-wrap: wrap;">
+                <a href="/" class="nav-item active">
+                    <i class="fas fa-home" style="margin-right: 8px;"></i>Backtest
+                </a>
+                <a href="/strategy_management" class="nav-item">
+                    <i class="fas fa-cogs" style="margin-right: 8px;"></i>Strategy Management
+                </a>
+                <a href="/data_management" class="nav-item">
+                    <i class="fas fa-database" style="margin-right: 8px;"></i>Data Management
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Backtest Strategy Optimization</h1>
+            <p>Tối ưu hóa thông số chiến lược giao dịch với dữ liệu thực</p>
+        </div>
+        
+        <!-- Strategy Selection Grid -->
+        <div class="grid">
+            <!-- Strategy Selection -->
+            <div class="card">
+                <h3>🎯 Chọn Strategy & Data</h3>
+                
+                <div class="form-group">
+                    <label>Strategy Available:</label>
+                    <select id="strategySelect">
+                        <option value="">⏳ Đang tải strategies...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Candle Data Source:</label>
+                    <select id="candleSelect">
+                        <option value="">⏳ Đang tải candle data...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <button type="button" class="btn btn-info" onclick="refreshDataSources()">
+                        <i class="fas fa-sync-alt"></i> Refresh Data
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="previewData()">
+                        <i class="fas fa-eye"></i> Preview Data
+                    </button>
+                    <button type="button" class="btn btn-success" onclick="showQuickSummary()">
+                        <i class="fas fa-lightning-bolt"></i> Quick Summary
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tổng kết nhanh Tradelist -->
+            <div class="card">
+                <h3>📈 Tổng kết nhanh Tradelist</h3>
+                <div id="tradelistSummary" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                    <p style="text-align: center; color: #666;">Chọn strategy để xem tổng kết nhanh</p>
+                </div>
+                
+                <div class="form-group">
+                    <button type="button" class="btn btn-warning" onclick="analyzeCurrentTradelist()">
+                        <i class="fas fa-chart-line"></i> Phân tích chi tiết
+                    </button>
+                    <button type="button" class="btn btn-info" onclick="compareWithPrevious()">
+                        <i class="fas fa-balance-scale"></i> So sánh
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Nhập thông số test & Gợi ý -->
+        <div class="grid">
+            <!-- Nhập thông số test -->
+            <div class="card">
+                <h3>🔧 Nhập thông số test (Range cho Optimization)</h3>
+                
+                <form id="testParametersForm">
+                    <!-- Optimization Engine Selection - LINH HỒN QUAN TRỌNG -->
+                    <div class="form-group" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 15px 0; color: white;">🧠 Chọn Engine Optimization (QUAN TRỌNG)</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <label style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; cursor: pointer; transition: all 0.3s ease;">
+                                <input type="radio" name="optimization_engine" value="optuna" checked style="margin-right: 8px;">
+                                <strong>🔥 Optuna (AI-Powered)</strong><br>
+                                <small style="color: #e0e0e0;">Intelligent Bayesian Optimization - Nhanh & Hiệu quả</small>
+                            </label>
+                            <label style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; cursor: pointer; transition: all 0.3s ease;">
+                                <input type="radio" name="optimization_engine" value="grid_search" style="margin-right: 8px;">
+                                <strong>🔍 Grid Search (Brute Force)</strong><br>
+                                <small style="color: #e0e0e0;">Test tất cả combination - Chậm nhưng đầy đủ</small>
+                            </label>
+                        </div>
+                        <div style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.9em;">
+                            💡 <strong>Khuyến nghị:</strong> Dùng Optuna cho tối ưu nhanh, Grid Search cho kiểm tra đầy đủ
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>📍 Stop Loss (SL) - Range:</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 0.9em;">Min (%):</label>
+                                <input type="number" id="sl_min" name="sl_min" value="0.5" step="0.1" min="0.1" max="20">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Max (%):</label>
+                                <input type="number" id="sl_max" name="sl_max" value="3.0" step="0.1" min="0.1" max="20">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Step (%):</label>
+                                <input type="number" id="sl_step" name="sl_step" value="0.1" step="0.05" min="0.05" max="1">
+                            </div>
+                        </div>
+                        <small>Optimization sẽ test từ Min đến Max với bước Step</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>⚖️ Break Even (BE) - Range:</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 0.9em;">Min (%):</label>
+                                <input type="number" id="be_min" name="be_min" value="0.2" step="0.05" min="0.05" max="10">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Max (%):</label>
+                                <input type="number" id="be_max" name="be_max" value="1.5" step="0.05" min="0.05" max="10">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Step (%):</label>
+                                <input type="number" id="be_step" name="be_step" value="0.05" step="0.01" min="0.01" max="0.5">
+                            </div>
+                        </div>
+                        <small>BE phải nhỏ hơn SL để hợp lệ</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>📈 Trailing Stop (TS) - Range:</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 0.9em;">Min (%):</label>
+                                <input type="number" id="ts_min" name="ts_min" value="0.1" step="0.01" min="0.01" max="5">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Max (%):</label>
+                                <input type="number" id="ts_max" name="ts_max" value="1.0" step="0.01" min="0.01" max="5">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Step (%):</label>
+                                <input type="number" id="ts_step" name="ts_step" value="0.02" step="0.01" min="0.01" max="0.2">
+                            </div>
+                        </div>
+                        <small>TS phải nhỏ hơn BE để hợp lệ</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>🎯 Take Profit (TP) - Optional Range:</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end;">
+                            <div>
+                                <label style="font-size: 0.9em;">Min (%):</label>
+                                <input type="number" id="tp_min" name="tp_min" value="" step="0.1" min="0.5" max="50" placeholder="Optional">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Max (%):</label>
+                                <input type="number" id="tp_max" name="tp_max" value="" step="0.1" min="0.5" max="50" placeholder="Optional">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Step (%):</label>
+                                <input type="number" id="tp_step" name="tp_step" value="" step="0.1" min="0.1" max="5" placeholder="Optional">
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="clearTPRange()">Clear TP</button>
+                            </div>
+                        </div>
+                        <small>Để trống nếu chỉ dùng Trailing Stop</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="button" class="btn btn-primary" onclick="validateParameterRanges()">
+                            <i class="fas fa-check"></i> Validate Ranges
+                        </button>
+                        <button type="button" class="btn btn-info" onclick="calculateCombinations()">
+                            <i class="fas fa-calculator"></i> Calculate Total Tests
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="resetToDefaultRanges()">
+                            <i class="fas fa-undo"></i> Reset Defaults
+                        </button>
+                    </div>
+                    
+                    <div id="combinationsInfo" style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px; display: none;">
+                        <strong>📊 Estimated Tests:</strong> <span id="totalCombinations">0</span> combinations
+                        <br><small>Estimated time: <span id="estimatedTime">0</span> minutes</small>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Gợi ý thông số -->
+            <div class="card">
+                <h3>💡 Gợi ý thông số (Ranges)</h3>
+                
+                <div id="parameterSuggestions" style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                    <p><strong>🎯 Gợi ý Range cho Symbol hiện tại:</strong></p>
+                    <div id="suggestionContent">
+                        <p style="text-align: center; color: #666;">Chọn strategy để nhận gợi ý ranges phù hợp cho optimization</p>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <button type="button" class="btn btn-success" onclick="getSmartRangeSuggestions()">
+                        <i class="fas fa-brain"></i> Smart Range Suggestions
+                    </button>
+                    <button type="button" class="btn btn-info" onclick="applyConservativeRanges()">
+                        <i class="fas fa-shield-alt"></i> Conservative Ranges
+                    </button>
+                    <button type="button" class="btn btn-warning" onclick="applyAggressiveRanges()">
+                        <i class="fas fa-rocket"></i> Aggressive Ranges
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="applyNarrowRanges()">
+                        <i class="fas fa-compress"></i> Narrow Ranges
+                    </button>
+                </div>
+                
+                <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 4px;">
+                    <small><strong>💡 Range Strategy Tips:</strong></small>
+                    <ul style="margin: 5px 0; font-size: 0.9em;">
+                        <li><strong>Conservative:</strong> Wide ranges, safe parameters</li>
+                        <li><strong>Aggressive:</strong> Tight ranges, risk-taking parameters</li>
+                        <li><strong>Narrow:</strong> Small ranges around optimal values</li>
+                        <li><strong>Smart:</strong> AI-based ranges theo market conditions</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Optimization Parameters -->
+        <div class="card full-width">
+            <h3>⚙️ Optimization Parameters & Run</h3>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 20px; align-items: end;">
+                <div class="form-group">
+                    <label>Step Multiplier:</label>
+                    <input type="number" name="step_multiplier" value="1.5" step="0.1" min="1.1" max="3.0">
+                    <small>Độ nhảy giữa các test</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Backtest Engine:</label>
+                    <select name="engine_type">
+                        <option value="realistic">Realistic Engine (khuyến nghị)</option>
+                        <option value="standard">Standard Engine</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Max Iterations:</label>
+                    <input type="number" name="max_iterations" value="100" min="10" max="500">
+                    <small>Số lần test tối đa</small>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary" onclick="startOptimization()">
+                        <i class="fas fa-play"></i> Bắt đầu Optimization
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview Area -->
+        <div class="card full-width">
+            <h3>📊 Data Preview</h3>
+            <div id="previewArea" style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 20px; text-align: center; color: #6c757d; margin: 20px 0;">
+                <i class="fas fa-info-circle"></i> Chọn strategy và candle data để xem preview
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" style="display: none;">
+            <div class="card full-width">
+                <h3>🏆 Optimization Results</h3>
+                <div id="resultsContent">
+                    <!-- Results will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        console.log('🎯 Backtest System loaded');
+
+        // 🔄 Data Loading Functions
+        async function refreshDataSources() {
+            console.log('🔄 Refreshing data sources...');
+            document.getElementById('strategySelect').innerHTML = '<option value="">⏳ Đang tải strategies...</option>';
+            document.getElementById('candleSelect').innerHTML = '<option value="">⏳ Đang tải candle data...</option>';
+            
+            await Promise.all([loadStrategies(), loadCandles()]);
+        }
+        
+        async function loadStrategies() {
+            console.log('📊 Loading strategies...');
+            try {
+                const response = await fetch('/list_strategies');
+                const result = await response.json();
+                console.log('Strategies response:', result);
+                
+                const select = document.getElementById('strategySelect');
+                select.innerHTML = '<option value="">-- Chọn Strategy --</option>';
+                
+                if (result.strategies && result.strategies.length > 0) {
+                    result.strategies.forEach(strategy => {
+                        const option = document.createElement('option');
+                        // Handle version format - don't add 'v' if version already starts with 'v'
+                        const versionDisplay = strategy.version.startsWith('v') ? strategy.version : `v${strategy.version}`;
+                        option.value = `${strategy.symbol}_${strategy.timeframe}_${strategy.strategy_name}_${versionDisplay}`;
+                        option.textContent = `${strategy.symbol} ${strategy.timeframe} - ${strategy.strategy_name} ${versionDisplay}`;
+                        option.dataset.symbol = strategy.symbol;
+                        option.dataset.timeframe = strategy.timeframe;
+                        option.dataset.strategyName = strategy.strategy_name;
+                        option.dataset.version = strategy.version;
+                        select.appendChild(option);
+                    });
+                    console.log(`✅ Loaded ${result.strategies.length} strategies`);
+                } else {
+                    select.innerHTML = '<option value="">❌ Không có strategy nào</option>';
+                }
+            } catch (error) {
+                console.error('❌ Error loading strategies:', error);
+                document.getElementById('strategySelect').innerHTML = '<option value="">❌ Lỗi load strategies</option>';
+            }
+        }
+        
+        async function loadCandles() {
+            console.log('🕯️ Loading candle data...');
+            try {
+                const response = await fetch('/list_candle_files');
+                const result = await response.json();
+                console.log('Candles response:', result);
+                
+                const select = document.getElementById('candleSelect');
+                select.innerHTML = '<option value="">-- Chọn Symbol & Timeframe --</option>';
+                
+                if (result.success && result.files && result.files.length > 0) {
+                    result.files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file;
+                        option.textContent = file.replace('BINANCE_', '').replace('.csv', '').replace('.db', '');
+                        select.appendChild(option);
+                    });
+                    console.log(`✅ Loaded ${result.files.length} candle sources`);
+                } else {
+                    select.innerHTML = '<option value="">❌ Không có candle data</option>';
+                }
+            } catch (error) {
+                console.error('❌ Error loading candles:', error);
+                document.getElementById('candleSelect').innerHTML = '<option value="">❌ Lỗi load candles</option>';
+            }
+        }
+        
+        // 👁️ Preview Data Function
+        async function previewData() {
+            const strategySelect = document.getElementById('strategySelect');
+            const candleSelect = document.getElementById('candleSelect');
+            const previewArea = document.getElementById('previewArea');
+            
+            if (!strategySelect.value || !candleSelect.value) {
+                alert('❌ Vui lòng chọn cả Strategy và Candle Data');
+                return;
+            }
+            
+            try {
+                previewArea.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải preview...';
+                
+                const selectedOption = strategySelect.options[strategySelect.selectedIndex];
+                const symbol = selectedOption.dataset.symbol;
+                const timeframe = selectedOption.dataset.timeframe;
+                const strategyName = selectedOption.dataset.strategyName;
+                const version = selectedOption.dataset.version;
+                
+                // Get strategy data
+                const response = await fetch(`/get_strategy_data?symbol=${symbol}&timeframe=${timeframe}&strategy_name=${strategyName}&version=${version}`);
+                const strategyInfo = await response.json();
+                
+                let previewHTML = `
+                    <div style="text-align: left;">
+                        <h4><i class="fas fa-info-circle"></i> Data Preview</h4>
+                        <p><strong>Strategy:</strong> ${strategyName} v${version}</p>
+                        <p><strong>Symbol:</strong> ${symbol}</p>
+                        <p><strong>Timeframe:</strong> ${timeframe}</p>
+                        <p><strong>Candle Source:</strong> ${candleSelect.value}</p>
+                `;
+                
+                if (strategyInfo.success && strategyInfo.data) {
+                    previewHTML += `
+                        <p><strong>Total Trades:</strong> ${strategyInfo.total_rows}</p>
+                        <p><strong>Columns:</strong> ${strategyInfo.columns.join(', ')}</p>
+                        <div style="margin-top: 15px;">
+                            <strong>Sample Trades:</strong>
+                            <ul>
+                    `;
+                    strategyInfo.data.slice(0, 3).forEach((trade, i) => {
+                        const dateField = trade.datetime || trade.date || trade.Date || 'Unknown date';
+                        const typeField = trade.type || trade.Type || trade.side || 'Unknown type';
+                        previewHTML += `<li>${dateField} - ${typeField}</li>`;
+                    });
+                    previewHTML += `</ul></div>`;
+                } else {
+                    previewHTML += `<p style="color: red;"><strong>Error:</strong> ${strategyInfo.error || 'Cannot load strategy data'}</p>`;
+                }
+                
+                previewHTML += `</div>`;
+                previewArea.innerHTML = previewHTML;
+                
+            } catch (error) {
+                console.error('❌ Error previewing data:', error);
+                previewArea.innerHTML = `<div style="color: red;"><i class="fas fa-exclamation-triangle"></i> Lỗi preview data: ${error.message}</div>`;
+            }
+        }
+        
+        // 🚀 Quick Summary Function
+        async function showQuickSummary() {
+            const strategySelect = document.getElementById('strategySelect');
+            const candleSelect = document.getElementById('candleSelect');
+            
+            if (!strategySelect.value || !candleSelect.value) {
+                alert('❌ Vui lòng chọn cả Strategy và Candle Data');
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('strategy', strategySelect.value);
+                formData.append('candle_data', candleSelect.value);
+                
+                const response = await fetch('/quick_summary_strategy', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                console.log('Quick summary result:', result);
+                
+                if (result.success) {
+                    displayQuickSummary(result.data);
+                } else {
+                    alert('❌ Lỗi: ' + result.error);
+                }
+            } catch (error) {
+                console.error('❌ Error in quick summary:', error);
+                alert('❌ Lỗi kết nối: ' + error.message);
+            }
+        }
+        
+        // 📊 Display Quick Summary
+        function displayQuickSummary(data) {
+            const previewArea = document.getElementById('previewArea');
+            
+            const summaryHTML = `
+                <div style="text-align: left;">
+                    <h4><i class="fas fa-lightning-bolt"></i> Quick Summary</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0;">
+                        <div style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 1.5em; font-weight: bold; color: #007bff;">${data.total_trades}</div>
+                            <div style="color: #666; font-size: 0.9em;">Total Trades</div>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 1.5em; font-weight: bold; color: #28a745;">${data.win_rate.toFixed(2)}%</div>
+                            <div style="color: #666; font-size: 0.9em;">Win Rate</div>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 1.5em; font-weight: bold; color: #ffc107;">${data.profit_factor.toFixed(2)}</div>
+                            <div style="color: #666; font-size: 0.9em;">Profit Factor</div>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 1.5em; font-weight: bold; color: #dc3545;">${data.total_pnl.toFixed(2)}</div>
+                            <div style="color: #666; font-size: 0.9em;">Total PnL</div>
+                        </div>
+                    </div>
+                    <p><strong>Period:</strong> ${data.start_date} → ${data.end_date}</p>
+                </div>
+            `;
+            
+            previewArea.innerHTML = summaryHTML;
+        }
+        
+        // 🎯 Form Handler & Initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎯 DOM loaded, initializing...');
+            
+            // Load data sources
+            refreshDataSources();
+            
+            // Add event listener for strategy selection change
+            document.getElementById('strategySelect').addEventListener('change', function() {
+                if (this.value) {
+                    // Auto-analyze tradelist when strategy is selected
+                    setTimeout(() => {
+                        analyzeCurrentTradelist();
+                        getSmartSuggestions();
+                    }, 500);
+                }
+            });
+            
+            // Form submit handler (keeping old form for compatibility)
+            const optimizeForm = document.getElementById('optimizeForm');
+            if (optimizeForm) {
+                optimizeForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    startOptimization();
+                });
+            }
+        });
+        
+        // 📈 Display Optimization Results
+        function displayOptimizationResults(data) {
+            const resultsSection = document.getElementById('resultsSection');
+            
+            let resultsHTML = `
+                <div class="card full-width">
+                    <h3>🏆 Optimization Results</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0;">
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 2em; font-weight: bold; color: #007bff;">${data.best_result.total_trades}</div>
+                            <div style="color: #666; font-size: 0.9em;">Total Trades</div>
+                        </div>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 2em; font-weight: bold; color: #28a745;">${data.best_result.winrate.toFixed(2)}%</div>
+                            <div style="color: #666; font-size: 0.9em;">Win Rate</div>
+                        </div>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 2em; font-weight: bold; color: #ffc107;">${data.best_result.pf.toFixed(2)}</div>
+                            <div style="color: #666; font-size: 0.9em;">Profit Factor</div>
+                        </div>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 2em; font-weight: bold; color: #dc3545;">${data.best_result.total_pnl.toFixed(2)}</div>
+                            <div style="color: #666; font-size: 0.9em;">Best PnL</div>
+                        </div>
+                    </div>
+                    
+                    <h4>📊 Best Parameters:</h4>
+                    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                        <thead>
+                            <tr>
+                                <th style="padding: 12px; text-align: left; background: #f8f9fa; border-bottom: 1px solid #e1e5e9;">Parameter</th>
+                                <th style="padding: 12px; text-align: left; background: #f8f9fa; border-bottom: 1px solid #e1e5e9;">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            Object.entries(data.best_result.parameters).forEach(([key, value]) => {
+                resultsHTML += `<tr><td style="padding: 12px; border-bottom: 1px solid #e1e5e9;">${key}</td><td style="padding: 12px; border-bottom: 1px solid #e1e5e9;">${value}</td></tr>`;
+            });
+            
+            resultsHTML += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            resultsSection.innerHTML = resultsHTML;
+        }
+        
+        // 📈 Analyze Current Tradelist
+        async function analyzeCurrentTradelist() {
+            const strategySelect = document.getElementById('strategySelect');
+            if (!strategySelect.value) {
+                alert('❌ Vui lòng chọn strategy trước');
+                return;
+            }
+            
+            try {
+                const selectedOption = strategySelect.options[strategySelect.selectedIndex];
+                const symbol = selectedOption.dataset.symbol;
+                const timeframe = selectedOption.dataset.timeframe;
+                const strategyName = selectedOption.dataset.strategyName;
+                const version = selectedOption.dataset.version;
+                
+                const response = await fetch(`/get_strategy_data?symbol=${symbol}&timeframe=${timeframe}&strategy_name=${strategyName}&version=${version}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateTradelistSummary(result);
+                } else {
+                    alert('❌ Lỗi: ' + result.error);
+                }
+            } catch (error) {
+                console.error('❌ Error analyzing tradelist:', error);
+                alert('❌ Lỗi phân tích: ' + error.message);
+            }
+        }
+        
+        // 📊 Update Tradelist Summary
+        function updateTradelistSummary(data) {
+            const summaryDiv = document.getElementById('tradelistSummary');
+            
+            if (data.data && data.data.length > 0) {
+                const trades = data.data;
+                const totalTrades = trades.length;
+                const winTrades = trades.filter(trade => {
+                    const pnl = trade.PnL || trade.pnl || 0;
+                    return pnl > 0;
+                }).length;
+                const winRate = ((winTrades / totalTrades) * 100).toFixed(2);
+                
+                summaryDiv.innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; text-align: center;">
+                        <div>
+                            <div style="font-size: 1.5em; font-weight: bold; color: #007bff;">${totalTrades}</div>
+                            <div style="font-size: 0.8em; color: #666;">Total Trades</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5em; font-weight: bold; color: #28a745;">${winTrades}</div>
+                            <div style="font-size: 0.8em; color: #666;">Win Trades</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5em; font-weight: bold; color: ${winRate > 50 ? '#28a745' : '#dc3545'};">${winRate}%</div>
+                            <div style="font-size: 0.8em; color: #666;">Win Rate</div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                summaryDiv.innerHTML = '<p style="text-align: center; color: #666;">Không có data để phân tích</p>';
+            }
+        }
+        
+        // 💡 Get Smart Range Suggestions
+        async function getSmartRangeSuggestions() {
+            const strategySelect = document.getElementById('strategySelect');
+            if (!strategySelect.value) {
+                alert('❌ Vui lòng chọn strategy trước');
+                return;
+            }
+            
+            const selectedOption = strategySelect.options[strategySelect.selectedIndex];
+            const symbol = selectedOption.dataset.symbol;
+            const timeframe = selectedOption.dataset.timeframe;
+            
+            // Smart range suggestions based on symbol and timeframe
+            let ranges = getParameterRangeSuggestions(symbol, timeframe);
+            
+            document.getElementById('suggestionContent').innerHTML = `
+                <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                    <h5>🎯 Gợi ý Ranges cho ${symbol} ${timeframe}:</h5>
+                    <table style="width: 100%; font-size: 0.9em; margin: 10px 0;">
+                        <tr><td><strong>SL:</strong></td><td>${ranges.sl.min}% - ${ranges.sl.max}% (step ${ranges.sl.step}%)</td><td>${ranges.sl.reason}</td></tr>
+                        <tr><td><strong>BE:</strong></td><td>${ranges.be.min}% - ${ranges.be.max}% (step ${ranges.be.step}%)</td><td>${ranges.be.reason}</td></tr>
+                        <tr><td><strong>TS:</strong></td><td>${ranges.ts.min}% - ${ranges.ts.max}% (step ${ranges.ts.step}%)</td><td>${ranges.ts.reason}</td></tr>
+                    </table>
+                    <button class="btn btn-primary btn-sm" onclick="applyRangeSuggestions(${JSON.stringify(ranges).replace(/"/g, '&quot;')})">
+                        <i class="fas fa-magic"></i> Apply These Ranges
+                    </button>
+                </div>
+            `;
+        }
+        
+        // 🎯 Get Parameter Range Suggestions based on Symbol & Timeframe
+        function getParameterRangeSuggestions(symbol, timeframe) {
+            // Base range suggestions
+            let ranges = {
+                sl: {min: 0.5, max: 2.5, step: 0.1, reason: "Standard volatility"},
+                be: {min: 0.2, max: 1.2, step: 0.05, reason: "Conservative BE range"},
+                ts: {min: 0.1, max: 0.8, step: 0.02, reason: "Tight trailing range"}
+            };
+            
+            // Adjust for volatility based on symbol
+            if (symbol.includes('BTC')) {
+                ranges.sl = {min: 1.0, max: 4.0, step: 0.2, reason: "BTC high volatility"};
+                ranges.be = {min: 0.5, max: 2.0, step: 0.1, reason: "BTC BE range"};
+                ranges.ts = {min: 0.2, max: 1.2, step: 0.05, reason: "BTC TS range"};
+            } else if (symbol.includes('ETH')) {
+                ranges.sl = {min: 0.8, max: 3.0, step: 0.15, reason: "ETH medium volatility"};
+                ranges.be = {min: 0.3, max: 1.5, step: 0.08, reason: "ETH BE range"};
+                ranges.ts = {min: 0.15, max: 1.0, step: 0.03, reason: "ETH TS range"};
+            } else if (symbol.includes('USDT') && !symbol.includes('BTC') && !symbol.includes('ETH')) {
+                ranges.sl = {min: 0.3, max: 2.0, step: 0.08, reason: "Altcoin moderate volatility"};
+                ranges.be = {min: 0.1, max: 1.0, step: 0.04, reason: "Altcoin BE range"};
+                ranges.ts = {min: 0.05, max: 0.6, step: 0.02, reason: "Altcoin TS range"};
+            }
+            
+            // Adjust for timeframe
+            if (timeframe.includes('5') || timeframe.includes('15')) {
+                // Short timeframes - tighter ranges
+                ranges.sl.min *= 0.6; ranges.sl.max *= 0.7; ranges.sl.step *= 0.5;
+                ranges.be.min *= 0.6; ranges.be.max *= 0.7; ranges.be.step *= 0.5;
+                ranges.ts.min *= 0.6; ranges.ts.max *= 0.7; ranges.ts.step *= 0.5;
+                ranges.sl.reason += " + Short TF";
+            } else if (timeframe.includes('240') || timeframe.includes('1440')) {
+                // Long timeframes - wider ranges
+                ranges.sl.min *= 1.2; ranges.sl.max *= 1.4; ranges.sl.step *= 1.2;
+                ranges.be.min *= 1.2; ranges.be.max *= 1.4; ranges.be.step *= 1.2;
+                ranges.ts.min *= 1.2; ranges.ts.max *= 1.4; ranges.ts.step *= 1.2;
+                ranges.sl.reason += " + Long TF";
+            }
+            
+            // Round to reasonable precision
+            Object.keys(ranges).forEach(param => {
+                ranges[param].min = Math.round(ranges[param].min * 100) / 100;
+                ranges[param].max = Math.round(ranges[param].max * 100) / 100;
+                ranges[param].step = Math.round(ranges[param].step * 100) / 100;
+            });
+            
+            return ranges;
+        }
+        
+        // ✅ Apply Range Suggestions
+        function applyRangeSuggestions(ranges) {
+            document.getElementById('sl_min').value = ranges.sl.min;
+            document.getElementById('sl_max').value = ranges.sl.max;
+            document.getElementById('sl_step').value = ranges.sl.step;
+            
+            document.getElementById('be_min').value = ranges.be.min;
+            document.getElementById('be_max').value = ranges.be.max;
+            document.getElementById('be_step').value = ranges.be.step;
+            
+            document.getElementById('ts_min').value = ranges.ts.min;
+            document.getElementById('ts_max').value = ranges.ts.max;
+            document.getElementById('ts_step').value = ranges.ts.step;
+            
+            alert('✅ Đã apply smart range suggestions!');
+            calculateCombinations();
+        }
+        
+        // 🛡️ Apply Conservative Ranges
+        function applyConservativeRanges() {
+            document.getElementById('sl_min').value = '1.5';
+            document.getElementById('sl_max').value = '4.0';
+            document.getElementById('sl_step').value = '0.2';
+            
+            document.getElementById('be_min').value = '0.6';
+            document.getElementById('be_max').value = '2.0';
+            document.getElementById('be_step').value = '0.1';
+            
+            document.getElementById('ts_min').value = '0.3';
+            document.getElementById('ts_max').value = '1.2';
+            document.getElementById('ts_step').value = '0.05';
+            
+            alert('✅ Đã apply Conservative ranges!');
+            calculateCombinations();
+        }
+        
+        // 🚀 Apply Aggressive Ranges
+        function applyAggressiveRanges() {
+            document.getElementById('sl_min').value = '0.3';
+            document.getElementById('sl_max').value = '1.5';
+            document.getElementById('sl_step').value = '0.08';
+            
+            document.getElementById('be_min').value = '0.1';
+            document.getElementById('be_max').value = '0.8';
+            document.getElementById('be_step').value = '0.04';
+            
+            document.getElementById('ts_min').value = '0.05';
+            document.getElementById('ts_max').value = '0.5';
+            document.getElementById('ts_step').value = '0.02';
+            
+            alert('✅ Đã apply Aggressive ranges!');
+            calculateCombinations();
+        }
+        
+        // 📉 Apply Narrow Ranges
+        function applyNarrowRanges() {
+            document.getElementById('sl_min').value = '0.8';
+            document.getElementById('sl_max').value = '1.5';
+            document.getElementById('sl_step').value = '0.1';
+            
+            document.getElementById('be_min').value = '0.3';
+            document.getElementById('be_max').value = '0.7';
+            document.getElementById('be_step').value = '0.05';
+            
+            document.getElementById('ts_min').value = '0.1';
+            document.getElementById('ts_max').value = '0.4';
+            document.getElementById('ts_step').value = '0.02';
+            
+            alert('✅ Đã apply Narrow ranges!');
+            calculateCombinations();
+        }
+        
+        // ✅ Validate Parameter Ranges
+        function validateParameterRanges() {
+            const sl_min = parseFloat(document.getElementById('sl_min').value);
+            const sl_max = parseFloat(document.getElementById('sl_max').value);
+            const be_min = parseFloat(document.getElementById('be_min').value);
+            const be_max = parseFloat(document.getElementById('be_max').value);
+            const ts_min = parseFloat(document.getElementById('ts_min').value);
+            const ts_max = parseFloat(document.getElementById('ts_max').value);
+            
+            let warnings = [];
+            let errors = [];
+            
+            // Check basic range validity (critical errors)
+            if (isNaN(sl_min) || isNaN(sl_max) || isNaN(be_min) || isNaN(be_max) || isNaN(ts_min) || isNaN(ts_max)) {
+                errors.push('❌ All parameters must be valid numbers');
+            }
+            if (sl_min >= sl_max) errors.push('❌ SL Min phải nhỏ hơn SL Max');
+            if (be_min >= be_max) errors.push('❌ BE Min phải nhỏ hơn BE Max');
+            if (ts_min >= ts_max) errors.push('❌ TS Min phải nhỏ hơn TS Max');
+            
+            // Check logical constraints (warnings - overlaps are OK for optimization testing)
+            if (be_min >= sl_max) warnings.push('⚠️ BE Min >= SL Max - có thể không hợp lý');
+            if (ts_min >= be_max) warnings.push('⚠️ TS Min >= BE Max - có thể không hợp lý');
+            
+            // Check reasonable ranges (warnings)
+            if (sl_max > 10) warnings.push('⚠️ SL Max quá cao (>10%)');
+            if (sl_min < 0.01) warnings.push('⚠️ SL Min quá thấp (<0.01%)');
+            if (ts_min < 0.001) warnings.push('⚠️ TS Min quá thấp (<0.001%)');
+            if (be_max > 5) warnings.push('⚠️ BE Max quá cao (>5%)');
+            
+            // Check step sizes
+            const sl_step = parseFloat(document.getElementById('sl_step').value);
+            const be_step = parseFloat(document.getElementById('be_step').value);
+            const ts_step = parseFloat(document.getElementById('ts_step').value);
+            
+            if (sl_step <= 0) errors.push('❌ SL Step phải > 0');
+            if (be_step <= 0) errors.push('❌ BE Step phải > 0');
+            if (ts_step <= 0) errors.push('❌ TS Step phải > 0');
+            
+            if (sl_step > (sl_max - sl_min)) warnings.push('⚠️ SL Step quá lớn so với range');
+            if (be_step > (be_max - be_min)) warnings.push('⚠️ BE Step quá lớn so với range');
+            if (ts_step > (ts_max - ts_min)) warnings.push('⚠️ TS Step quá lớn so với range');
+            
+            // Display results
+            if (errors.length > 0) {
+                alert('❌ Critical Errors:\n' + errors.join('\n') + 
+                      (warnings.length > 0 ? '\n\nWarnings:\n' + warnings.join('\n') : ''));
+                return false;
+            } else if (warnings.length > 0) {
+                const proceed = confirm('⚠️ Validation warnings:\n' + warnings.join('\n') + '\n\nContinue anyway?');
+                if (proceed) {
+                    calculateCombinations();
+                }
+                return proceed;
+            } else {
+                alert('✅ All parameter ranges are valid!');
+                calculateCombinations();
+                return true;
+            }
+        }
+        
+        // 🧮 Calculate Total Combinations
+        function calculateCombinations() {
+            try {
+                const sl_min = parseFloat(document.getElementById('sl_min').value);
+                const sl_max = parseFloat(document.getElementById('sl_max').value);
+                const sl_step = parseFloat(document.getElementById('sl_step').value);
+                
+                const be_min = parseFloat(document.getElementById('be_min').value);
+                const be_max = parseFloat(document.getElementById('be_max').value);
+                const be_step = parseFloat(document.getElementById('be_step').value);
+                
+                const ts_min = parseFloat(document.getElementById('ts_min').value);
+                const ts_max = parseFloat(document.getElementById('ts_max').value);
+                const ts_step = parseFloat(document.getElementById('ts_step').value);
+                
+                // Calculate number of steps for each parameter
+                const sl_steps = Math.floor((sl_max - sl_min) / sl_step) + 1;
+                const be_steps = Math.floor((be_max - be_min) / be_step) + 1;
+                const ts_steps = Math.floor((ts_max - ts_min) / ts_step) + 1;
+                
+                // Check TP
+                let tp_steps = 1;
+                const tp_min = document.getElementById('tp_min').value;
+                const tp_max = document.getElementById('tp_max').value;
+                const tp_step_val = document.getElementById('tp_step').value;
+                
+                if (tp_min && tp_max && tp_step_val) {
+                    tp_steps = Math.floor((parseFloat(tp_max) - parseFloat(tp_min)) / parseFloat(tp_step_val)) + 1;
+                }
+                
+                const totalCombinations = sl_steps * be_steps * ts_steps * tp_steps;
+                const estimatedMinutes = Math.ceil(totalCombinations * 0.5); // Estimate 0.5 seconds per test
+                
+                document.getElementById('totalCombinations').textContent = totalCombinations.toLocaleString();
+                document.getElementById('estimatedTime').textContent = estimatedMinutes;
+                document.getElementById('combinationsInfo').style.display = 'block';
+                
+                // Color code based on complexity
+                const infoDiv = document.getElementById('combinationsInfo');
+                if (totalCombinations > 10000) {
+                    infoDiv.style.background = '#f8d7da';
+                    infoDiv.style.color = '#721c24';
+                } else if (totalCombinations > 1000) {
+                    infoDiv.style.background = '#fff3cd';
+                    infoDiv.style.color = '#856404';
+                } else {
+                    infoDiv.style.background = '#d4edda';
+                    infoDiv.style.color = '#155724';
+                }
+                
+            } catch (error) {
+                console.error('Error calculating combinations:', error);
+            }
+        }
+        
+        // 🗑️ Clear TP Range
+        function clearTPRange() {
+            document.getElementById('tp_min').value = '';
+            document.getElementById('tp_max').value = '';
+            document.getElementById('tp_step').value = '';
+            calculateCombinations();
+        }
+        
+        // 🔄 Reset to Default Ranges
+        function resetToDefaultRanges() {
+            document.getElementById('sl_min').value = '0.5';
+            document.getElementById('sl_max').value = '3.0';
+            document.getElementById('sl_step').value = '0.1';
+            
+            document.getElementById('be_min').value = '0.2';
+            document.getElementById('be_max').value = '1.5';
+            document.getElementById('be_step').value = '0.05';
+            
+            document.getElementById('ts_min').value = '0.1';
+            document.getElementById('ts_max').value = '1.0';
+            document.getElementById('ts_step').value = '0.02';
+            
+            clearTPRange();
+            alert('✅ Đã reset về default ranges!');
+            calculateCombinations();
+        }
+        
+        // 🚀 Start Optimization with all parameters
+        async function startOptimization() {
+            const strategySelect = document.getElementById('strategySelect');
+            const candleSelect = document.getElementById('candleSelect');
+            
+            if (!strategySelect.value || !candleSelect.value) {
+                alert('❌ Vui lòng chọn cả Strategy và Candle Data');
+                return;
+            }
+            
+            // Validate parameter ranges first
+            if (!validateParameterRanges()) {
+                return;
+            }
+            
+            try {
+                // Get range parameters
+                const params = {
+                    strategy: strategySelect.value,
+                    candle_data: candleSelect.value,
+                    optimization_engine: document.querySelector('input[name="optimization_engine"]:checked').value,
+                    sl_min: parseFloat(document.getElementById('sl_min').value),
+                    sl_max: parseFloat(document.getElementById('sl_max').value),
+                    sl_step: parseFloat(document.getElementById('sl_step').value),
+                    be_min: parseFloat(document.getElementById('be_min').value),
+                    be_max: parseFloat(document.getElementById('be_max').value),
+                    be_step: parseFloat(document.getElementById('be_step').value),
+                    ts_min: parseFloat(document.getElementById('ts_min').value),
+                    ts_max: parseFloat(document.getElementById('ts_max').value),
+                    ts_step: parseFloat(document.getElementById('ts_step').value)
+                };
+                
+                // Add TP if specified
+                const tp_min = document.getElementById('tp_min').value;
+                const tp_max = document.getElementById('tp_max').value;
+                const tp_step = document.getElementById('tp_step').value;
+                
+                if (tp_min && tp_max && tp_step) {
+                    params.tp_min = parseFloat(tp_min);
+                    params.tp_max = parseFloat(tp_max);
+                    params.tp_step = parseFloat(tp_step);
+                }
+                
+                // Add advanced options
+                params.step_multiplier = document.querySelector('input[name="step_multiplier"]').value;
+                params.engine_type = document.querySelector('select[name="engine_type"]').value;
+                params.max_iterations = document.querySelector('input[name="max_iterations"]').value;
+                
+                // Calculate total combinations for display
+                const totalCombinations = document.getElementById('totalCombinations').textContent;
+                
+                // Show loading with range info
+                const resultsSection = document.getElementById('resultsSection');
+                resultsSection.style.display = 'block';
+                resultsSection.innerHTML = `
+                    <div class="card full-width">
+                        <h3>⏳ Đang thực hiện optimization với ${params.optimization_engine === 'optuna' ? '🔥 Optuna (AI-Powered)' : '🔍 Grid Search (Brute Force)'}...</h3>
+                        <p><strong>Engine:</strong> ${params.optimization_engine === 'optuna' ? 'Optuna - Bayesian Optimization (Thông minh & Nhanh)' : 'Grid Search - Test tất cả combinations (Chậm nhưng đầy đủ)'}</p>
+                        <p><strong>Parameter Ranges:</strong></p>
+                        <ul style="text-align: left;">
+                            <li>SL: ${params.sl_min}% → ${params.sl_max}% (step ${params.sl_step}%)</li>
+                            <li>BE: ${params.be_min}% → ${params.be_max}% (step ${params.be_step}%)</li>
+                            <li>TS: ${params.ts_min}% → ${params.ts_max}% (step ${params.ts_step}%)</li>
+                            ${params.tp_min ? `<li>TP: ${params.tp_min}% → ${params.tp_max}% (step ${params.tp_step}%)</li>` : ''}
+                        </ul>
+                        <p><strong>Total Combinations:</strong> ${totalCombinations}</p>
+                        <p>Vui lòng đợi, quá trình này có thể mất vài phút...</p>
+                        <div id="optimizationProgress" style="margin-top: 15px;">
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar" style="width: 0%;">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                const response = await fetch('/optimize_ranges', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
+                });
+                
+                const result = await response.json();
+                console.log('Range Optimization result:', result);
+                
+                if (result.success) {
+                    displayRangeOptimizationResults(result.data);
+                } else {
+                    resultsSection.innerHTML = `<div class="card full-width"><h3 style="color: red;">❌ Range Optimization Failed</h3><p>${result.error}</p></div>`;
+                }
+            } catch (error) {
+                console.error('❌ Range Optimization error:', error);
+                const resultsSection = document.getElementById('resultsSection');
+                resultsSection.innerHTML = `<div class="card full-width"><h3 style="color: red;">❌ Lỗi kết nối</h3><p>${error.message}</p></div>`;
+            }
+        }
+        
+        // 📊 Display Range Optimization Results
+        function displayRangeOptimizationResults(results) {
+            if (!results || results.length === 0) {
+                document.getElementById('resultsSection').innerHTML = `
+                    <div class="card full-width">
+                        <h3 style="color: orange;">⚠️ Không có kết quả</h3>
+                        <p>Không tìm thấy kết quả nào từ optimization ranges.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Sort by performance metric (total profit)
+            results.sort((a, b) => (b.total_profit || 0) - (a.total_profit || 0));
+            
+            const topResult = results[0];
+            
+            let resultsHTML = `
+                <div class="card full-width">
+                    <h3>🏆 Range Optimization Results</h3>
+                    
+                    <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <h4>🥇 Best Parameters Found:</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 10px 0;">
+                            <div><strong>SL:</strong> ${(topResult.sl * 100).toFixed(2)}%</div>
+                            <div><strong>BE:</strong> ${(topResult.be * 100).toFixed(2)}%</div>
+                            <div><strong>TS:</strong> ${(topResult.ts * 100).toFixed(2)}%</div>
+                            ${topResult.tp ? `<div><strong>TP:</strong> ${(topResult.tp * 100).toFixed(2)}%</div>` : ''}
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0;">
+                            <div><strong>Total Profit:</strong> <span style="color: ${topResult.total_profit > 0 ? 'green' : 'red'};">${topResult.total_profit ? topResult.total_profit.toFixed(2) : '0.00'}</span></div>
+                            <div><strong>Win Rate:</strong> ${topResult.win_rate ? (topResult.win_rate * 100).toFixed(1) : '0.0'}%</div>
+                            <div><strong>Total Trades:</strong> ${topResult.total_trades || 0}</div>
+                            <div><strong>Avg Win:</strong> ${topResult.avg_win ? topResult.avg_win.toFixed(2) : '0.00'}</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin: 20px 0;">
+                        <h4>📈 Top ${Math.min(results.length, 10)} Results:</h4>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; font-size: 0.85em; border-collapse: collapse; margin: 10px 0;">
+                                <thead>
+                                    <tr style="background: #e9ecef;">
+                                        <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Rank</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">SL%</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">BE%</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">TS%</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">TP%</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Profit</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Win Rate</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Trades</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+            `;
+            
+            // Show top 10 results
+            results.slice(0, 10).forEach((result, index) => {
+                const rowColor = index === 0 ? '#d4edda' : (index < 3 ? '#fff3cd' : 'white');
+                resultsHTML += `
+                    <tr style="background: ${rowColor};">
+                        <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${index + 1}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${(result.sl * 100).toFixed(2)}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${(result.be * 100).toFixed(2)}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${(result.ts * 100).toFixed(2)}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${result.tp ? (result.tp * 100).toFixed(2) : 'N/A'}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd; color: ${result.total_profit > 0 ? 'green' : 'red'};">
+                            ${result.total_profit ? result.total_profit.toFixed(2) : '0.00'}
+                        </td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${result.win_rate ? (result.win_rate * 100).toFixed(1) : '0.0'}%</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${result.total_trades || 0}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">
+                            <button class="btn btn-sm btn-outline-primary" onclick="applyCombination(${result.sl}, ${result.be}, ${result.ts}, ${result.tp || 'null'})">
+                                <i class="fas fa-copy"></i> Use
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            resultsHTML += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <h5>📊 Summary Statistics:</h5>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div>
+                                <strong>Total Combinations Tested:</strong><br>
+                                ${results.length.toLocaleString()}
+                            </div>
+                            <div>
+                                <strong>Profitable Combinations:</strong><br>
+                                ${results.filter(r => (r.total_profit || 0) > 0).length} (${((results.filter(r => (r.total_profit || 0) > 0).length / results.length) * 100).toFixed(1)}%)
+                            </div>
+                            <div>
+                                <strong>Best Profit:</strong><br>
+                                <span style="color: green;">${Math.max(...results.map(r => r.total_profit || 0)).toFixed(2)}</span>
+                            </div>
+                            <div>
+                                <strong>Worst Loss:</strong><br>
+                                <span style="color: red;">${Math.min(...results.map(r => r.total_profit || 0)).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 15px; text-align: center;">
+                        <button class="btn btn-success" onclick="applyCombination(${topResult.sl}, ${topResult.be}, ${topResult.ts}, ${topResult.tp || 'null'})">
+                            <i class="fas fa-star"></i> Use Best Parameters
+                        </button>
+                        <button class="btn btn-info" onclick="exportOptimizationResults()">
+                            <i class="fas fa-download"></i> Export Results
+                        </button>
+                        <button class="btn btn-secondary" onclick="compareWithPrevious()">
+                            <i class="fas fa-chart-line"></i> Compare Results
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('resultsSection').innerHTML = resultsHTML;
+        }
+        
+        // 📋 Apply Combination to Form
+        function applyCombination(sl, be, ts, tp) {
+            // Apply to range inputs as single values for testing
+            document.getElementById('sl_min').value = (sl * 100).toFixed(3);
+            document.getElementById('sl_max').value = (sl * 100).toFixed(3);
+            document.getElementById('sl_step').value = '0.001';
+            
+            document.getElementById('be_min').value = (be * 100).toFixed(3);
+            document.getElementById('be_max').value = (be * 100).toFixed(3);
+            document.getElementById('be_step').value = '0.001';
+            
+            document.getElementById('ts_min').value = (ts * 100).toFixed(3);
+            document.getElementById('ts_max').value = (ts * 100).toFixed(3);
+            document.getElementById('ts_step').value = '0.001';
+            
+            if (tp && tp !== 'null') {
+                document.getElementById('tp_min').value = (tp * 100).toFixed(3);
+                document.getElementById('tp_max').value = (tp * 100).toFixed(3);
+                document.getElementById('tp_step').value = '0.001';
+            }
+            
+            alert(`✅ Đã apply parameters: SL=${(sl*100).toFixed(2)}%, BE=${(be*100).toFixed(2)}%, TS=${(ts*100).toFixed(2)}%${tp ? `, TP=${(tp*100).toFixed(2)}%` : ''}`);
+            calculateCombinations();
+        }
+        
+        // 📤 Export Optimization Results
+        function exportOptimizationResults() {
+            alert('🚧 Export functionality sẽ được implement trong phiên bản sau. Sẽ export ra CSV/Excel.');
+        }
+        
+        // 🔄 Compare with Previous Results
+        function compareWithPrevious() {
+            alert('🚧 Tính năng so sánh đang được phát triển. Sẽ có thể compare với kết quả optimization trước đó.');
+        }
+        
+        // 📊 Legacy Display Optimization Results (for backward compatibility)
+        function displayOptimizationResults(results) {
+            // This function handles results from the old single-parameter optimization
+            // Convert to new format if needed
+            if (Array.isArray(results)) {
+                displayRangeOptimizationResults(results);
+            } else {
+                // Handle single result format
+                const singleResult = [results];
+                displayRangeOptimizationResults(singleResult);
+            }
+        }
+        
+        // 🔄 Auto-calculate combinations when inputs change
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add event listeners to all range inputs
+            const rangeInputs = [
+                'sl_min', 'sl_max', 'sl_step',
+                'be_min', 'be_max', 'be_step', 
+                'ts_min', 'ts_max', 'ts_step',
+                'tp_min', 'tp_max', 'tp_step'
+            ];
+            
+            rangeInputs.forEach(inputId => {
+                const element = document.getElementById(inputId);
+                if (element) {
+                    element.addEventListener('input', function() {
+                        // Debounce the calculation to avoid too many calls
+                        clearTimeout(window.calculationTimeout);
+                        window.calculationTimeout = setTimeout(calculateCombinations, 300);
+                    });
+                }
+            });
+            
+            // Initial calculation on page load
+            setTimeout(calculateCombinations, 500);
+        });
+        
+        // 🎯 Set Focus and Initialize
+        window.addEventListener('load', function() {
+            // Focus on strategy selection to encourage user to start there
+            const strategySelect = document.getElementById('strategySelect');
+            if (strategySelect) {
+                strategySelect.focus();
+            }
+            
+            // Initialize default ranges if empty
+            const sl_min = document.getElementById('sl_min');
+            if (sl_min && !sl_min.value) {
+                resetToDefaultRanges();
+            }
+        });
+    </script>
+</body>
+</html>

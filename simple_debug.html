@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🐛 Simple Debug Test</title>
+    <script>
+        console.log('🔍 Debug script loaded');
+        
+        // Simple test function
+        function simpleTest() {
+            console.log('🧪 Starting simple test...');
+            
+            // Test 1: Check if elements exist
+            const strategySelect = document.getElementById('strategySelect');
+            const candleSelect = document.getElementById('candleSelect');
+            
+            console.log('📍 Strategy select element:', strategySelect);
+            console.log('📍 Candle select element:', candleSelect);
+            
+            if (!strategySelect) {
+                console.log('❌ strategySelect not found');
+                return;
+            }
+            
+            if (!candleSelect) {
+                console.log('❌ candleSelect not found');
+                return;
+            }
+            
+            // Test 2: Test API directly
+            console.log('🔗 Testing /list_strategies API...');
+            fetch('/list_strategies')
+                .then(response => {
+                    console.log('📡 Strategies response status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('📊 Strategies data:', data);
+                    
+                    if (data.strategies && data.strategies.length > 0) {
+                        console.log('✅ Found', data.strategies.length, 'strategies');
+                        
+                        strategySelect.innerHTML = '<option value="">-- Chọn Strategy --</option>';
+                        data.strategies.forEach(strategy => {
+                            const option = document.createElement('option');
+                            option.value = `${strategy.symbol}_${strategy.timeframe}_${strategy.strategy_name}_v${strategy.version}`;
+                            option.textContent = `${strategy.symbol} ${strategy.timeframe} - ${strategy.strategy_name} v${strategy.version}`;
+                            strategySelect.appendChild(option);
+                        });
+                        console.log('✅ Strategy select updated with', data.strategies.length, 'options');
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ Strategies fetch error:', error);
+                });
+            
+            // Test 3: Test candles API
+            console.log('🔗 Testing /list_candle_files API...');
+            fetch('/list_candle_files')
+                .then(response => {
+                    console.log('📡 Candles response status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('📊 Candles data:', data);
+                    
+                    if (data.success && data.files && data.files.length > 0) {
+                        console.log('✅ Found', data.files.length, 'candle files');
+                        
+                        candleSelect.innerHTML = '<option value="">-- Chọn Symbol & Timeframe --</option>';
+                        data.files.forEach(file => {
+                            const option = document.createElement('option');
+                            option.value = file;
+                            option.textContent = file.replace('BINANCE_', '').replace('.csv', '').replace('.db', '');
+                            candleSelect.appendChild(option);
+                        });
+                        console.log('✅ Candle select updated with', data.files.length, 'options');
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ Candles fetch error:', error);
+                });
+        }
+    </script>
+</head>
+<body>
+    <h1>🐛 Simple Debug Test</h1>
+    <p>Mở Developer Console (F12) để xem debug info</p>
+    
+    <h2>Test Elements:</h2>
+    <div>
+        <label>Strategy Select:</label>
+        <select id="strategySelect">
+            <option>Loading...</option>
+        </select>
+    </div>
+    
+    <div>
+        <label>Candle Select:</label>
+        <select id="candleSelect">
+            <option>Loading...</option>
+        </select>
+    </div>
+    
+    <h2>Manual Test:</h2>
+    <button onclick="simpleTest()">🧪 Run Simple Test</button>
+    
+    <script>
+        // Auto-run test when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📄 Page DOM loaded');
+            setTimeout(() => {
+                console.log('⏰ Running auto test after 1 second...');
+                simpleTest();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

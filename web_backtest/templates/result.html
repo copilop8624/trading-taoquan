@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Kết quả Backtest</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="container mt-4">
+    <h2>Kết quả Backtest</h2>
+    <a href="/" class="btn btn-secondary mb-3">Quay lại</a>
+    <h4>Top 5 bộ tham số tối ưu</h4>
+    <table class="table table-bordered">
+        <thead>
+        <tr>
+            <th>#</th>
+            <th>SL</th>
+            <th>BE</th>
+            <th>TS trig</th>
+            <th>TS step</th>
+            <th>PnL</th>
+            <th>Winrate</th>
+            <th>PF</th>
+            <th>Lệnh hợp lệ</th>
+            <th>Lệnh loại</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for i, r in enumerate(results) %}
+        <tr>
+            <td>{{ i+1 }}</td>
+            <td>{{ r.sl }}</td>
+            <td>{{ r.be }}</td>
+            <td>{{ r.ts_trig }}</td>
+            <td>{{ r.ts_step }}</td>
+            <td>{{ '%.2f'|format(r.pnl_total) }}</td>
+            <td>{{ '%.2f'|format(r.winrate) }}</td>
+            <td>{{ '%.2f'|format(r.pf) }}</td>
+            <td>{{ r.details|length }}</td>
+            <td>{{ r.skip }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <h4>Biểu đồ so sánh</h4>
+    <canvas id="chart1" height="120"></canvas>
+    <script>
+        const chartData = {{ chart_data|tojson }};
+        const ctx = document.getElementById('chart1').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartData.labels,
+                datasets: [
+                    {label: 'PnL', data: chartData.pnl, backgroundColor: 'rgba(75,192,192,0.5)'},
+                    {label: 'Winrate', data: chartData.winrate, backgroundColor: 'rgba(255,205,86,0.5)'},
+                    {label: 'PF', data: chartData.pf, backgroundColor: 'rgba(255,99,132,0.5)'}
+                ]
+            },
+            options: {responsive: true, scales: {y: {beginAtZero: true}}}
+        });
+    </script>
+    <h4 class="mt-4">Log các lệnh (top 1)</h4>
+    <div style="max-height:300px;overflow:auto;background:#f8f9fa;padding:10px;">
+        {% for l in log %}
+            <div>{{ l }}</div>
+        {% endfor %}
+    </div>
+</div>
+</body>
+</html>

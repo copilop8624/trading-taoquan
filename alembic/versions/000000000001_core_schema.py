@@ -17,13 +17,17 @@ depends_on = None
 
 
 def upgrade():
-    # Create enum for scan_runs.status
-    scan_status_enum = postgresql.ENUM(
-        'pending', 'running', 'completed', 'failed',
-        name='scanrunstatus',
-        create_type=True
-    )
-    scan_status_enum.create(op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    dialect_name = bind.dialect.name
+
+    # Create enum for scan_runs.status only on PostgreSQL
+    if dialect_name == 'postgresql':
+        scan_status_enum = postgresql.ENUM(
+            'pending', 'running', 'completed', 'failed',
+            name='scanrunstatus',
+            create_type=True
+        )
+        scan_status_enum.create(bind, checkfirst=True)
 
     # symbols
     op.create_table(
@@ -49,29 +53,33 @@ def upgrade():
     )
 
     # config
+    json_type = postgresql.JSONB(astext_type=sa.Text()) if dialect_name == 'postgresql' else sa.JSON()
     op.create_table(
         'config',
         sa.Column('id', sa.BigInteger(), primary_key=True),
         sa.Column('name', sa.String(length=128), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('params', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('params', json_type, nullable=True),
         sa.Column('active', sa.Boolean(), server_default=sa.text('true'), nullable=False),
         sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.UniqueConstraint('name', name='uq_config_name')
     )
 
     # scan_runs
+    # scan_runs
+    status_col_type = postgresql.ENUM('pending', 'running', 'completed', 'failed', name='scanrunstatus') if dialect_name == 'postgresql' else sa.String(length=16)
     op.create_table(
         'scan_runs',
         sa.Column('id', sa.BigInteger(), primary_key=True),
         sa.Column('started_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('finished_at', sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column('config_id', sa.BigInteger(), sa.ForeignKey('config.id', ondelete='CASCADE'), nullable=False),
-        sa.Column('status', sa.Enum('pending', 'running', 'completed', 'failed', name='scanrunstatus'), nullable=False, server_default='pending'),
-        sa.Column('stats', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('status', status_col_type, nullable=False, server_default=sa.text("'pending'")),
+        sa.Column('stats', json_type, nullable=True),
         sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
     )
 
+    # candles
     # candles
     op.create_table(
         'candles',
@@ -85,7 +93,7 @@ def upgrade():
         sa.Column('low', sa.Numeric(), nullable=False),
         sa.Column('close', sa.Numeric(), nullable=False),
         sa.Column('volume', sa.Numeric(), nullable=True),
-        sa.Column('extra', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('extra', json_type, nullable=True),
         sa.Column('fetch_run_id', sa.BigInteger(), sa.ForeignKey('fetch_runs.id', ondelete='CASCADE'), nullable=True),
         sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.UniqueConstraint('symbol_id', 'timeframe', 'open_time', name='uq_candles_symbol_tf_open'),
@@ -103,7 +111,8 @@ def downgrade():
     op.drop_table('config')
     op.drop_table('fetch_runs')
     op.drop_table('symbols')
-
-    # drop enum
-    scan_status_enum = postgresql.ENUM(name='scanrunstatus')
-    scan_status_enum.drop(op.get_bind(), checkfirst=True)
+    # drop enum if Postgres
+    bind = op.get_bind()
+    if bind.dialect.name == 'postgresql':
+        scan_status_enum = postgresql.ENUM(name='scanrunstatus')
+        scan_status_enum.drop(bind, checkfirst=True)

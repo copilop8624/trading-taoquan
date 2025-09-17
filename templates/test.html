@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test</title>
+</head>
+<body>
+    <h1>Server Working</h1>
+    <div id="strategies"></div>
+    <script>
+        fetch('/list_strategies')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Strategies:', data);
+                document.getElementById('strategies').innerHTML = JSON.stringify(data, null, 2);
+            });
+    </script>
+</body>
+</html>

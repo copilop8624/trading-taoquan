@@ -1,0 +1,196 @@
+﻿{
+  "statistics": {
+    "runup": {
+      "mean": 6.25462962962963,
+      "median": 6.0,
+      "std": 3.1756781381690304,
+      "max": 13.0,
+      "percentiles": {
+        "p5": 1.835,
+        "p10": 2.2,
+        "p25": 3.575,
+        "p50": 6.0,
+        "p75": 8.65,
+        "p90": 10.86,
+        "p95": 11.794999999999998
+      }
+    },
+    "drawdown": {
+      "mean": 2.432407407407408,
+      "median": 2.0,
+      "std": 1.5674152008664566,
+      "max": 6.5,
+      "percentiles": {
+        "p5": 0.5,
+        "p10": 0.7,
+        "p25": 1.1,
+        "p50": 2.0,
+        "p75": 3.5,
+        "p90": 4.83,
+        "p95": 5.329999999999998
+      }
+    },
+    "pnl": {
+      "mean": 2.93425925925926,
+      "median": 2.6500000000000004,
+      "positive_rate": 85.18518518518519
+    }
+  },
+  "behaviors": {
+    "trending_winners": {
+      "count": 27,
+      "percentage": 25.0,
+      "avg_runup": 10.570370370370373,
+      "avg_drawdown": 4.666666666666666,
+      "description": "Strong trends with good profits - consider wider TS"
+    },
+    "volatile_winners": {
+      "count": 26,
+      "percentage": 24.074074074074073,
+      "avg_runup": 10.415384615384617,
+      "avg_drawdown": 4.75,
+      "description": "High volatility but profitable - wider SL ranges"
+    },
+    "quick_losers": {
+      "count": 0,
+      "percentage": 0.0,
+      "avg_runup": 0,
+      "avg_drawdown": 0,
+      "description": "Fast losses - SL should catch these early"
+    },
+    "near_miss_losers": {
+      "count": 0,
+      "percentage": 0.0,
+      "avg_runup": 0,
+      "avg_drawdown": 0,
+      "description": "Had potential but failed - BE/TS could help"
+    }
+  },
+  "scenarios": {
+    "conservative": {
+      "trade_count": 66,
+      "percentage": 61.111111111111114,
+      "target_sl_max": 2.0,
+      "target_be_range": 3.0,
+      "target_ts_trigger": 4.05,
+      "description": "Lower risk tolerance - tight parameters"
+    },
+    "balanced": {
+      "trade_count": 53,
+      "percentage": 49.074074074074076,
+      "target_sl_max": 3.4199999999999995,
+      "target_be_range": 6.18,
+      "target_ts_trigger": 7.12,
+      "description": "Standard risk-reward balance"
+    },
+    "aggressive": {
+      "trade_count": 33,
+      "percentage": 30.555555555555557,
+      "target_sl_max": 5.76,
+      "target_be_range": 8.9,
+      "target_ts_trigger": 11.3,
+      "description": "Higher risk for higher potential reward"
+    }
+  },
+  "recommended_ranges": {
+    "sl_ranges": {
+      "conservative": {
+        "min": 0.7,
+        "max": 2.0,
+        "step": 0.325
+      },
+      "balanced": {
+        "min": 2.0,
+        "max": 3.5,
+        "step": 0.375
+      },
+      "aggressive": {
+        "min": 3.5,
+        "max": 5.33,
+        "step": 0.61
+      }
+    },
+    "be_ranges": {
+      "conservative": {
+        "min": 1.1,
+        "max": 2.86,
+        "step": 0.44
+      },
+      "balanced": {
+        "min": 2.86,
+        "max": 5.4,
+        "step": 0.635
+      },
+      "aggressive": {
+        "min": 5.4,
+        "max": 10.0,
+        "step": 1.15
+      }
+    },
+    "ts_ranges": {
+      "conservative": {
+        "min": 2.5,
+        "max": 6.0,
+        "step": 0.875
+      },
+      "balanced": {
+        "min": 3.575,
+        "max": 8.65,
+        "step": 1.269
+      },
+      "aggressive": {
+        "min": 8.65,
+        "max": 11.795,
+        "step": 0.786
+      }
+    },
+    "ts_step_ranges": {
+      "conservative": {
+        "min": 0.367,
+        "max": 1.072,
+        "step": 0.235
+      },
+      "balanced": {
+        "min": 0.367,
+        "max": 1.609,
+        "step": 0.31
+      },
+      "aggressive": {
+        "min": 0.367,
+        "max": 2.145,
+        "step": 0.444
+      }
+    },
+    "efficiency_analysis": {
+      "smart_combinations": {
+        "conservative": 400,
+        "balanced": 500,
+        "aggressive": 500
+      },
+      "total_smart": 1400,
+      "typical_blind": 9600,
+      "efficiency_gain": 6.857142857142857
+    }
+  },
+  "tp_levels": {
+    "TP1": 6.0,
+    "TP2": 8.65,
+    "TP3": 10.86
+  },
+  "warnings": [
+    "TS conservative: min 2.5 -> 2.5 (floor 2.5% applied)",
+    {
+      "code": "TS_TRIGGER_FLOOR",
+      "message": "TS conservative: min 2.5 -> 2.5 (floor 2.5% applied)",
+      "value": 2.5,
+      "human": "TS conservative: min 2.5 -> 2.5 (floor 2.5% applied)"
+    },
+    "ts_trig raised to 2.5% (floor applied)",
+    {
+      "code": "TS_FLOOR_CANONICAL",
+      "message": "ts_trig raised to 2.5% (floor applied)",
+      "value": 2.5,
+      "human": "ts_trig raised to 2.5% (floor applied)"
+    }
+  ]
+}

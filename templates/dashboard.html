@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <title>Backtest Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js"></script>
+  </head>
+  <body class="bg-light">
+    <style>
+      .dropped-row { opacity: 0.6; text-decoration: line-through; }
+      .upload-warnings { margin-bottom: 0.5rem; }
+    </style>
+    <div class="container py-4">
+      <h1 class="mb-4">Backtest Dashboard</h1>
+      <div id="config-summary" class="mb-4"></div>
+
+      <!-- Permanent upload form visible at top for quick demos -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <h5 class="card-title mb-3">Quick Upload</h5>
+          <form id="permanent-upload-form" class="mb-2">
+            <div class="row g-2 align-items-center">
+              <div class="col-md-2">
+                <input type="text" name="symbol" class="form-control form-control-sm" placeholder="Symbol (e.g. BINANCE_BTCUSDT)" required />
+              </div>
+              <div class="col-md-2">
+                <input type="text" name="strategy" class="form-control form-control-sm" placeholder="Strategy (optional)" />
+              </div>
+              <div class="col-auto">
+                <select name="date_parse_mode" class="form-select form-select-sm">
+                  <option value="default">Default</option>
+                  <option value="mixed">Mixed (flexible)</option>
+                </select>
+              </div>
+              <div class="col-auto form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="permanent-drop-incomplete" name="drop_incomplete" />
+                <label class="form-check-label small ms-2" for="permanent-drop-incomplete">Drop incomplete (chart)</label>
+              </div>
+              <div class="col-md-3">
+                <input type="file" name="file" class="form-control form-control-sm" accept=".csv" required />
+              </div>
+              <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-success">Upload</button>
+                <button type="button" id="permanent-reset-btn" class="btn btn-sm btn-outline-danger ms-2">Reset Options</button>
+              </div>
+            </div>
+          </form>
+          <div id="permanent-warnings" class="upload-warnings mt-2"></div>
+          <div id="permanent-result" class="mt-3"></div>
+        </div>
+      </div>
+
+      <!-- Confirm Reset Modal -->
+      <div class="modal fade" id="confirmResetModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Confirm Reset</h5></div>
+            <div class="modal-body">Are you sure you want to reset saved upload options for <strong id="confirm-reset-symbol">this symbol</strong>? This cannot be undone.</div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" id="confirm-reset-yes" class="btn btn-sm btn-danger">Reset</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>Data Status</h3>
+      <div id="data-status" class="mb-4"></div>
+
+      <button id="dryrun-btn" class="btn btn-primary">Run Dry-Run</button>
+      <div id="dryrun-area" class="mt-3">
+        <div id="dryrun-message" class="mb-2 text-muted">Press "Run Dry-Run" to fetch planned updates.</div>
+        <div id="dryrun-table-container"></div>
+        <div id="dryrun-accordion" class="accordion mt-3"></div>
+      </div>
+    </div>
+
+    <script>
+      async function loadConfig() {
+        const resp = await fetch('/_config_summary');
+        const data = await resp.json();
+        document.getElementById('config-summary').innerText = JSON.stringify(data, null, 2);
+      }
+
+      async function loadDataStatus() {
+        const resp = await fetch('/_data_status');
+        const data = await resp.json();
+        document.getElementById('data-status').innerText = JSON.stringify(data, null, 2);
+      }
+
+      function msToLocalDatetime(ms){
+        if(ms===null || ms===undefined) return '';
+        try{
+          const d = new Date(ms);
+          return d.toLocaleString();
+        }catch(e){return String(ms)}
+      }
+
+      function renderPlannedTableGrouped(planned){
+        const container = document.getElementById('dryrun-table-container');
+        const acc = document.getElementById('dryrun-accordion');
+        container.innerHTML = '';
+        acc.innerHTML = '';
+          if(!planned || planned.length === 0){
+          container.innerHTML = '<div class="alert alert-info">No planned fetches</div>';
+          return;
+        }
+
+        // Group by symbol
+        const groups = {};
+        planned.forEach(p=>{
+          groups[p.symbol] = groups[p.symbol] || [];
+          groups[p.symbol].push(p);
+        });
+
+        let idx = 0;
+        for(const symbol of Object.keys(groups)){
+          idx += 1;
+          const items = groups[symbol];
+          const cardId = 'card-' + idx;
+          const headerId = 'heading-' + idx;
+          const collapseId = 'collapse-' + idx;
+
+          // compute total estimated rows for this symbol
+          let total = 0;
+          let anyUnknown = false;
+          items.forEach(p=>{
+            const v = p.estimated_new_rows;
+            if(v === null || v === undefined || v === 'unknown') { anyUnknown = true; return; }
+            const n = Number(v);
+            if(Number.isFinite(n)) total += n; else { anyUnknown = true; }
+          });
+
+          const itemHtml = [];
+          itemHtml.push('<table class="table table-bordered table-sm mb-0">');
+          itemHtml.push('<thead><tr><th>Timeframe</th><th>Since (local)</th><th>Estimated New Rows</th></tr></thead>');
+          itemHtml.push('<tbody>');
+          items.forEach(p=>{
+            const sinceDisp = p.since_ms ? msToLocalDatetime(p.since_ms) : '';
+            itemHtml.push(`<tr><td>${p.timeframe}</td><td>${sinceDisp}</td><td>${p.estimated_new_rows}</td></tr>`);
+          });
+          itemHtml.push('</tbody></table>');
+
+          const accordionItem = document.createElement('div');
+          accordionItem.className = 'accordion-item';
+          // Add upload form and feedback area per symbol below the table
+          const uploadFormHtml = `
+            <div class="p-3 border-top">
+              <form class="upload-tradelist-form" data-symbol="${symbol}">
+                <div class="row g-2 align-items-center">
+                  <div class="col-auto">
+                    <input type="file" name="file" class="form-control form-control-sm" accept=".csv" required />
+                  </div>
+                  <div class="col-auto">
+                    <select name="date_parse_mode" class="form-select form-select-sm">
+                      <option value="default">Default</option>
+                      <option value="mixed">Mixed (flexible)</option>
+                    </select>
+                  </div>
+                  <div class="col-auto form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="drop_incomplete_${idx}" name="drop_incomplete" />
+                    <label class="form-check-label small ms-2" for="drop_incomplete_${idx}">Drop incomplete (chart)</label>
+                  </div>
+                  <div class="col-auto">
+                    <input type="hidden" name="symbol" value="${symbol}" />
+                    <input type="text" name="strategy" class="form-control form-control-sm" placeholder="strategy (optional)" />
+                  </div>
+                  <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-success">Upload tradelist</button>
+                  </div>
+                  <div class="col">
+                    <div class="upload-feedback text-muted small"></div>
+                  </div>
+                </div>
+              </form>
+              <div class="d-flex justify-content-end mt-2">
+                <button class="btn btn-sm btn-outline-danger reset-options-btn" data-symbol="${symbol}">Reset Options</button>
+              </div>
+              <div class="symbol-warnings-badge small text-end mt-1" data-symbol="${symbol}"></div>
+            </div>
+          `;
+
+          accordionItem.innerHTML = `
+            <h2 class="accordion-header" id="${headerId}">
+              <div class="d-flex align-items-center">
+                <button class="accordion-button collapsed flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+                  ${symbol} <span class="text-muted ms-3">(${items.length} timeframes)</span>
+                  <span class="badge bg-secondary ms-3">${ anyUnknown ? 'estimated: unknown' : ('estimated: ' + total) }</span>
+                </button>
+                <button class="btn btn-sm btn-outline-danger ms-2 reset-options-btn" data-symbol="${symbol}" title="Reset saved upload options for this symbol">Reset Options</button>
+              </div>
+            </h2>
+            <div id="${collapseId}" class="accordion-collapse collapse" aria-labelledby="${headerId}" data-bs-parent="#dryrun-accordion">
+              <div class="accordion-body p-0">${itemHtml.join('')}${uploadFormHtml}</div>
+            </div>
+          `;
+            acc.appendChild(accordionItem);
+            // restore per-symbol upload options for the form we just inserted
+            try {
+              const insertedForm = accordionItem.querySelector('form.upload-tradelist-form');
+              if (insertedForm) restoreUploadOptions(insertedForm);
+            } catch (e) { console.warn('restore after insert', e) }
+        }
+      }
+
+      // Persist upload options to localStorage and restore (per-symbol+strategy)
+      function makeKeys(symbol, strategy){
+        const s = (symbol||'').trim() || 'unknown';
+        const t = (strategy||'').trim() || 'default';
+        return { modeKey: `parseMode_${s}_${t}`, dropKey: `dropIncomplete_${s}_${t}` };
+      }
+
+      function restoreUploadOptions(form){
+        try{
+          const symbol = form.querySelector('input[name=symbol]')?.value || form.querySelector('input[name=symbol]')?.getAttribute('value') || document.querySelector('#permanent-upload-form input[name=symbol]')?.value;
+          const strategy = form.querySelector('input[name=strategy]')?.value || document.querySelector('#permanent-upload-form input[name=strategy]')?.value || '';
+          const keys = makeKeys(symbol, strategy);
+          const mode = localStorage.getItem(keys.modeKey) || 'default';
+          const drop = localStorage.getItem(keys.dropKey) === 'true';
+          const sel = form.querySelector('select[name=date_parse_mode]'); if(sel) sel.value = mode;
+          const chk = form.querySelector('input[name=drop_incomplete]'); if(chk) chk.checked = drop;
+        }catch(e){console.warn('restoreUploadOptions', e)}
+      }
+
+      function storeUploadOptions(form){
+        try{
+          const symbol = form.querySelector('input[name=symbol]')?.value || document.querySelector('#permanent-upload-form input[name=symbol]')?.value || '';
+          const strategy = form.querySelector('input[name=strategy]')?.value || document.querySelector('#permanent-upload-form input[name=strategy]')?.value || '';
+          const keys = makeKeys(symbol, strategy);
+          const sel = form.querySelector('select[name=date_parse_mode]'); if(sel) localStorage.setItem(keys.modeKey, sel.value);
+          const chk = form.querySelector('input[name=drop_incomplete]'); if(chk) localStorage.setItem(keys.dropKey, chk.checked ? 'true' : 'false');
+        }catch(e){console.warn('storeUploadOptions', e)}
+      }
+
+      // Helper to update warnings badge in accordion header
+      function updateHeaderBadge(symbol, warnings){
+        try{
+          const headerBtn = Array.from(document.querySelectorAll('.accordion-button')).find(b=> b.textContent.includes(symbol));
+          if(!headerBtn) return;
+          // remove existing badge
+          let badge = headerBtn.querySelector('.upload-warnings-badge');
+          if(warnings && warnings.length>0){
+            if(!badge){ badge = document.createElement('span'); badge.className='badge bg-danger text-white upload-warnings-badge ms-3'; badge.title = warnings.join('\n'); headerBtn.appendChild(badge); }
+            // compact count
+            badge.innerText = warnings.length > 9 ? '9+' : String(warnings.length);
+          }else{ if(badge) badge.remove(); }
+        }catch(e){console.warn('updateHeaderBadge', e)}
+      }
+
+      // Apply drop_incomplete toggle on client side: hide chart points and mark preview rows
+      function applyDropToggle(container, form){
+        try{
+          if(!container || !container._uploadData) return;
+          const data = container._uploadData;
+          const drop = form.querySelector('input[name=drop_incomplete]')?.checked;
+          // If server provided labels aligned to preview, mark dropped indices
+          const droppedIdx = [];
+          if(Array.isArray(data.labels) && data.labels.length === (data.preview||[]).length){
+            data.labels.forEach((lab,i)=>{ if(lab===null||lab===undefined) droppedIdx.push(i); });
+          }
+          // Update preview table rows styling and Dropped column content
+          const tbl = container.querySelector('table');
+          if(tbl){
+            const tbody = tbl.querySelector('tbody');
+            if(tbody){
+              Array.from(tbody.children).forEach((tr, i)=>{
+                const dropped = droppedIdx.includes(i);
+                if(dropped){
+                  tr.classList.toggle('dropped-row', true);
+                  // Find last cell (Dropped column) and set tooltip
+                  const last = tr.lastElementChild;
+                  if(last){ last.innerText = 'missing/invalid date'; last.title = 'This row was excluded from the chart because its timestamp is missing or invalid.' }
+                }else{
+                  tr.classList.toggle('dropped-row', false);
+                  const last = tr.lastElementChild; if(last){ last.innerText = ''; last.title = ''; }
+                }
+              });
+            }
+          }
+          // Rebuild chart dataset visibility if chart exists
+          if(container._chart && Array.isArray(container._chart.data.datasets)){
+            const chart = container._chart;
+            // If drop is true and labels were provided, rebuild datasets to exclude null x
+            if(drop && Array.isArray(data.labels) && data.labels.length === data.cumulative.length){
+              chart.data.datasets.forEach(ds=>{
+                ds.data = ds._fullDataFiltered || ds.data; // no-op if not set
+              });
+              // Recreate data arrays to remove points with null x
+              const cum = data.cumulative.map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+              const dd = (data.drawdown||[]).map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+              const wr = (data.winrate||[]).map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+              chart.data.datasets[0].data = cum.filter(pt=>pt.x!==null);
+              if(chart.data.datasets[1]) chart.data.datasets[1].data = dd.filter(pt=>pt.x!==null);
+              if(chart.data.datasets[2]) chart.data.datasets[2].data = wr.filter(pt=>pt.x!==null);
+            }else{
+              // restore full series (use original server-provided arrays)
+              const hasLabels = Array.isArray(data.labels) && data.labels.length === data.cumulative.length;
+              if(hasLabels){
+                const cum = data.cumulative.map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+                const dd = (data.drawdown||[]).map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+                const wr = (data.winrate||[]).map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+                chart.data.datasets[0].data = cum;
+                if(chart.data.datasets[1]) chart.data.datasets[1].data = dd;
+                if(chart.data.datasets[2]) chart.data.datasets[2].data = wr;
+              }else{
+                chart.data.datasets[0].data = data.cumulative || [];
+                if(chart.data.datasets[1]) chart.data.datasets[1].data = data.drawdown || [];
+                if(chart.data.datasets[2]) chart.data.datasets[2].data = data.winrate || [];
+              }
+            }
+            try{ chart.update(); }catch(e){ console.warn('chart.update failed', e); }
+          }
+        }catch(e){ console.warn('applyDropToggle failed', e) }
+      }
+
+      // Helper to render upload response into a container (reused by permanent form and dynamic forms)
+      function handleUploadResponse(container, form, data){
+        try{
+          const symbol = data.symbol || form.querySelector('input[name=symbol]')?.value || (document.querySelector('#permanent-upload-form input[name=symbol]')?.value);
+          const strategy = data.strategy || form.querySelector('input[name=strategy]')?.value || (document.querySelector('#permanent-upload-form input[name=strategy]')?.value || 'default');
+          // show feedback
+          const feedbackEl = form.querySelector('.upload-feedback') || form.querySelector('.permanent-feedback');
+          if(feedbackEl) feedbackEl.innerHTML = `<span class="text-success">Success: ${data.rows_added} rows added. Final count: ${data.final_count}</span>`;
+          // create or find result container
+          let containerEl = container;
+          if(!containerEl){
+            containerEl = document.createElement('div'); containerEl.className='upload-result-container p-3'; form.parentElement.appendChild(containerEl);
+          }
+          const previewHtmlId = 'upload-preview-'+(symbol||'global');
+          const chartId = 'upload-chart-'+(symbol||'global');
+          containerEl.innerHTML = '<div class="mb-2 upload-warnings" id="warnings-'+(symbol||'global')+'"></div><div class="mb-2" id="'+previewHtmlId+'"></div><canvas id="'+chartId+'" height="120"></canvas>';
+          const previewArea = containerEl.querySelector('#'+previewHtmlId);
+          const warningsArea = containerEl.querySelector('#warnings-'+(symbol||'global'));
+          updateHeaderBadge(symbol, data.warnings || []);
+          restoreUploadOptions(form);
+          // render preview table (same logic as delegated handler)
+          if(data.preview && data.preview.length>0){
+            const cols = Object.keys(data.preview[0]);
+            if(!cols.includes('Dropped from chart')) cols.push('Dropped from chart');
+            const tbl = document.createElement('table'); tbl.className='table table-sm table-bordered';
+            const thead = document.createElement('thead');
+            thead.innerHTML = '<tr>'+cols.map(c=>{ if(c === 'Dropped from chart') return `<th title="Rows without valid timestamps are excluded from chart series">${c} &#9432;</th>`; return `<th>${c}</th>` }).join('')+'</tr>';
+            const tbody = document.createElement('tbody');
+            const droppedIdx = [];
+            if(Array.isArray(data.labels) && data.labels.length === data.preview.length){
+              data.labels.forEach((lab,i)=>{ if(lab===null||lab===undefined) droppedIdx.push(i); });
+            }
+            data.preview.forEach((r,i)=>{
+              const tr=document.createElement('tr');
+              const rowHtml = cols.map(c=>{
+                if(c === 'Dropped from chart'){
+                  if(droppedIdx.includes(i)) return `<td>missing/invalid date</td>`;
+                  return `<td></td>`;
+                }
+                const raw = r[c];
+                const val = raw===undefined||raw===null? '': raw;
+                if(/date|time|timestamp/i.test(c)){
+                  try{ const d = new Date(val); if(!isNaN(d)) return `<td>${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</td>`;}catch(e){}
+                }
+                if(typeof val === 'number' || !isNaN(parseFloat(val))){ const num = Number(val); return `<td>${num.toFixed(2)}</td>`; }
+                return `<td>${val}</td>`;
+              }).join('');
+              tr.innerHTML = rowHtml;
+              const pnlKeys = ['pl','pnl','pnlPct','pl_usdt'];
+              let pnlVal = null;
+              for(const k of pnlKeys){ if(r[k]!==undefined){ pnlVal = parseFloat(r[k]); break; } }
+              if(pnlVal!==null && !isNaN(pnlVal)){ if(pnlVal>0) tr.style.backgroundColor = 'rgba(0,255,0,0.04)'; else if(pnlVal<0) tr.style.backgroundColor = 'rgba(255,0,0,0.04)'; }
+              if(droppedIdx.includes(i)) tr.classList.add('dropped-row');
+              tbody.appendChild(tr);
+            });
+            tbl.appendChild(thead); tbl.appendChild(tbody); previewArea.appendChild(tbl);
+          }
+          if(warningsArea && data.warnings && data.warnings.length>0){ warningsArea.innerHTML = data.warnings.map(w=>`<div class="alert alert-warning p-1 mb-1">${w}</div>`).join(''); }
+          else if(warningsArea){ warningsArea.innerHTML = ''; }
+          containerEl._uploadData = data;
+          // attach listeners for options
+          try{ const sel = form.querySelector('select[name=date_parse_mode]'); const chk = form.querySelector('input[name=drop_incomplete]'); const onOptsChange = ()=>{ storeUploadOptions(form); applyDropToggle(containerEl, form); }; if(sel) sel.addEventListener('change', onOptsChange); if(chk) chk.addEventListener('change', onOptsChange); }catch(e){}
+          // render chart (reuse code)
+          try{
+            if(data.cumulative){
+              const ctx = containerEl.querySelector('#'+chartId).getContext('2d'); if(containerEl._chart) containerEl._chart.destroy();
+              const hasLabels = Array.isArray(data.labels) && data.labels.length === data.cumulative.length;
+              let chartData = { labels: [], datasets: [] };
+              if(hasLabels){
+                const cum = data.cumulative.map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+                const dd = (data.drawdown||[]).map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+                const wr = (data.winrate||[]).map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+                chartData.datasets = [ {label:'Cumulative PnL', data:cum, borderColor:'blue', backgroundColor:'rgba(0,0,255,0.05)', tension:0.15, yAxisID:'y'}, {label:'Drawdown', data:dd, borderColor:'red', backgroundColor:'rgba(255,0,0,0.05)', tension:0.15, yAxisID:'y'}, {label:'Winrate %', data:wr, borderColor:'green', backgroundColor:'rgba(0,128,0,0.05)', tension:0.15, yAxisID:'y3', hidden: data.winrate? false : true} ];
+              }else{
+                chartData.labels = data.cumulative.map((_,i)=> i+1);
+                chartData.datasets = [ {label:'Cumulative PnL', data:data.cumulative, borderColor:'blue', backgroundColor:'rgba(0,0,255,0.05)', tension:0.15, yAxisID:'y'}, {label:'Drawdown', data:data.drawdown||[], borderColor:'red', backgroundColor:'rgba(255,0,0,0.05)', tension:0.15, yAxisID:'y'}, {label:'Winrate %', data:data.winrate||[], borderColor:'green', backgroundColor:'rgba(0,128,0,0.05)', tension:0.15, yAxisID:'y3', hidden: data.winrate? false : true} ];
+              }
+              containerEl._chart = new Chart(ctx, { type:'line', data: chartData, options: { parsing: false, interaction: {mode:'index', intersect:false}, plugins: { legend: { display:true }, tooltip: { mode:'index', intersect:false }, zoom: { pan: { enabled: true, mode: 'x' }, zoom: { wheel: { enabled: true, modifierKey: 'ctrl' }, mode: 'y' } } }, scales: { x: hasLabels ? { type: 'time', time: { tooltipFormat: 'yyyy-MM-dd HH:mm' } } : { type: 'category' }, y: { type:'linear', position:'left', title: { display:true, text: 'PnL' } }, y2: { type:'linear', position:'right', title: { display:true, text: 'Drawdown' }, grid:{ drawOnChartArea:false } }, y3: { type:'linear', position:'right', title: { display:true, text: 'Winrate %' }, grid:{ drawOnChartArea:false }, ticks:{ callback: v=> v + '%' } } } } });
+            }
+          }catch(e){ console.warn('Chart render failed', e); if(warningsArea) warningsArea.innerHTML += `<div class="alert alert-danger p-1">Chart rendering failed: ${String(e)}</div>`; }
+          try{ applyDropToggle(containerEl, form); }catch(e){}
+        }catch(e){ console.warn('handleUploadResponse failed', e) }
+      }
+
+      // Handle upload form submissions (delegated)
+      document.addEventListener('submit', async (ev)=>{
+        const form = ev.target;
+        if(!form.classList || !form.classList.contains('upload-tradelist-form')) return;
+        ev.preventDefault();
+        const feedbackEl = form.querySelector('.upload-feedback');
+        feedbackEl.innerText = 'Uploading...';
+        // Persist chosen options
+        storeUploadOptions(form);
+        const fd = new FormData();
+        const fileInput = form.querySelector('input[type=file]');
+        if(!fileInput || !fileInput.files || fileInput.files.length===0){ feedbackEl.innerText = 'No file selected'; return; }
+        fd.append('file', fileInput.files[0]);
+        const strategy = form.querySelector('input[name=strategy]')?.value || 'default';
+        const symbol = form.querySelector('input[name=symbol]')?.value;
+        fd.append('strategy', strategy);
+        fd.append('symbol', symbol);
+        // Attach upload options from controls
+        const selectedMode = form.querySelector('select[name=date_parse_mode]')?.value || 'default';
+        const dropVal = form.querySelector('input[name=drop_incomplete]')?.checked ? 'true' : 'false';
+        fd.append('date_parse_mode', selectedMode);
+        fd.append('drop_incomplete', dropVal);
+        try{
+          const resp = await fetch('/upload_tradelist', {method:'POST', body: fd});
+          const data = await resp.json();
+          if(resp.ok && data.success){
+            feedbackEl.innerHTML = `<span class="text-success">Success: ${data.rows_added} rows added. Final count: ${data.final_count}</span>`;
+            // If server returned preview and series, render inline preview and chart
+            if(data.preview || data.cumulative){
+              const previewHtmlId = 'upload-preview-'+symbol;
+              const chartId = 'upload-chart-'+symbol;
+              // create container
+              let container = form.parentElement.querySelector('.upload-result-container');
+              if(!container){
+                container = document.createElement('div'); container.className='upload-result-container p-3'; form.parentElement.appendChild(container);
+              }
+              container.innerHTML = '<div class="mb-2 upload-warnings" id="warnings-'+symbol+'"></div><div class="mb-2" id="'+previewHtmlId+'"></div><canvas id="'+chartId+'" height="120"></canvas>';
+              // render preview
+              const previewArea = container.querySelector('#'+previewHtmlId);
+              const warningsArea = container.querySelector('#warnings-'+symbol);
+              // update header badge for warnings
+              updateHeaderBadge(symbol, data.warnings || []);
+              // restore options on newly created form inputs
+              restoreUploadOptions(form);
+              if(data.preview && data.preview.length>0){
+                const cols = Object.keys(data.preview[0]);
+                // add Dropped column
+                if(!cols.includes('Dropped from chart')) cols.push('Dropped from chart');
+                const tbl = document.createElement('table'); tbl.className='table table-sm table-bordered';
+                const thead = document.createElement('thead');
+                // add tooltip to Dropped from chart header
+                thead.innerHTML = '<tr>'+cols.map(c=>{ if(c === 'Dropped from chart') return `<th title="Rows without valid timestamps are excluded from chart series">${c} &#9432;</th>`; return `<th>${c}</th>` }).join('')+'</tr>';
+                const tbody = document.createElement('tbody');
+                // Determine dropped indices when server provided labels aligned to preview
+                const droppedIdx = [];
+                if(Array.isArray(data.labels) && data.labels.length === data.preview.length){
+                  data.labels.forEach((lab,i)=>{ if(lab===null||lab===undefined) droppedIdx.push(i); });
+                }
+                data.preview.forEach((r,i)=>{
+                  const tr=document.createElement('tr');
+                  const rowHtml = cols.map(c=>{
+                    // if this is the extra Dropped column, fill reason
+                    if(c === 'Dropped from chart'){
+                      if(droppedIdx.includes(i)) return `<td>missing/invalid date</td>`;
+                      return `<td></td>`;
+                    }
+                    const raw = r[c];
+                    const val = raw===undefined||raw===null? '': raw;
+                    if(/date|time|timestamp/i.test(c)){
+                      try{ const d = new Date(val); if(!isNaN(d)) return `<td>${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</td>`;}catch(e){}
+                    }
+                    if(typeof val === 'number' || !isNaN(parseFloat(val))){
+                      const num = Number(val);
+                      return `<td>${num.toFixed(2)}</td>`;
+                    }
+                    return `<td>${val}</td>`;
+                  }).join('');
+                  tr.innerHTML = rowHtml;
+                  // highlight profit/loss if columns available
+                  const pnlKeys = ['pl','pnl','pnlPct','pl_usdt'];
+                  let pnlVal = null;
+                  for(const k of pnlKeys){ if(r[k]!==undefined){ pnlVal = parseFloat(r[k]); break; } }
+                  if(pnlVal!==null && !isNaN(pnlVal)){
+                    if(pnlVal>0) tr.style.backgroundColor = 'rgba(0,255,0,0.04)';
+                    else if(pnlVal<0) tr.style.backgroundColor = 'rgba(255,0,0,0.04)';
+                  }
+                  // mark dropped rows (if applicable)
+                  if(droppedIdx.includes(i)){
+                    tr.classList.add('dropped-row');
+                  }
+                  tbody.appendChild(tr);
+                });
+                tbl.appendChild(thead); tbl.appendChild(tbody); previewArea.appendChild(tbl);
+              }
+              // show warnings if present
+              if(warningsArea && data.warnings && data.warnings.length>0){
+                warningsArea.innerHTML = data.warnings.map(w=>`<div class="alert alert-warning p-1 mb-1">${w}</div>`).join('');
+              }else if(warningsArea){ warningsArea.innerHTML = ''; }
+              // store raw upload data for dynamic client-side updates
+              container._uploadData = data;
+              // attach event listeners to form controls to persist and update without re-upload
+              try{
+                const sel = form.querySelector('select[name=date_parse_mode]');
+                const chk = form.querySelector('input[name=drop_incomplete]');
+                const onOptsChange = ()=>{
+                  storeUploadOptions(form);
+                  // apply drop_incomplete toggle client-side
+                  applyDropToggle(container, form);
+                };
+                if(sel) sel.addEventListener('change', onOptsChange);
+                if(chk) chk.addEventListener('change', onOptsChange);
+              }catch(e){ console.warn('attach control listeners', e) }
+              // render chart if cumulative provided
+              if(data.cumulative){
+                const ctx = container.querySelector('#'+chartId).getContext('2d');
+                if(container._chart) container._chart.destroy();
+
+                try{
+                  // When server provides labels that may include nulls, build data points with {x,y} so Chart.js skips invalid x
+                  const hasLabels = Array.isArray(data.labels) && data.labels.length === data.cumulative.length;
+                  let chartData = { labels: [], datasets: [] };
+                  if(hasLabels){
+                    // build datasets as arrays of {x: date|null, y: value}
+                    const cum = data.cumulative.map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+                    const dd = (data.drawdown||[]).map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+                    const wr = (data.winrate||[]).map((v,i)=> ({ x: data.labels[i]? new Date(data.labels[i]) : null, y: v }));
+                    chartData.datasets = [
+                      {label:'Cumulative PnL', data:cum, borderColor:'blue', backgroundColor:'rgba(0,0,255,0.05)', tension:0.15, yAxisID:'y'},
+                      {label:'Drawdown', data:dd, borderColor:'red', backgroundColor:'rgba(255,0,0,0.05)', tension:0.15, yAxisID:'y'},
+                      {label:'Winrate %', data:wr, borderColor:'green', backgroundColor:'rgba(0,128,0,0.05)', tension:0.15, yAxisID:'y3', hidden: data.winrate? false : true}
+                    ];
+                  }else{
+                    chartData.labels = data.cumulative.map((_,i)=> i+1);
+                    chartData.datasets = [
+                      {label:'Cumulative PnL', data:data.cumulative, borderColor:'blue', backgroundColor:'rgba(0,0,255,0.05)', tension:0.15, yAxisID:'y'},
+                      {label:'Drawdown', data:data.drawdown||[], borderColor:'red', backgroundColor:'rgba(255,0,0,0.05)', tension:0.15, yAxisID:'y'},
+                      {label:'Winrate %', data:data.winrate||[], borderColor:'green', backgroundColor:'rgba(0,128,0,0.05)', tension:0.15, yAxisID:'y3', hidden: data.winrate? false : true}
+                    ];
+                  }
+
+                  container._chart = new Chart(ctx, {
+                    type:'line',
+                    data: chartData,
+                    options: {
+                      parsing: false,
+                      interaction: {mode:'index', intersect:false},
+                      plugins: {
+                        legend: { display:true },
+                        tooltip: { mode:'index', intersect:false },
+                        zoom: { pan: { enabled: true, mode: 'x' }, zoom: { wheel: { enabled: true, modifierKey: 'ctrl' }, mode: 'y' } }
+                      },
+                      scales: {
+                        x: hasLabels ? { type: 'time', time: { tooltipFormat: 'yyyy-MM-dd HH:mm' } } : { type: 'category' },
+                        y: { type:'linear', position:'left', title: { display:true, text: 'PnL' } },
+                        y2: { type:'linear', position:'right', title: { display:true, text: 'Drawdown' }, grid:{ drawOnChartArea:false } },
+                        y3: { type:'linear', position:'right', title: { display:true, text: 'Winrate %' }, grid:{ drawOnChartArea:false }, ticks:{ callback: v=> v + '%' } }
+                      }
+                    }
+                  });
+                }catch(e){
+                  console.warn('Chart render failed', e);
+                  if(warningsArea) warningsArea.innerHTML += `<div class="alert alert-danger p-1">Chart rendering failed: ${String(e)}</div>`;
+                }
+
+                // apply initial drop toggle
+                try{ applyDropToggle(container, form); }catch(e){}
+
+                // add reset + presets toolbar
+                let toolbar = container.querySelector('.chart-toolbar');
+                if(!toolbar){
+                  toolbar = document.createElement('div'); toolbar.className='chart-toolbar mt-2';
+                  const resetBtn = document.createElement('button'); resetBtn.className='btn btn-sm btn-outline-secondary me-2'; resetBtn.innerText='Reset Zoom'; resetBtn.addEventListener('click', ()=>{ if(container._chart) container._chart.resetZoom(); });
+                  const oneDay = document.createElement('button'); oneDay.className='btn btn-sm btn-outline-primary me-2'; oneDay.innerText='1 day'; oneDay.addEventListener('click', ()=>{ applyRange(container._chart, '1d'); });
+                  const sevenDay = document.createElement('button'); sevenDay.className='btn btn-sm btn-outline-primary me-2'; sevenDay.innerText='7 days'; sevenDay.addEventListener('click', ()=>{ applyRange(container._chart, '7d'); });
+                  const allBtn = document.createElement('button'); allBtn.className='btn btn-sm btn-outline-primary'; allBtn.innerText='All'; allBtn.addEventListener('click', ()=>{ container._chart.resetZoom(); });
+                  const hint = document.createElement('small'); hint.className='text-muted ms-3'; hint.innerText='Hold Ctrl to zoom';
+                  toolbar.appendChild(resetBtn); toolbar.appendChild(oneDay); toolbar.appendChild(sevenDay); toolbar.appendChild(allBtn); toolbar.appendChild(hint);
+                  container.appendChild(toolbar);
+                }
+              }
+
+                function applyRange(chart, preset){
+                try{
+                  if(!chart) return;
+                  // If labels are timestamps, compute exact range
+                  const labels = chart.data.labels;
+                  if(labels && labels.length>0 && labels[0] instanceof Date){
+                    const times = labels.map(d=>d.getTime());
+                    const maxT = Math.max(...times);
+                    let minT = Math.min(...times);
+                    if(preset === '1d') minT = maxT - 24*3600*1000;
+                    else if(preset === '7d') minT = maxT - 7*24*3600*1000;
+                    chart.zoomScale('x', {min: minT, max: maxT});
+                  }else{
+                    const len = labels.length;
+                    if(preset === '1d'){
+                      const start = Math.max(0, len - 1440);
+                      chart.zoomScale('x', {min: start, max: len});
+                    }else if(preset === '7d'){
+                      const start = Math.max(0, len - 10080);
+                      chart.zoomScale('x', {min: start, max: len});
+                    }
+                  }
+                }catch(e){console.warn('applyRange error', e)}
+              }
+            }
+          }else{
+            feedbackEl.innerHTML = `<span class="text-danger">Error: ${data.error || 'Unknown'}</span>`;
+          }
+        }catch(e){
+          feedbackEl.innerHTML = `<span class="text-danger">Upload failed: ${String(e)}</span>`;
+        }
+      });
+
+        // Permanent form submit/reset handlers
+        const permanentForm = document.querySelector('#permanent-upload-form');
+        if(permanentForm){
+          permanentForm.addEventListener('submit', async function(ev){
+            ev.preventDefault();
+            const form = ev.target;
+            const fd = new FormData();
+            const sym = form.querySelector('input[name=symbol]')?.value || '';
+            const strat = form.querySelector('input[name=strategy]')?.value || 'default';
+            const dateMode = form.querySelector('select[name=date_parse_mode]')?.value || 'default';
+            const drop = form.querySelector('input[name=drop_incomplete]')?.checked ? 'on' : '';
+            const fileInput = form.querySelector('input[name=file]');
+            if(fileInput && fileInput.files && fileInput.files.length>0){ fd.append('file', fileInput.files[0]); }
+            fd.append('symbol', sym);
+            fd.append('strategy', strat);
+            fd.append('date_parse_mode', dateMode);
+            fd.append('drop_incomplete', drop);
+            const warningsArea = document.querySelector('#permanent-warnings');
+            const resultArea = document.querySelector('#permanent-result');
+            try{
+              warningsArea.innerHTML = '<div class="text-muted">Uploading&hellip;</div>';
+              const resp = await fetch('/upload_tradelist', { method: 'POST', body: fd });
+              const data = await resp.json();
+              if(!resp.ok){ warningsArea.innerHTML = `<div class="alert alert-danger">Upload failed: ${data.error||resp.statusText}</div>`; return; }
+              // Persist options scoped by symbol+strategy
+              storeUploadOptions(form);
+              // show warnings
+              if(data.warnings && data.warnings.length>0) warningsArea.innerHTML = data.warnings.map(w=>`<div class="alert alert-warning p-1 mb-1">${w}</div>`).join(''); else warningsArea.innerHTML = '';
+              // ensure server returns strategy
+              if(!data.strategy) data.strategy = strat;
+              data.symbol = sym;
+              // render into result area
+              handleUploadResponse(resultArea, form, data);
+              // notify other tabs/pages (Results) to reload list
+              try{ localStorage.setItem('uploads-sync', JSON.stringify({event:'upload', filename: data.filename || '', symbol: sym, ts: Date.now()})); }catch(e){/*ignore*/}
+            }catch(err){ console.error(err); warningsArea.innerHTML = `<div class="alert alert-danger">Upload error: ${String(err)}</div>`; }
+          });
+
+          // Reset button: clears localStorage for current symbol+strategy and resets controls
+          const resetBtn = permanentForm.querySelector('#permanent-reset-btn');
+          if(resetBtn){
+            resetBtn.addEventListener('click', function(ev){
+              ev.preventDefault();
+              const form = permanentForm;
+              const sym = form.querySelector('input[name=symbol]')?.value || '';
+              const strat = form.querySelector('input[name=strategy]')?.value || 'default';
+              const keys = makeKeys(sym, strat);
+              try{ localStorage.removeItem(keys.parseKey); localStorage.removeItem(keys.dropKey); }catch(e){}
+              // restore defaults
+              try{ form.querySelector('select[name=date_parse_mode]').value = 'default'; form.querySelector('input[name=drop_incomplete]').checked = false; }catch(e){}
+              const warningsArea = document.querySelector('#permanent-warnings'); if(warningsArea) warningsArea.innerHTML = '<div class="text-muted">Options reset to defaults.</div>';
+            });
+          }
+        }
+      // Handle Reset Options buttons (both header and body)
+      // Show confirmation modal for resets; use delegated listener to open modal and store target symbol
+      let pendingResetSymbol = null;
+      document.addEventListener('click', (ev)=>{
+        const btn = ev.target.closest && ev.target.closest('.reset-options-btn');
+        if(!btn) return;
+        const sym = btn.getAttribute('data-symbol');
+        if(!sym) return;
+        pendingResetSymbol = sym;
+        const modal = new bootstrap.Modal(document.getElementById('confirmResetModal'));
+        document.getElementById('confirm-reset-symbol').innerText = sym;
+        modal.show();
+      });
+
+      document.getElementById('confirm-reset-yes')?.addEventListener('click', ()=>{
+        if(!pendingResetSymbol) return;
+        try{
+          const sym = pendingResetSymbol;
+          const modeKey = `parseMode_${sym}`;
+          const dropKey = `dropIncomplete_${sym}`;
+          localStorage.removeItem(modeKey);
+          localStorage.removeItem(dropKey);
+          // update forms and previews
+          const form = document.querySelector(`form.upload-tradelist-form[data-symbol="${sym}"]`);
+          if(form){ const sel = form.querySelector('select[name=date_parse_mode]'); if(sel) sel.value='default'; const chk = form.querySelector('input[name=drop_incomplete]'); if(chk) chk.checked=false; const container = form.parentElement.querySelector('.upload-result-container'); if(container){ try{ applyDropToggle(container, form); }catch(e){} } }
+          // signal other pages (Results) to refresh
+          localStorage.setItem('uploads-sync', JSON.stringify({event:'reset', symbol: sym, ts: Date.now()}));
+        }catch(e){ console.warn('confirm reset action failed', e) }
+        pendingResetSymbol = null;
+        const modalEl = document.getElementById('confirmResetModal'); const modal = bootstrap.Modal.getInstance(modalEl); modal?.hide();
+      });
+
+      document.getElementById('dryrun-btn').addEventListener('click', async ()=>{
+        document.getElementById('dryrun-message').innerText = 'Running dry-run...';
+        document.getElementById('dryrun-table-container').innerHTML = '';
+        try{
+          const resp = await fetch('/dry_run', {method:'POST'});
+          const data = await resp.json();
+          if(!data.success){
+            document.getElementById('dryrun-message').innerText = 'Error: ' + (data.error || 'Unknown');
+            return;
+          }
+          const planned = data.planned_fetches || [];
+          renderPlannedTableGrouped(planned);
+          document.getElementById('dryrun-message').innerText = `Planned fetches: ${planned.length}`;
+        }catch(e){
+          document.getElementById('dryrun-message').innerText = 'Error running dry-run';
+          document.getElementById('dryrun-table-container').innerText = String(e);
+        }
+      });
+
+      loadConfig(); loadDataStatus();
+    </script>
+  </body>
+</html>

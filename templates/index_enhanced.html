@@ -1,0 +1,1687 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔎 Backtest Grid Search - Enhanced Progress</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .status-bar {
+            background: #f8f9fa;
+            padding: 15px;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+        
+        .status-ready {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-processing {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .status-complete {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .progress-section {
+            background: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            border-left: 4px solid #007bff;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #0056b3);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .quick-summary {
+            background: #e8f5e8;
+            border: 2px solid #4caf50;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .parameter-suggestion {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .suggestion-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 15px 0;
+        }
+        
+        .suggestion-explanation {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .efficiency-metrics {
+            background: #d4edda;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+        }
+        
+        .form-section {
+            background: #f8f9fa;
+            padding: 25px;
+            margin: 20px 0;
+            border-radius: 10px;
+            border-left: 4px solid #28a745;
+        }
+        
+        .file-upload {
+            border: 2px dashed #007bff;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin: 15px 0;
+            transition: all 0.3s ease;
+        }
+        
+        .file-upload:hover {
+            border-color: #0056b3;
+            background: #f8f9fa;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px 5px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,123,255,0.3);
+        }
+        
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-suggest {
+            background: linear-gradient(135deg, #28a745, #1e7e34);
+            margin-left: 10px;
+        }
+        
+        .btn-suggest:hover {
+            box-shadow: 0 5px 15px rgba(40,167,69,0.3);
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 500;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .timer {
+            font-family: 'Courier New', monospace;
+            font-size: 1.2em;
+            color: #007bff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔎 Backtest Grid Search - Enhanced</h1>
+            <p>Tối ưu Stop Loss với Progress Tracking</p>
+            
+            <!-- Navigation Menu -->
+            <div style="margin-top: 20px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+                <a href="/" style="color: white; text-decoration: none; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 20px; transition: all 0.3s;">
+                    🏠 Home
+                </a>
+                <a href="/batch" style="color: white; text-decoration: none; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 20px; transition: all 0.3s;">
+                    📊 Batch Processing
+                </a>
+                <a href="/compare" style="color: white; text-decoration: none; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 20px; transition: all 0.3s;">
+                    🔍 Compare Results
+                </a>
+                <a href="/analytics" style="color: white; text-decoration: none; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 20px; transition: all 0.3s;">
+                    📈 Analytics
+                </a>
+            </div>
+        </div>
+        
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div id="statusIndicator" class="status-indicator status-ready">
+                <span id="statusIcon">✅</span>
+                <span id="statusText">Sẵn sàng - Upload files để bắt đầu</span>
+            </div>
+            <div id="timerDisplay" class="timer" style="display: none;">
+                ⏱️ <span id="elapsed">00:00</span>
+            </div>
+        </div>
+        
+        <!-- Progress Section -->
+        <div id="progressSection" class="progress-section">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong id="progressTitle">Đang xử lý...</strong>
+                <span id="progressPercent">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <div id="progressDetail" style="font-size: 0.9em; color: #666; margin-top: 5px;">
+                Đang khởi tạo...
+            </div>
+        </div>
+        
+        <!-- Quick Summary -->
+        <div id="quickSummary" class="quick-summary">
+            <h3>📊 Tổng kết nhanh từ dữ liệu gốc</h3>
+            <div id="summaryContent"></div>
+        </div>
+        
+        <!-- Smart Parameter Suggestion Results -->
+        <div id="parameterSuggestion" class="parameter-suggestion" style="display: none;">
+            <h3>🎯 Gợi ý Thông số Thông minh</h3>
+            <div id="suggestionContent"></div>
+        </div>
+        
+        <!-- Upload Section -->
+        <div class="form-section">
+            <h3>📁 Upload Files</h3>
+            <div class="file-upload">
+                <input type="file" id="tradeFile" accept=".csv" style="margin: 10px;">
+                <label for="tradeFile">Trade CSV File</label>
+            </div>
+            <div class="file-upload">
+                <input type="file" id="candleFile" accept=".csv" style="margin: 10px;">
+                <label for="candleFile">Candle CSV File</label>
+            </div>
+            <button id="quickSummaryBtn" class="btn" onclick="getQuickSummary()">
+                🚀 Xem Tổng kết Nhanh
+            </button>
+            <button id="suggestParamsBtn" class="btn btn-suggest" onclick="suggestParameters()">
+                🎯 Gợi ý Dải Thông số Quét
+            </button>
+        </div>
+        
+        <!-- Trade Selection -->
+        <div class="form-section">
+            <h3>🎯 Chọn lệnh để test</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <div>
+                    <label>Từ lệnh số:</label>
+                    <input type="number" id="startTrade" value="1" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                    <small style="color: #666;">Số âm = từ cuối (-50 = 50 lệnh cuối)</small>
+                </div>
+                <div>
+                    <label>Số lượng tối đa:</label>
+                    <input type="number" id="maxTrades" value="0" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                    <small style="color: #666;">0 = không giới hạn</small>
+                </div>
+                <div>
+                    <label>Chế độ chọn:</label>
+                    <select id="tradeSelectionMode" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                        <option value="sequence">Theo thứ tự</option>
+                        <option value="time">Theo thời gian</option>
+                        <option value="random">Ngẫu nhiên</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Parameters -->
+        <div class="form-section">
+            <h3>⚙️ Tham số tối ưu</h3>
+            <!-- Chọn thông số cần tối ưu -->
+            <div style="margin-bottom: 20px;">
+                <label><strong>Chọn thông số cần tối ưu:</strong></label><br>
+                <label style="margin-right: 15px;"><input type="checkbox" id="optimizeSL" checked> Stop Loss (SL)</label>
+                <label style="margin-right: 15px;"><input type="checkbox" id="optimizeBE" checked> Break Even (BE)</label>
+                <label style="margin-right: 15px;"><input type="checkbox" id="optimizeTS" checked> Trailing Stop (TS)</label>
+                <span style="font-size: 12px; color: #666; margin-left: 10px;">(Bỏ chọn để không tối ưu/thử nghiệm thông số đó)</span>
+            </div>
+            
+            <!-- SL Parameters -->
+            <div style="margin-bottom: 20px;">
+                <h4 style="color: #dc3545;">🛑 Stop Loss (SL)</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                    <div>
+                        <label>SL Min (%):</label>
+                        <input type="number" id="slMin" value="0.5" step="0.1" style="width: 100%; padding: 8px;">
+                    </div>
+                    <div>
+                        <label>SL Max (%):</label>
+                        <input type="number" id="slMax" value="3.0" step="0.1" style="width: 100%; padding: 8px;">
+                    </div>
+                    <div>
+                        <label>SL Step (%):</label>
+                        <input type="number" id="slStep" value="0.5" step="0.1" style="width: 100%; padding: 8px;">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- BE Parameters -->
+            <div style="margin-bottom: 20px;">
+                <h4 style="color: #28a745;">💚 Break Even (BE)</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                    <div>
+                        <label>BE Min (%):</label>
+                        <input type="number" id="beMin" value="0.5" step="0.1" style="width: 100%; padding: 8px;">
+                    </div>
+                    <div>
+                        <label>BE Max (%):</label>
+                        <input type="number" id="beMax" value="2.0" step="0.1" style="width: 100%; padding: 8px;">
+                    </div>
+                    <div>
+                        <label>BE Step (%):</label>
+                        <input type="number" id="beStep" value="0.5" step="0.1" style="width: 100%; padding: 8px;">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- TS Parameters -->
+            <div style="margin-bottom: 20px;">
+                <h4 style="color: #007bff;">📈 Trailing Stop (TS)</h4>
+                <div style="margin-bottom: 10px;">
+                    <strong>TS Trigger:</strong>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                        <div>
+                            <label>TS Trig Min (%):</label>
+                            <input type="number" id="tsTrigMin" value="0.5" step="0.1" style="width: 100%; padding: 8px;">
+                        </div>
+                        <div>
+                            <label>TS Trig Max (%):</label>
+                            <input type="number" id="tsTrigMax" value="3.0" step="0.1" style="width: 100%; padding: 8px;">
+                        </div>
+                        <div>
+                            <label>TS Trig Step (%):</label>
+                            <input type="number" id="tsTrigStep" value="0.5" step="0.1" style="width: 100%; padding: 8px;">
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <strong>TS Step:</strong>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                        <div>
+                            <label>TS Step Min (%):</label>
+                            <input type="number" id="tsStepMin" value="0.5" step="0.1" style="width: 100%; padding: 8px;">
+                        </div>
+                        <div>
+                            <label>TS Step Max (%):</label>
+                            <input type="number" id="tsStepMax" value="1.0" step="0.1" style="width: 100%; padding: 8px;">
+                        </div>
+                        <div>
+                            <label>TS Step Step (%):</label>
+                            <input type="number" id="tsStepStep" value="0.2" step="0.1" style="width: 100%; padding: 8px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Optimization Type -->
+            <div>
+                <label><strong>Tối ưu theo:</strong></label>
+                <select id="optType" style="width: 200px; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                    <option value="pnl">Total PnL</option>
+                    <option value="winrate">Win Rate</option>
+                    <option value="pf">Profit Factor</option>
+                    <option value="sharpe">Sharpe Ratio</option>
+                    <option value="recovery">Recovery Factor</option>
+                    <option value="drawdown">Min Drawdown</option>
+                </select>
+            </div>
+            
+            <!-- Advanced Mode Option -->
+            <div style="margin-top: 15px;">
+                <label style="display: flex; align-items: center; gap: 5px;">
+                    <input type="checkbox" id="forceAdvanced" style="transform: scale(1.2);">
+                    <strong>Force Advanced Mode</strong>
+                    <span style="font-size: 12px; color: #666; margin-left: 10px;">
+                        (100K → 1M combinations limit. Có thể chậm với dải rộng!)
+                    </span>
+                </label>
+            </div>
+            
+            <!-- Combinations Counter -->
+            <div id="combinationsCounter" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; font-size: 14px;">
+                <strong>Tổng số combinations: </strong>
+                <span id="totalCombinations" style="color: #007bff; font-weight: bold;">0</span>
+                <br>
+                <span id="combinationsStatus" style="font-size: 12px; color: #666;"></span>
+            </div>
+        </div>
+        
+        <!-- New Method Selection Section -->
+        <div class="form-section">
+            <h3>⚙️ Chọn Phương Pháp Tối Ưu</h3>
+            <div class="form-group">
+                <label for="method_type"><b>Phương pháp tối ưu:</b></label>
+                <select name="method_type" id="method_type" class="form-control">
+                    <option value="grid">Grid Search (Toàn diện)</option>
+                    <option value="optuna">Optuna (Nhanh)</option>
+                </select>
+                <small class="form-text text-muted">
+                    Chọn phương pháp tối ưu hóa: <b>Grid Search</b> quét toàn bộ, <b>Optuna</b> tìm nhanh vùng tối ưu.
+                </small>
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div style="text-align: center; padding: 30px;">
+            <button id="optimizeBtn" class="btn" onclick="startOptimization()" disabled>
+                🔍 Bắt đầu Tối ưu
+            </button>
+            <button id="cancelBtn" class="btn" onclick="cancelOperation()" style="background: #dc3545; display: none;">
+                ❌ Hủy
+            </button>
+        </div>
+        
+        <!-- Results will be shown here -->
+        <div id="results" style="padding: 0 40px 40px;"></div>
+    </div>
+
+    <script>
+        let startTime = null;
+        let timerInterval = null;
+        let currentController = null;
+        
+        // Update status
+        function updateStatus(type, text, showTimer = false) {
+            const indicator = document.getElementById('statusIndicator');
+            const icon = document.getElementById('statusIcon');
+            const statusText = document.getElementById('statusText');
+            const timerDisplay = document.getElementById('timerDisplay');
+            
+            // Reset classes
+            indicator.className = 'status-indicator';
+            
+            switch(type) {
+                case 'ready':
+                    indicator.classList.add('status-ready');
+                    icon.textContent = '✅';
+                    break;
+                case 'processing':
+                    indicator.classList.add('status-processing');
+                    icon.innerHTML = '<div class="spinner"></div>';
+                    break;
+                case 'complete':
+                    indicator.classList.add('status-complete');
+                    icon.textContent = '🎉';
+                    break;
+                case 'error':
+                    indicator.classList.add('status-error');
+                    icon.textContent = '❌';
+                    break;
+            }
+            
+            statusText.textContent = text;
+            timerDisplay.style.display = showTimer ? 'block' : 'none';
+            
+            if (showTimer && !timerInterval) {
+                startTimer();
+            } else if (!showTimer && timerInterval) {
+                stopTimer();
+            }
+        }
+        
+        // Timer functions
+        function startTimer() {
+            startTime = Date.now();
+            timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                document.getElementById('elapsed').textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+        
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+        
+        // Progress functions
+        function showProgress(title, detail = '') {
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('progressTitle').textContent = title;
+            document.getElementById('progressDetail').textContent = detail;
+            setProgress(0);
+        }
+        
+        function hideProgress() {
+            document.getElementById('progressSection').style.display = 'none';
+        }
+        
+        function setProgress(percent, detail = null) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressPercent').textContent = Math.round(percent) + '%';
+            if (detail) {
+                document.getElementById('progressDetail').textContent = detail;
+            }
+        }
+        
+        // Enable optimize button when files are selected
+        document.getElementById('tradeFile').addEventListener('change', checkFiles);
+        document.getElementById('candleFile').addEventListener('change', checkFiles);
+        
+        // Add listeners for parameter changes to update combinations count
+        const parameterInputs = [
+            'slMin', 'slMax', 'slStep',
+            'beMin', 'beMax', 'beStep', 
+            'tsTrigMin', 'tsTrigMax', 'tsTrigStep',
+            'tsStepMin', 'tsStepMax', 'tsStepStep',
+            'forceAdvanced'
+        ];
+        
+        parameterInputs.forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                if (element.type === 'checkbox') {
+                    element.addEventListener('change', updateCombinationsCount);
+                } else {
+                    element.addEventListener('input', updateCombinationsCount);
+                }
+            }
+        });
+        
+        function updateCombinationsCount() {
+            try {
+                const slMin = parseFloat(document.getElementById('slMin').value) || 0;
+                const slMax = parseFloat(document.getElementById('slMax').value) || 0;
+                const slStep = parseFloat(document.getElementById('slStep').value) || 0.1;
+                
+                const beMin = parseFloat(document.getElementById('beMin').value) || 0;
+                const beMax = parseFloat(document.getElementById('beMax').value) || 0;
+                const beStep = parseFloat(document.getElementById('beStep').value) || 0.1;
+                
+                const tsTrigMin = parseFloat(document.getElementById('tsTrigMin').value) || 0;
+                const tsTrigMax = parseFloat(document.getElementById('tsTrigMax').value) || 0;
+                const tsTrigStep = parseFloat(document.getElementById('tsTrigStep').value) || 0.1;
+                
+                const tsStepMin = parseFloat(document.getElementById('tsStepMin').value) || 0;
+                const tsStepMax = parseFloat(document.getElementById('tsStepMax').value) || 0;
+                const tsStepStep = parseFloat(document.getElementById('tsStepStep').value) || 0.1;
+                
+                // Calculate array sizes
+                const slCount = slMax > slMin ? Math.max(1, Math.round((slMax - slMin) / slStep) + 1) : 1;
+                const beCount = beMax > beMin ? Math.max(1, Math.round((beMax - beMin) / beStep) + 1) : 1;
+                const tsTrigCount = tsTrigMax > tsTrigMin ? Math.max(1, Math.round((tsTrigMax - tsTrigMin) / tsTrigStep) + 1) : 1;
+                const tsStepCount = tsStepMax > tsStepMin ? Math.max(1, Math.round((tsStepMax - tsStepMin) / tsStepStep) + 1) : 1;
+                
+                const totalCombinations = slCount * beCount * tsTrigCount * tsStepCount;
+                
+                // Update display
+                document.getElementById('totalCombinations').textContent = totalCombinations.toLocaleString();
+                
+                const forceAdvanced = document.getElementById('forceAdvanced').checked;
+                const limit = forceAdvanced ? 1000000 : 100000;
+                const statusElement = document.getElementById('combinationsStatus');
+                
+                if (totalCombinations <= 1000) {
+                    statusElement.textContent = '✅ Nhanh (≤1K combinations)';
+                    statusElement.style.color = '#28a745';
+                } else if (totalCombinations <= 10000) {
+                    statusElement.textContent = '⚡ Trung bình (1K-10K combinations, ~1-3 phút)';
+                    statusElement.style.color = '#ffc107';
+                } else if (totalCombinations <= limit) {
+                    statusElement.textContent = `🐌 Chậm (${(totalCombinations/1000).toFixed(0)}K combinations, ~${Math.ceil(totalCombinations/10000)} phút)`;
+                    statusElement.style.color = '#fd7e14';
+                } else {
+                    statusElement.textContent = `❌ Quá nhiều (>${(limit/1000).toFixed(0)}K limit) - Sẽ dùng FALLBACK MODE`;
+                    statusElement.style.color = '#dc3545';
+                }
+                
+            } catch (error) {
+                document.getElementById('totalCombinations').textContent = 'Error';
+                document.getElementById('combinationsStatus').textContent = 'Lỗi tính toán';
+            }
+        }
+        
+        // Initialize combinations count
+        updateCombinationsCount();
+        
+        function checkFiles() {
+            const tradeFile = document.getElementById('tradeFile').files[0];
+            const candleFile = document.getElementById('candleFile').files[0];
+            const optimizeBtn = document.getElementById('optimizeBtn');
+            const quickSummaryBtn = document.getElementById('quickSummaryBtn');
+            
+            if (tradeFile && candleFile) {
+                optimizeBtn.disabled = false;
+                quickSummaryBtn.disabled = false;
+                updateStatus('ready', 'Files đã sẵn sàng - Có thể bắt đầu tối ưu');
+            } else {
+                optimizeBtn.disabled = true;
+                quickSummaryBtn.disabled = true;
+            }
+        }
+        
+        // Quick Summary
+        async function getQuickSummary() {
+            const tradeFile = document.getElementById('tradeFile').files[0];
+            const candleFile = document.getElementById('candleFile').files[0];
+            
+            if (!tradeFile || !candleFile) {
+                alert('Vui lòng chọn cả 2 files!');
+                return;
+            }
+            
+            updateStatus('processing', 'Đang tải và phân tích dữ liệu...', true);
+            showProgress('Quick Summary', 'Đang đọc files và tính toán...');
+            
+            try {
+                currentController = new AbortController();
+                const formData = new FormData();
+                formData.append('trade_file', tradeFile);
+                formData.append('candle_file', candleFile);
+                
+                setProgress(30, 'Đang upload files...');
+                
+                const response = await fetch('/quick_summary', {
+                    method: 'POST',
+                    body: formData,
+                    signal: currentController.signal
+                });
+                
+                setProgress(70, 'Đang xử lý dữ liệu...');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                setProgress(100, 'Hoàn thành!');
+                
+                if (data.success) {
+                    displayQuickSummary(data.summary);
+                    updateStatus('complete', 'Quick Summary hoàn thành!');
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    updateStatus('ready', 'Đã hủy thao tác');
+                } else {
+                    console.error('Quick Summary Error:', error);
+                    updateStatus('error', 'Lỗi: ' + error.message);
+                }
+            } finally {
+                hideProgress();
+                currentController = null;
+            }
+        }
+        
+        function displayQuickSummary(summary) {
+            const summaryDiv = document.getElementById('quickSummary');
+            const contentDiv = document.getElementById('summaryContent');
+            
+            contentDiv.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-top: 15px;">
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                        <strong style="color: #007bff;">📊 Tổng số lệnh</strong><br>
+                        <span style="font-size: 1.5em; color: #333;">${summary.total_trades}</span>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                        <strong style="color: #28a745;">✅ Lệnh hợp lệ</strong><br>
+                        <span style="font-size: 1.5em; color: #333;">${summary.valid_trades}</span>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                        <strong style="color: ${summary.total_pnl >= 0 ? '#28a745' : '#dc3545'};">💰 Total PnL</strong><br>
+                        <span style="font-size: 1.5em; color: ${summary.total_pnl >= 0 ? '#28a745' : '#dc3545'};">${summary.total_pnl.toFixed(2)}%</span><br>
+                        <small style="color: ${summary.total_pnl > 0 ? '#28a745' : '#dc3545'};">
+                            ${summary.total_pnl > 0 ? '✅' : '❌'} Khuyến cáo: > 0%
+                        </small>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                        <strong style="color: #17a2b8;">🎯 Win Rate</strong><br>
+                        <span style="font-size: 1.5em; color: #333;">${summary.winrate.toFixed(1)}%</span><br>
+                        <small style="color: ${summary.winrate > 50 ? '#28a745' : '#dc3545'};">
+                            ${summary.winrate > 50 ? '✅' : '❌'} Khuyến cáo: > 50%
+                        </small>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                        <strong style="color: #6f42c1;">📈 Profit Factor</strong><br>
+                        <span style="font-size: 1.5em; color: #333;">${summary.profit_factor.toFixed(2)}</span><br>
+                        <small style="color: ${summary.profit_factor > 1.5 ? '#28a745' : '#dc3545'};">
+                            ${summary.profit_factor > 1.5 ? '✅' : '❌'} Khuyến cáo: > 1.5
+                        </small>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                        <strong style="color: #dc3545;">📉 Max Drawdown</strong><br>
+                        <span style="font-size: 1.5em; color: #dc3545;">${summary.max_drawdown.toFixed(2)}%</span><br>
+                        <small style="color: ${summary.max_drawdown < 20 ? '#28a745' : '#dc3545'};">
+                            ${summary.max_drawdown < 20 ? '✅' : '❌'} Khuyến cáo: < 20%
+                        </small>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                        <strong style="color: #20c997;">📊 Sharpe Ratio</strong><br>
+                        <span style="font-size: 1.5em; color: #333;">${summary.sharpe_ratio.toFixed(3)}</span><br>
+                        <small style="color: ${summary.sharpe_ratio > 1.0 ? '#28a745' : '#dc3545'};">
+                            ${summary.sharpe_ratio > 1.0 ? '✅' : '❌'} Khuyến cáo: > 1.0
+                        </small>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                        <strong style="color: #fd7e14;">🔄 Recovery Factor</strong><br>
+                        <span style="font-size: 1.5em; color: #333;">${summary.recovery_factor.toFixed(2)}</span><br>
+                        <small style="color: ${summary.recovery_factor > 3.0 ? '#28a745' : '#dc3545'};">
+                            ${summary.recovery_factor > 3.0 ? '✅' : '❌'} Khuyến cáo: > 3.0
+                        </small>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                        <strong style="color: #fd7e14;">📅 Thời gian</strong><br>
+                        <span style="font-size: 0.9em; color: #333;">${summary.date_range}</span>
+                    </div>
+                </div>
+                <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <strong>📈 Chi tiết giao dịch:</strong><br>
+                            • Win: ${summary.win_trades} | Loss: ${summary.loss_trades}<br>
+                            • Avg/Trade: ${summary.avg_trade.toFixed(2)}%<br>
+                            • Avg Win: ${summary.avg_win.toFixed(2)}%<br>
+                            • Avg Loss: ${summary.avg_loss.toFixed(2)}%
+                        </div>
+                        <div>
+                            <strong>📊 Thống kê nâng cao:</strong><br>
+                            • Max Win Streak: ${summary.max_consecutive_wins}<br>
+                            • Max Loss Streak: ${summary.max_consecutive_losses}<br>
+                            • Candles: ${summary.candle_count.toLocaleString()}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Đánh giá tổng thể chiến lược -->
+                <div style="margin-top: 15px; padding: 15px; border-radius: 8px; text-align: center;">
+                    ${(() => {
+                        const checks = [
+                            summary.total_pnl > 0,
+                            summary.winrate > 50,
+                            summary.profit_factor > 1.5,
+                            summary.max_drawdown < 20,
+                            summary.sharpe_ratio > 1.0,
+                            summary.recovery_factor > 3.0
+                        ];
+                        const passedChecks = checks.filter(check => check).length;
+                        const totalChecks = checks.length;
+                        const percentage = (passedChecks / totalChecks * 100);
+                        
+                        let color, evaluation, icon;
+                        if (percentage >= 80) {
+                            color = '#28a745';
+                            evaluation = 'CHIẾN LƯỢC XUẤT SẮC';
+                            icon = '🏆';
+                        } else if (percentage >= 60) {
+                            color = '#ffc107';
+                            evaluation = 'CHIẾN LƯỢC TỐT';
+                            icon = '👍';
+                        } else if (percentage >= 40) {
+                            color = '#fd7e14';
+                            evaluation = 'CHIẾN LƯỢC TRUNG BÌNH';
+                            icon = '⚠️';
+                        } else {
+                            color = '#dc3545';
+                            evaluation = 'CHIẾN LƯỢC CẦN CẢI THIỆN';
+                            icon = '⛔';
+                        }
+                        
+                        return `
+                            <div style="background: ${color}; color: white; padding: 20px; border-radius: 8px; font-weight: bold;">
+                                <div style="font-size: 2em; margin-bottom: 10px;">${icon}</div>
+                                <div style="font-size: 1.3em; margin-bottom: 10px;">${evaluation}</div>
+                                <div style="font-size: 1em;">
+                                    Đạt ${passedChecks}/${totalChecks} tiêu chí khuyến cáo (${percentage.toFixed(0)}%)
+                                </div>
+                            </div>
+                        `;
+                    })()}
+                </div>
+            `;
+            
+            summaryDiv.style.display = 'block';
+        }
+        
+        // Smart Parameter Suggestion
+        async function suggestParameters() {
+            const tradeFile = document.getElementById('tradeFile').files[0];
+            
+            if (!tradeFile) {
+                alert('Vui lòng chọn Trade CSV file để phân tích!');
+                return;
+            }
+            
+            updateStatus('processing', 'Đang phân tích thông số thông minh...', true);
+            showProgress('Smart Parameter Analysis', 'Đang phân tích tradelist data...');
+            
+            try {
+                currentController = new AbortController();
+                const formData = new FormData();
+                formData.append('trade_file', tradeFile);
+                
+                setProgress(30, 'Đang upload và phân tích dữ liệu...');
+                
+                const response = await fetch('/suggest_parameters', {
+                    method: 'POST',
+                    body: formData,
+                    signal: currentController.signal
+                });
+                
+                setProgress(70, 'Đang tính toán dải thông số tối ưu...');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                setProgress(100, 'Hoàn thành!');
+                
+                if (data.success) {
+                    displayParameterSuggestion(data);
+                    autoFillParameters(data.suggested_parameters);
+                    updateStatus('complete', 'Gợi ý thông số hoàn thành!');
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    updateStatus('ready', 'Đã hủy thao tác');
+                } else {
+                    console.error('Parameter Suggestion Error:', error);
+                    updateStatus('error', 'Lỗi: ' + error.message);
+                }
+            } finally {
+                hideProgress();
+                currentController = null;
+            }
+        }
+        
+        function displayParameterSuggestion(data) {
+            const suggestionDiv = document.getElementById('parameterSuggestion');
+            const contentDiv = document.getElementById('suggestionContent');
+            
+            const params = data.suggested_parameters;
+            const explanation = data.explanation;
+            const efficiency = data.efficiency;
+
+            // --- Warnings processing helpers ---
+            function normalizeWarnings(warnings) {
+                return (warnings || []).map(w => {
+                    if (typeof w === 'string') return { code: 'UNKNOWN', message: w, value: null, human: w };
+                    try {
+                        return {
+                            code: w.code || 'UNKNOWN',
+                            message: w.message || (typeof w === 'object' && w.message) || '',
+                            value: (w && (w.value !== undefined)) ? w.value : null,
+                            human: w.human || w.message || JSON.stringify(w)
+                        };
+                    } catch (e) {
+                        return { code: 'UNKNOWN', message: String(w), value: null, human: String(w) };
+                    }
+                });
+            }
+
+            function dedupeWarnings(warnings) {
+                const seen = new Set();
+                const out = [];
+                warnings.forEach(w => {
+                    const key = `${w.code}::${w.human}`;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        out.push(w);
+                    }
+                });
+                return out;
+            }
+
+            function groupWarnings(warnings) {
+                const groups = {};
+                warnings.forEach(w => {
+                    const key = w.code || 'UNKNOWN';
+                    if (!groups[key]) groups[key] = [];
+                    groups[key].push(w);
+                });
+                return groups;
+            }
+
+            function buildWarningsHtml(groups) {
+                let html = '';
+                Object.keys(groups).forEach(code => {
+                    const items = groups[code];
+                    html += `<div style="margin-top:8px; padding-top:6px; border-top:1px dashed rgba(0,0,0,0.05);">
+                                <div style="font-weight:700; margin-bottom:6px;">${code} <small style=\"color:#666; font-weight:400;\">(${items.length})</small></div>
+                                <ul style="margin:0 0 0 18px; color:#856404;">`;
+                    html += items.map(w => `<li>${w.human}${(w.value !== null && w.value !== undefined) ? ` — <span style=\"color:#333; font-weight:600;\">${w.value}</span>` : ''}</li>`).join('');
+                    html += `</ul></div>`;
+                });
+                return html;
+            }
+
+            // Copy deduped warnings JSON to clipboard
+            window.copyWarningsAsJSON = function(warnings) {
+                try {
+                    const txt = JSON.stringify(warnings, null, 2);
+                    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(txt).then(() => {
+                            alert('Warnings copied to clipboard.');
+                        }).catch(() => {
+                            // fallback
+                            prompt('Copy the warnings JSON below (Ctrl+C):', txt);
+                        });
+                    } else {
+                        prompt('Copy the warnings JSON below (Ctrl+C):', txt);
+                    }
+                } catch (e) {
+                    alert('Unable to copy warnings JSON.');
+                }
+            };
+
+            // Prepare deduped & grouped warnings HTML
+            const rawWarnings = data.warnings || [];
+            const normalizedWarnings = normalizeWarnings(rawWarnings);
+            const dedupedWarnings = dedupeWarnings(normalizedWarnings);
+            const groupedWarnings = groupWarnings(dedupedWarnings);
+            // expose for copy button
+            window._lastWarningsForCopy = dedupedWarnings;
+            const warningsHtml = (dedupedWarnings.length > 0) ? `
+                <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                        <h5 style="color: #856404; margin:0;">⚠️ Cảnh báo tự động</h5>
+                        <div>
+                            <button class="btn" onclick="copyWarningsAsJSON(window._lastWarningsForCopy)" style="font-size:0.9em; padding:6px 8px;">📋 Copy warnings as JSON</button>
+                        </div>
+                    </div>
+                    ${buildWarningsHtml(groupedWarnings)}
+                    ${ (dedupedWarnings.some(w => (String(w.code).toLowerCase().includes('ts') && String(w.code).toLowerCase().includes('trig')) || (w.human && (w.human.toLowerCase().includes('ts_trig') || w.human.toLowerCase().includes('ts trig'))))) ? `
+                        <div style="margin-top:10px; padding:10px; background:#f8d7da; border-radius:6px; color:#721c24;">
+                            <strong>Thông tin TS:</strong> Hệ thống đã áp dụng giới hạn tối thiểu cho TS Trigger. Giá trị hiển thị ở trên (TS Trigger min) là giá trị đã được áp dụng.
+                        </div>
+                    ` : '' }
+                </div>
+            ` : `
+                <div style="margin-top: 20px; padding: 15px; background: #d1ecf1; border-radius: 8px; border-left: 4px solid #17a2b8;">
+                    <h5 style="color: #0c5460;">✅ Các thông số đã được tự động điền vào form!</h5>
+                    <p style="margin: 5px 0; color: #0c5460;">Bạn có thể điều chỉnh các giá trị này nếu cần trước khi chạy Grid Search.</p>
+                </div>
+            `;
+            
+            contentDiv.innerHTML = `
+                <div class="suggestion-grid">
+                    <div class="suggestion-explanation">
+                        <h4>📊 Cơ sở Phân tích</h4>
+                        <p><strong>Dữ liệu:</strong> ${explanation.data_analysis}</p>
+                        <p><strong>Chiến lược:</strong> ${explanation.strategy_selected}</p>
+                        
+                        <h5 style="margin-top: 15px; color: #007bff;">🔬 Nền tảng Thống kê:</h5>
+                        <ul style="margin: 10px 0; padding-left: 20px;">
+                            ${explanation.statistical_foundation.map(item => `<li>${item}</li>`).join('')}
+                        </ul>
+                        
+                        <h5 style="margin-top: 15px; color: #28a745;">📏 Logic Step:</h5>
+                        <ul style="margin: 10px 0; padding-left: 20px; font-size: 0.9em;">
+                            ${explanation.step_logic.map(item => `<li>${item}</li>`).join('')}
+                        </ul>
+                    </div>
+                    
+                    <div class="efficiency-metrics">
+                        <h4>⚡ Hiệu quả Tối ưu</h4>
+                        <div style="text-align: center; margin: 15px 0;">
+                            <div style="font-size: 2em; color: #28a745; font-weight: bold;">
+                                ${efficiency.efficiency}
+                            </div>
+                            <div style="color: #666;">times faster</div>
+                        </div>
+                        
+                        <p><strong>Smart Combinations:</strong> ${efficiency.smart_combinations.toLocaleString()}</p>
+                        <p><strong>Thời gian tiết kiệm:</strong> ${efficiency.estimated_time_savings}</p>
+                        
+                        <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                            <h5 style="color: #007bff;">🎯 Thông số được gợi ý:</h5>
+                                <div style="font-size: 0.9em; margin-top: 8px;">
+                                <strong>SL:</strong> ${params.sl_min}%-${params.sl_max}% (step: ${params.sl_step})<br>
+                                <strong>BE:</strong> ${params.be_min}%-${params.be_max}% (step: ${params.be_step})<br>
+                                <strong>TS Trigger:</strong> ${params.ts_trig_min}%-${params.ts_trig_max}% (step: ${params.ts_trig_step})<br>
+                                <strong>TS Step:</strong> ${params.ts_step_min}%-${params.ts_step_max}% (step: ${params.ts_step_step})<br>
+                                <strong>TP Levels:</strong> ${data.tp_levels ? `TP1=${data.tp_levels.TP1 || 'N/A'}%  TP2=${data.tp_levels.TP2 || 'N/A'}%  TP3=${data.tp_levels.TP3 || 'N/A'}%` : 'N/A'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                        <!-- Warnings block: show any warnings returned by the analysis (e.g., TS clamp) -->
+                        ${ (data.warnings && data.warnings.length>0) ? `
+                            <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">
+                                <h5 style="color: #856404;">⚠️ Cảnh báo tự động</h5>
+                                <ul style="margin: 5px 0 0 18px; color: #856404;">
+                                    ${data.warnings.map(w => `<li>${(w && w.human) ? w.human : (typeof w === 'string' ? w : JSON.stringify(w))}</li>`).join('')}
+                                </ul>
+                                ${ (data.warnings.some(w => (
+                                    (w && w.code && String(w.code).toLowerCase().includes('ts') && String(w.code).toLowerCase().includes('trig')) ||
+                                    (typeof w === 'string' && (w.toLowerCase().includes('ts_trig') || w.toLowerCase().includes('ts trig'))) ||
+                                    (w && w.human && (w.human.toLowerCase().includes('ts_trig') || w.human.toLowerCase().includes('ts trig')))
+                                ))) ? `
+                                    <div style="margin-top:10px; padding:10px; background:#f8d7da; border-radius:6px; color:#721c24;">
+                                        <strong>Thông tin TS:</strong> Hệ thống đã áp dụng giới hạn tối thiểu cho TS Trigger. Giá trị hiển thị ở trên (TS Trigger min) là giá trị đã được áp dụng.
+                                    </div>
+                                ` : '' }
+                            </div>
+                        ` : `
+                            <div style="margin-top: 20px; padding: 15px; background: #d1ecf1; border-radius: 8px; border-left: 4px solid #17a2b8;">
+                                <h5 style="color: #0c5460;">✅ Các thông số đã được tự động điền vào form!</h5>
+                                <p style="margin: 5px 0; color: #0c5460;">Bạn có thể điều chỉnh các giá trị này nếu cần trước khi chạy Grid Search.</p>
+                            </div>
+                        ` }
+            `;
+            
+            suggestionDiv.style.display = 'block';
+        }
+        
+        function autoFillParameters(params) {
+            // Auto-fill all parameter inputs
+            document.getElementById('slMin').value = params.sl_min.toFixed(1);
+            document.getElementById('slMax').value = params.sl_max.toFixed(1);
+            document.getElementById('slStep').value = params.sl_step;
+            
+            document.getElementById('beMin').value = params.be_min.toFixed(2);
+            document.getElementById('beMax').value = params.be_max.toFixed(2);
+            document.getElementById('beStep').value = params.be_step;
+            
+            document.getElementById('tsTrigMin').value = params.ts_trig_min.toFixed(2);
+            document.getElementById('tsTrigMax').value = params.ts_trig_max.toFixed(2);
+            document.getElementById('tsTrigStep').value = params.ts_trig_step;
+            
+            document.getElementById('tsStepMin').value = params.ts_step_min.toFixed(2);
+            document.getElementById('tsStepMax').value = params.ts_step_max.toFixed(2);
+            document.getElementById('tsStepStep').value = params.ts_step_step;
+            
+            // Visual feedback - highlight filled fields briefly
+            const inputIds = ['slMin', 'slMax', 'slStep', 'beMin', 'beMax', 'beStep', 
+                             'tsTrigMin', 'tsTrigMax', 'tsTrigStep', 'tsStepMin', 'tsStepMax', 'tsStepStep'];
+            
+            inputIds.forEach(id => {
+                const input = document.getElementById(id);
+                if (input) {
+                    input.style.backgroundColor = '#d4edda';
+                    input.style.borderColor = '#28a745';
+                    setTimeout(() => {
+                        input.style.backgroundColor = '';
+                        input.style.borderColor = '';
+                    }, 2000);
+                }
+            });
+        }
+        
+        // Optimization
+        async function startOptimization() {
+            const tradeFile = document.getElementById('tradeFile').files[0];
+            const candleFile = document.getElementById('candleFile').files[0];
+            
+            if (!tradeFile || !candleFile) {
+                alert('Vui lòng chọn cả 2 files!');
+                return;
+            }
+            
+            updateStatus('processing', 'Đang chạy tối ưu hóa...', true);
+            showProgress('Grid Search Optimization', 'Đang khởi tạo...');
+            
+            // Show cancel button
+            document.getElementById('optimizeBtn').style.display = 'none';
+            document.getElementById('cancelBtn').style.display = 'inline-block';
+            
+            try {
+                currentController = new AbortController();
+                const formData = new FormData();
+                // Add files
+                formData.append('trade_file', tradeFile);
+                formData.append('candle_file', candleFile);
+                // Add parameters
+                formData.append('max_trades', document.getElementById('maxTrades').value);
+                formData.append('start_trade', document.getElementById('startTrade').value);
+                formData.append('trade_selection_mode', document.getElementById('tradeSelectionMode').value);
+                // Only send SL values if SL optimization is enabled; otherwise send 0 to indicate disabled
+                if (document.getElementById('optimizeSL').checked) {
+                    formData.append('sl_min', document.getElementById('slMin').value);
+                    formData.append('sl_max', document.getElementById('slMax').value);
+                    formData.append('sl_step', document.getElementById('slStep').value);
+                } else {
+                    formData.append('sl_min', '0');
+                    formData.append('sl_max', '0');
+                    formData.append('sl_step', '0');
+                }
+                formData.append('be_min', document.getElementById('beMin').value);
+                formData.append('be_max', document.getElementById('beMax').value);
+                formData.append('be_step', document.getElementById('beStep').value);
+                formData.append('ts_trig_min', document.getElementById('tsTrigMin').value);
+                formData.append('ts_trig_max', document.getElementById('tsTrigMax').value);
+                formData.append('ts_trig_step', document.getElementById('tsTrigStep').value);
+                formData.append('ts_step_min', document.getElementById('tsStepMin').value);
+                formData.append('ts_step_max', document.getElementById('tsStepMax').value);
+                formData.append('ts_step_step', document.getElementById('tsStepStep').value);
+                formData.append('opt_type', document.getElementById('optType').value);
+                formData.append('force_advanced_mode', document.getElementById('forceAdvanced').checked);
+                formData.append('method_type', document.getElementById('method_type').value);
+
+                // Lấy danh sách các thông số cần tối ưu
+                let optimizeParams = [];
+                if (document.getElementById('optimizeSL').checked) optimizeParams.push('sl');
+                if (document.getElementById('optimizeBE').checked) optimizeParams.push('be');
+                if (document.getElementById('optimizeTS').checked) optimizeParams.push('ts');
+                formData.append('optimize_params', JSON.stringify(optimizeParams));
+
+                // Calculate expected combinations for progress (giữ nguyên logic cũ)
+                const slMin = parseFloat(document.getElementById('slMin').value);
+                const slMax = parseFloat(document.getElementById('slMax').value);
+                const slStep = parseFloat(document.getElementById('slStep').value);
+                const beMin = parseFloat(document.getElementById('beMin').value);
+                const beMax = parseFloat(document.getElementById('beMax').value);
+                const beStep = parseFloat(document.getElementById('beStep').value);
+                const tsTrigMin = parseFloat(document.getElementById('tsTrigMin').value);
+                const tsTrigMax = parseFloat(document.getElementById('tsTrigMax').value);
+                const tsTrigStep = parseFloat(document.getElementById('tsTrigStep').value);
+                const tsStepMin = parseFloat(document.getElementById('tsStepMin').value);
+                const tsStepMax = parseFloat(document.getElementById('tsStepMax').value);
+                const tsStepStep = parseFloat(document.getElementById('tsStepStep').value);
+
+                const slCount = Math.floor((slMax - slMin) / slStep) + 1;
+                const beCount = beMax > beMin ? Math.floor((beMax - beMin) / beStep) + 1 : 1;
+                const tsTrigCount = tsTrigMax > tsTrigMin ? Math.floor((tsTrigMax - tsTrigMin) / tsTrigStep) + 1 : 1;
+                const tsStepCount = tsStepMax > tsStepMin ? Math.floor((tsStepMax - tsStepMin) / tsStepStep) + 1 : 1;
+                const totalCombinations = slCount * beCount * tsTrigCount * tsStepCount;
+
+                const forceAdvanced = document.getElementById('forceAdvanced').checked;
+                const warningMsg = totalCombinations > 1000 && !forceAdvanced 
+                    ? ` (⚠️ FALLBACK MODE: Chỉ test ${slCount} SL values!)` 
+                    : totalCombinations > 1000 
+                    ? ` (🚨 ADVANCED MODE: Có thể mất nhiều phút!)` 
+                    : '';
+
+                setProgress(10, `Sẽ test ${totalCombinations.toLocaleString()} tổ hợp (SL:${slCount} × BE:${beCount} × TS:${tsTrigCount}×${tsStepCount})${warningMsg}...`);
+
+                const response = await fetch('/optimize', {
+                    method: 'POST',
+                    body: formData,
+                    signal: currentController.signal
+                });
+
+                setProgress(50, 'Đang nhận kết quả...');
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                setProgress(100, 'Hoàn thành!');
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                displayResults(data);
+                updateStatus('complete', 'Tối ưu hoàn thành thành công!');
+
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    updateStatus('ready', 'Đã hủy tối ưu hóa');
+                } else {
+                    console.error('Optimization Error:', error);
+                    updateStatus('error', 'Lỗi tối ưu: ' + error.message);
+                }
+            } finally {
+                hideProgress();
+                currentController = null;
+                // Show optimize button, hide cancel button
+                document.getElementById('optimizeBtn').style.display = 'inline-block';
+                document.getElementById('cancelBtn').style.display = 'none';
+            }
+        }
+        
+        function cancelOperation() {
+            if (currentController) {
+                currentController.abort();
+                updateStatus('ready', 'Đang hủy thao tác...');
+            }
+        }
+        
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            
+            let html = '<div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-top: 20px;">';
+            html += '<h2>🎉 Kết quả tối ưu với Advanced Metrics</h2>';
+            
+            // Mode indicator with detailed info
+            const modeColor = data.mode === 'ADVANCED' ? '#28a745' : '#ffc107';
+            const modeIcon = data.mode === 'ADVANCED' ? '🚀' : '⚡';
+            html += `<div style="display: inline-block; padding: 8px 15px; background: ${modeColor}; color: white; border-radius: 20px; margin-bottom: 15px; font-weight: bold;">`;
+            html += `${modeIcon} ${data.mode} MODE`;
+            if (data.mode === 'ADVANCED') {
+                html += ' - Full SL+BE+TS Optimization';
+            } else {
+                html += ' - SL Only (BE/TS Fixed)';
+            }
+            html += '</div>';
+            
+            // Show mode details if available
+            if (data.mode_details) {
+                const details = data.mode_details;
+                if (details.warning) {
+                    html += `<div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 10px; border-radius: 5px; margin-bottom: 15px;">`;
+                    html += `<strong>⚠️ ${details.warning}</strong><br>`;
+                    html += `Tested ${details.actual_tests_run?.toLocaleString() || 'N/A'} combinations instead of ${details.total_combinations?.toLocaleString() || 'N/A'}<br>`;
+                    html += `Scope: ${details.optimization_scope || 'Unknown'}`;
+                    if (details.fallback_reason) {
+                        html += `<br>Reason: ${details.fallback_reason}`;
+                    }
+                    html += '</div>';
+                }
+            }
+            
+            if (data.filter_info) {
+                html += `<div class="alert alert-info">${data.filter_info}</div>`;
+            }
+            
+            if (data.best_result) {
+                const best = data.best_result;
+                const baseline = data.baseline;
+                
+                html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">';
+                
+                // Baseline
+                html += '<div style="background: white; padding: 20px; border-radius: 10px; border: 2px solid #6c757d;">';
+                html += '<h4 style="color: #6c757d;">📊 Kết quả gốc (No SL)</h4>';
+                html += `<div style="font-size: 1.5em; color: ${baseline.pnl_total >= 0 ? '#28a745' : '#dc3545'}; margin: 10px 0;">`;
+                html += `${baseline.pnl_total.toFixed(2)}%</div>`;
+                html += `<div style="color: #666;">Win Rate: ${baseline.winrate.toFixed(1)}%</div>`;
+                html += `<div style="color: #666;">Trades: ${baseline.trade_count}</div>`;
+                html += '</div>';
+                
+                // Best result
+                html += '<div style="background: white; padding: 20px; border-radius: 10px; border: 2px solid #28a745;">';
+                html += '<h4 style="color: #28a745;">🏆 Kết quả tối ưu</h4>';
+                html += `<div style="font-size: 1.5em; color: ${best.pnl_total >= 0 ? '#28a745' : '#dc3545'}; margin: 10px 0;">`;
+                html += `${best.pnl_total.toFixed(2)}%</div>`;
+                html += `<div style="color: #666;">SL: ${best.sl}% | BE: ${best.be}% | TS: ${best.ts_trig}%/${best.ts_step}%</div>`;
+                html += `<div style="color: #666;">Win Rate: ${best.winrate.toFixed(1)}% | PF: ${best.pf.toFixed(2)}</div>`;
+                html += `<div style="color: #666;">Max DD: ${best.max_drawdown ? best.max_drawdown.toFixed(2) : '0.00'}% | Sharpe: ${best.sharpe_ratio ? best.sharpe_ratio.toFixed(3) : '0.000'}</div>`;
+                html += `<div style="color: #666;">Recovery: ${best.recovery_factor ? best.recovery_factor.toFixed(2) : '0.00'} | Win/Loss: ${best.trade_win}/${best.trade_loss}</div>`;
+                html += `<div style="color: #666;">Avg Win: ${best.avg_win ? best.avg_win.toFixed(2) : '0.00'}% | Avg Loss: ${best.avg_loss ? best.avg_loss.toFixed(2) : '0.00'}%</div>`;
+                html += `<div style="color: #666;">Max Streaks: +${best.max_consecutive_wins || 0} / -${best.max_consecutive_losses || 0}</div>`;
+                
+                const improvement = best.pnl_total - baseline.pnl_total;
+                html += `<div style="margin-top: 10px; padding: 10px; background: ${improvement >= 0 ? '#d4edda' : '#f8d7da'}; border-radius: 5px;">`;
+                html += `<strong>Cải thiện: ${improvement >= 0 ? '+' : ''}${improvement.toFixed(2)}%</strong>`;
+                html += '</div>';
+                html += '</div>';
+                
+                html += '</div>';
+                
+                // Show top results table
+                if (data.all_results && data.all_results.length > 0) {
+                    html += '<div style="margin-top: 20px;">';
+                    html += '<h4>📋 Top 10 kết quả</h4>';
+                    html += '<div style="overflow-x: auto;">';
+                    html += '<table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden;">';
+                    html += '<thead style="background: #007bff; color: white;"><tr>';
+                    html += '<th style="padding: 8px; text-align: center; font-size: 0.9em;">Rank</th>';
+                    html += '<th style="padding: 8px; text-align: center; font-size: 0.9em;">SL (%)</th>';
+                    html += '<th style="padding: 8px; text-align: center; font-size: 0.9em;">BE (%)</th>';
+                    html += '<th style="padding: 8px; text-align: center; font-size: 0.9em;">TS Trig (%)</th>';
+                    html += '<th style="padding: 8px; text-align: center; font-size: 0.9em;">TS Step (%)</th>';
+                    html += '<th style="padding: 8px; text-align: center; font-size: 0.9em;">PnL (%)</th>';
+                    html += '<th style="padding: 8px; text-align: center; font-size: 0.9em;">Win Rate (%)</th>';
+                    html += '<th style="padding: 8px; text-align: center; font-size: 0.9em;">Profit Factor</th>';
+                    html += '<th style="padding: 8px; text-align: center; font-size: 0.9em;">Max DD (%)</th>';
+                    html += '<th style="padding: 8px; text-align: center; font-size: 0.9em;">Sharpe</th>';
+                    html += '<th style="padding: 8px; text-align: center; font-size: 0.9em;">Recovery</th>';
+                    html += '</tr></thead><tbody>';
+                    
+                    data.all_results.slice(0, 10).forEach((result, index) => {
+                        const rowColor = index % 2 === 0 ? '#f8f9fa' : 'white';
+                        const pnlColor = result.pnl_total >= 0 ? '#28a745' : '#dc3545';
+                        const ddColor = result.max_drawdown > 20 ? '#dc3545' : result.max_drawdown > 10 ? '#ffc107' : '#28a745';
+                        html += `<tr style="background: ${rowColor};">`;
+                        html += `<td style="padding: 8px; text-align: center; font-weight: bold; font-size: 0.9em;">${index + 1}</td>`;
+                        html += `<td style="padding: 8px; text-align: center; font-size: 0.9em;">${result.sl.toFixed(1)}</td>`;
+                        html += `<td style="padding: 8px; text-align: center; font-size: 0.9em;">${result.be.toFixed(1)}</td>`;
+                        html += `<td style="padding: 8px; text-align: center; font-size: 0.9em;">${result.ts_trig.toFixed(1)}</td>`;
+                        html += `<td style="padding: 8px; text-align: center; font-size: 0.9em;">${result.ts_step.toFixed(1)}</td>`;
+                        html += `<td style="padding: 8px; text-align: center; color: ${pnlColor}; font-weight: bold; font-size: 0.9em;">${result.pnl_total.toFixed(2)}</td>`;
+                        html += `<td style="padding: 8px; text-align: center; font-size: 0.9em;">${result.winrate.toFixed(1)}</td>`;
+                        html += `<td style="padding: 8px; text-align: center; font-size: 0.9em;">${result.pf.toFixed(2)}</td>`;
+                        html += `<td style="padding: 8px; text-align: center; color: ${ddColor}; font-size: 0.9em;">${result.max_drawdown ? result.max_drawdown.toFixed(2) : '0.00'}</td>`;
+                        html += `<td style="padding: 8px; text-align: center; font-size: 0.9em;">${result.sharpe_ratio ? result.sharpe_ratio.toFixed(3) : '0.000'}</td>`;
+                        html += `<td style="padding: 8px; text-align: center; font-size: 0.9em;">${result.recovery_factor ? result.recovery_factor.toFixed(2) : '0.00'}</td>`;
+                        html += '</tr>';
+                    });
+                    
+                    html += '</tbody></table></div></div>';
+                }
+            }
+            
+            // Thêm bảng log chi tiết các lệnh
+            if (data.trade_comparison && data.trade_comparison.length > 0) {
+                html += `
+                    <div style="margin-top: 30px; padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                        <h3 style="color: #333; margin-bottom: 15px;">📊 Chi Tiết So Sánh Các Lệnh (Top ${data.trade_comparison.length})</h3>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.85em;">
+                                <thead>
+                                    <tr style="background: #f8f9fa;">
+                                        <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">#</th>
+                                        <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Thời Gian</th>
+                                        <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Side</th>
+                                        <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Entry Price</th>
+                                        <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Exit Gốc</th>
+                                        <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Exit Type Gốc</th>
+                                        <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">PnL Gốc (%)</th>
+                                        <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Exit Tối Ưu</th>
+                                        <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Exit Type Tối Ưu</th>
+                                        <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">PnL Tối Ưu (%)</th>
+                                        <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Cải Thiện (%)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+                
+                data.trade_comparison.forEach((trade, index) => {
+                    const rowColor = index % 2 === 0 ? '#f9f9f9' : 'white';
+                    const baselinePnlColor = trade.baseline_pnl >= 0 ? '#28a745' : '#dc3545';
+                    const optimizedPnlColor = trade.optimized_pnl >= 0 ? '#28a745' : '#dc3545';
+                    const improvementColor = trade.improvement > 0 ? '#28a745' : (trade.improvement < 0 ? '#dc3545' : '#6c757d');
+                    
+                    // Highlight exit type với màu
+                    const getExitTypeColor = (exitType) => {
+                        if (exitType.includes('SL')) return '#dc3545';
+                        if (exitType.includes('BE')) return '#ffc107';
+                        if (exitType.includes('TS')) return '#17a2b8';
+                        return '#6c757d';
+                    };
+                    
+                    // Dynamic price formatting function
+                    const formatPrice = (price) => {
+                        if (price < 0.01) {
+                            // For very small prices like BOME (0.009xxx), use 6 decimal places
+                            return price.toFixed(6);
+                        } else if (price < 1) {
+                            // For prices between 0.01-1, use 4 decimal places
+                            return price.toFixed(4);
+                        } else if (price < 100) {
+                            // For prices between 1-100, use 2 decimal places
+                            return price.toFixed(2);
+                        } else {
+                            // For large prices, use 0 decimal places
+                            return price.toFixed(0);
+                        }
+                    };
+                    
+                    html += `
+                        <tr style="background: ${rowColor};">
+                            <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; font-weight: bold;">${trade.trade_num}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${trade.entry_time}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; font-weight: bold; color: ${trade.side === 'LONG' ? '#28a745' : '#dc3545'};">${trade.side}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${formatPrice(trade.entry_price)}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${formatPrice(trade.baseline_exit_price)}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${getExitTypeColor(trade.baseline_exit_type)}; font-weight: bold;">${trade.baseline_exit_type}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${baselinePnlColor}; font-weight: bold;">${trade.baseline_pnl.toFixed(2)}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${formatPrice(trade.optimized_exit_price)}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${getExitTypeColor(trade.optimized_exit_type)}; font-weight: bold;">${trade.optimized_exit_type}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${optimizedPnlColor}; font-weight: bold;">${trade.optimized_pnl.toFixed(2)}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${improvementColor}; font-weight: bold;">${trade.improvement > 0 ? '+' : ''}${trade.improvement.toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += '</tbody></table></div>';
+                
+                // Thêm thống kê tóm tắt
+                const improvedTrades = data.trade_comparison.filter(t => t.improvement > 0).length;
+                const worsenedTrades = data.trade_comparison.filter(t => t.improvement < 0).length;
+                const unchangedTrades = data.trade_comparison.filter(t => t.improvement === 0).length;
+                const avgImprovement = data.trade_comparison.reduce((sum, t) => sum + t.improvement, 0) / data.trade_comparison.length;
+                
+                html += `
+                    <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <strong>📈 Thống Kê Cải Thiện:</strong><br>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;">
+                            <div>✅ Cải thiện: <span style="color: #28a745; font-weight: bold;">${improvedTrades} lệnh</span></div>
+                            <div>❌ Xấu đi: <span style="color: #dc3545; font-weight: bold;">${worsenedTrades} lệnh</span></div>
+                            <div>➖ Không đổi: <span style="color: #6c757d; font-weight: bold;">${unchangedTrades} lệnh</span></div>
+                            <div>📊 Trung bình: <span style="color: ${avgImprovement >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">${avgImprovement > 0 ? '+' : ''}${avgImprovement.toFixed(2)}%</span></div>
+                        </div>
+                    </div>
+                `;
+                
+                html += '</div>';
+            }
+            
+            // Thêm biểu đồ so sánh PnL tích lũy
+            if (data.cumulative_comparison && data.cumulative_comparison.labels && data.cumulative_comparison.labels.length > 0) {
+                html += `
+                    <div style="margin-top: 30px; padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                        <h3 style="color: #333; margin-bottom: 15px;">📈 Biểu Đồ So Sánh PnL Tích Lũy</h3>
+                        <canvas id="cumulativePnlChart" width="800" height="400" style="max-width: 100%; height: 400px;"></canvas>
+                        <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.9em;">
+                            <strong>📊 Chú Thích:</strong><br>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-top: 8px;">
+                                <div><span style="color: #dc3545; font-weight: bold;">●</span> ${data.cumulative_comparison.baseline_label || 'Kết quả gốc'}</div>
+                                <div><span style="color: #28a745; font-weight: bold;">●</span> ${data.cumulative_comparison.optimized_label || 'Kết quả tối ưu'}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            resultsDiv.innerHTML = html;
+            
+            // Vẽ biểu đồ sau khi DOM được cập nhật
+            if (data.cumulative_comparison && data.cumulative_comparison.labels && data.cumulative_comparison.labels.length > 0) {
+                drawCumulativePnlChart(data.cumulative_comparison);
+            }
+        }
+        
+        function drawCumulativePnlChart(cumulativeData) {
+            const canvas = document.getElementById('cumulativePnlChart');
+            if (!canvas) {
+                console.error('Canvas element not found');
+                return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+            
+            const { labels, baseline_cumulative, optimized_cumulative } = cumulativeData;
+            
+            if (!labels || labels.length === 0) return;
+            
+            // Tính min/max values cho scaling
+            const allValues = [...(baseline_cumulative || []), ...(optimized_cumulative || [])];
+            const minValue = Math.min(...allValues, 0);
+            const maxValue = Math.max(...allValues, 0);
+            const valueRange = maxValue - minValue;
+            
+            // Margins
+            const margin = { top: 20, right: 80, bottom: 60, left: 80 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            // Helper functions
+            const xScale = (index) => margin.left + (index / (labels.length - 1)) * chartWidth;
+            const yScale = (value) => margin.top + ((maxValue - value) / valueRange) * chartHeight;
+            
+            // Draw grid
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            
+            // Horizontal grid lines
+            for (let i = 0; i <= 5; i++) {
+                const value = minValue + (valueRange * i / 5);
+                const y = yScale(value);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, y);
+                ctx.lineTo(margin.left + chartWidth, y);
+                ctx.stroke();
+                
+                // Y-axis labels
+                ctx.fillStyle = '#666';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(value.toFixed(1) + '%', margin.left - 10, y + 4);
+            }
+            
+            // Vertical grid lines (every 10th point or max 10 lines)
+            const gridStep = Math.max(1, Math.floor(labels.length / 10));
+            for (let i = 0; i < labels.length; i += gridStep) {
+                const x = xScale(i);
+                ctx.beginPath();
+                ctx.moveTo(x, margin.top);
+                ctx.lineTo(x, margin.top + chartHeight);
+                ctx.stroke();
+            }
+            
+            // Draw zero line
+            if (minValue <= 0 && maxValue >= 0) {
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                const zeroY = yScale(0);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, zeroY);
+                ctx.lineTo(margin.left + chartWidth, zeroY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // Draw baseline line (red)
+            if (baseline_cumulative && baseline_cumulative.length > 0) {
+                ctx.strokeStyle = '#dc3545';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = 0; i < baseline_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(baseline_cumulative[i]);
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+                
+                // Draw points
+                ctx.fillStyle = '#dc3545';
+                for (let i = 0; i < baseline_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(baseline_cumulative[i]);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+            
+            // Draw optimized line (green)
+            if (optimized_cumulative && optimized_cumulative.length > 0) {
+                ctx.strokeStyle = '#28a745';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = 0; i < optimized_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(optimized_cumulative[i]);
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+                
+                // Draw points
+                ctx.fillStyle = '#28a745';
+                for (let i = 0; i < optimized_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(optimized_cumulative[i]);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+            
+            // Draw axes
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            // Y-axis
+            ctx.moveTo(margin.left, margin.top);
+            ctx.lineTo(margin.left, margin.top + chartHeight);
+            // X-axis
+            ctx.moveTo(margin.left, margin.top + chartHeight);
+            ctx.lineTo(margin.left + chartWidth, margin.top + chartHeight);
+            ctx.stroke();
+            
+            // X-axis labels (show every few labels to avoid crowding)
+            ctx.fillStyle = '#666';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            const labelStep = Math.max(1, Math.floor(labels.length / 8));
+            for (let i = 0; i < labels.length; i += labelStep) {
+                const x = xScale(i);
+                ctx.fillText(labels[i], x, margin.top + chartHeight + 15);
+            }
+            
+            // Chart title
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('So Sánh PnL Tích Lũy (%)', width / 2, 20);
+            
+            // Final values display
+            if (baseline_cumulative && baseline_cumulative.length > 0) {
+                const finalBaseline = baseline_cumulative[baseline_cumulative.length - 1];
+                ctx.fillStyle = '#dc3545';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Gốc: ${finalBaseline.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 20);
+            }
+            
+            if (optimized_cumulative && optimized_cumulative.length > 0) {
+                const finalOptimized = optimized_cumulative[optimized_cumulative.length - 1];
+                ctx.fillStyle = '#28a745';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Tối ưu: ${finalOptimized.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 40);
+                
+                // Show improvement
+                if (baseline_cumulative && baseline_cumulative.length > 0) {
+                    const improvement = finalOptimized - baseline_cumulative[baseline_cumulative.length - 1];
+                    ctx.fillStyle = improvement >= 0 ? '#28a745' : '#dc3545';
+                    ctx.fillText(`Cải thiện: ${improvement >= 0 ? '+' : ''}${improvement.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 60);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
