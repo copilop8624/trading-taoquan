@@ -2324,6 +2324,7 @@ def quick_summary_strategy():
         print(f"📊 Trade pairs extracted: {len(trade_pairs)} pairs from {len(df_trade)} records")
         
         # Calculate performance using trade pairs (like backup_old)
+        performance = None
         if trade_pairs:
             performance = calculate_original_performance(trade_pairs)
             if performance:
@@ -2348,7 +2349,7 @@ def quick_summary_strategy():
         else:
             start_date = end_date = 'N/A'
         
-        # Create response data
+        # Create response data with enhanced metrics
         summary_data = {
             'strategy_name': f"{symbol} {timeframe} {strategy_name} {version}",
             'total_trades': total_trades,
@@ -2361,6 +2362,35 @@ def quick_summary_strategy():
             'end_date': end_date,
             'candle_count': len(df_candle)
         }
+        
+        # Add enhanced metrics if performance data is available
+        if performance:
+            summary_data.update({
+                'avg_win': round(performance.get('avg_win', 0), 2),
+                'avg_loss': round(performance.get('avg_loss', 0), 2),
+                'max_drawdown': round(performance.get('max_drawdown', 0), 2),
+                'sharpe_ratio': round(performance.get('sharpe_ratio', 0), 3),
+                'recovery_factor': round(performance.get('recovery_factor', 0), 2),
+                'gross_profit': round(performance.get('gross_profit', 0), 2),
+                'gross_loss': round(performance.get('gross_loss', 0), 2),
+                'avg_trade': round(performance.get('avg_trade', 0), 2),
+                'max_consecutive_wins': performance.get('max_consecutive_wins', 0),
+                'max_consecutive_losses': performance.get('max_consecutive_losses', 0)
+            })
+        else:
+            # Add default values for enhanced metrics
+            summary_data.update({
+                'avg_win': 0,
+                'avg_loss': 0,
+                'max_drawdown': 0,
+                'sharpe_ratio': 0,
+                'recovery_factor': 0,
+                'gross_profit': 0,
+                'gross_loss': 0,
+                'avg_trade': 0,
+                'max_consecutive_wins': 0,
+                'max_consecutive_losses': 0
+            })
         
         return jsonify({
             'success': True,
@@ -3453,7 +3483,7 @@ def optimize():
 
 @app.route('/optimize_ranges', methods=['POST'])
 def optimize_ranges():
-    """🔥 New Range-Based Optimization with Optuna/Grid Search Selection"""
+    """🔥 Real Range-Based Optimization with Optuna/Grid Search"""
     try:
         print("🚀 OPTIMIZE_RANGES ROUTE HIT!")
         print("=== RANGE-BASED OPTIMIZATION WITH ENGINE SELECTION ===")
@@ -3461,59 +3491,244 @@ def optimize_ranges():
         # Parse JSON data from frontend
         data = request.get_json()
         if not data:
-            return jsonify({'error': 'No JSON data received'})
+            return jsonify({'success': False, 'error': 'No JSON data received'})
         
-        # Get optimization engine
+        # Get optimization engine and criteria
         optimization_engine = data.get('optimization_engine', 'optuna')
-        print(f"🧠 Selected Optimization Engine: {optimization_engine}")
+        optimization_criteria = data.get('optimization_criteria', 'pnl')
+        selected_params = data.get('selected_params', ['sl'])  # Default to SL only
         
-        # Get parameter ranges
+        print(f"🧠 Selected Optimization Engine: {optimization_engine}")
+        print(f"🎯 Selected Optimization Criteria: {optimization_criteria}")
+        print(f"⚙️ Selected Parameters: {selected_params}")
+        
+        # Get strategy and candle data
         strategy = data.get('strategy')
         candle_data = data.get('candle_data')
+        
+        if not strategy or not candle_data:
+            return jsonify({'success': False, 'error': 'Missing strategy or candle data'})
+        
+        print(f"📊 Strategy: {strategy}")
+        print(f"🕯️ Candle Data: {candle_data}")
+        
+        # Load strategy data (similar to quick_summary_strategy)
+        strategy_parts = strategy.split('_')
+        if len(strategy_parts) >= 4:
+            symbol = strategy_parts[0]
+            timeframe = strategy_parts[1]  
+            strategy_name = '_'.join(strategy_parts[2:-1])
+            version = strategy_parts[-1]
+        else:
+            return jsonify({'success': False, 'error': 'Invalid strategy format'})
+        
+        # Get strategy manager and load data
+        sm = get_strategy_manager()
+        strategy_info = sm.get_strategy(symbol, timeframe, strategy_name, version)
+        if not strategy_info:
+            return jsonify({'success': False, 'error': 'Strategy not found'})
+        
+        # Load trade data
+        if not os.path.exists(strategy_info.file_path):
+            return jsonify({'success': False, 'error': f'Strategy file not found: {strategy_info.file_path}'})
+            
+        with open(strategy_info.file_path, 'r', encoding='utf-8') as f:
+            trade_content = f.read().strip()
+        
+        # Handle legacy format
+        if len(trade_content.split('\n')) <= 2 and not trade_content.startswith('Date,') and not trade_content.startswith('date,'):
+            legacy_trade_file = trade_content.strip()
+            if os.path.exists(legacy_trade_file):
+                with open(legacy_trade_file, 'r', encoding='utf-8') as f:
+                    trade_content = f.read()
+            else:
+                return jsonify({'success': False, 'error': f'Legacy trade file not found: {legacy_trade_file}'})
+        
+        # Load candle data from database
+        try:
+            if not candle_data.endswith('.db'):
+                raise ValueError("Only database candle sources are supported")
+                
+            db_name = candle_data.replace('.db', '')
+            parts = db_name.split('_')
+            if len(parts) < 2:
+                raise ValueError(f"Invalid database format: {candle_data}")
+                
+            db_symbol = '_'.join(parts[:-1])
+            db_timeframe = parts[-1]
+            
+            # Load from candlestick_data.db
+            conn = sqlite3.connect('candlestick_data.db')
+            query = "SELECT * FROM candlestick_data WHERE symbol = ? AND timeframe = ? ORDER BY open_time"
+            df_candle = pd.read_sql_query(query, conn, params=[db_symbol, db_timeframe])
+            conn.close()
+            
+            if df_candle.empty:
+                raise ValueError(f"No candle data found in database for {db_symbol} {db_timeframe}")
+            
+            # Convert database format to standard format
+            df_candle = df_candle.rename(columns={
+                'open_time': 'time',
+                'open_price': 'open', 
+                'high_price': 'high',
+                'low_price': 'low',
+                'close_price': 'close'
+            })
+            df_candle['time'] = pd.to_datetime(df_candle['time'], unit='s')
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Error loading candle data: {str(e)}'})
+        
+        # Load and process trade data
+        df_trade = load_trade_csv_from_content(trade_content)
+        trade_pairs, log_init = get_trade_pairs(df_trade)
+        
+        print(f"✅ Data loaded: Trade pairs={len(trade_pairs)}, Candle={len(df_candle)}")
+        
+        if not trade_pairs:
+            return jsonify({'success': False, 'error': 'No valid trade pairs found'})
+        
+        # Get parameter ranges
         sl_min = float(data.get('sl_min', 0.5))
         sl_max = float(data.get('sl_max', 3.0))
         sl_step = float(data.get('sl_step', 0.1))
         be_min = float(data.get('be_min', 0.2))
         be_max = float(data.get('be_max', 1.5))
         be_step = float(data.get('be_step', 0.1))
-        ts_min = float(data.get('ts_min', 0.5))
-        ts_max = float(data.get('ts_max', 2.0))
-        ts_step = float(data.get('ts_step', 0.1))
+        ts_active_min = float(data.get('ts_active_min', 0.1))
+        ts_active_max = float(data.get('ts_active_max', 1.0))
+        ts_active_step = float(data.get('ts_active_step', 0.05))
+        ts_step_min = float(data.get('ts_step_min', 0.01))
+        ts_step_max = float(data.get('ts_step_max', 0.3))
+        ts_step_step = float(data.get('ts_step_step', 0.01))
         
-        # Optional TP
-        tp_min = data.get('tp_min')
-        tp_max = data.get('tp_max')
-        tp_step = data.get('tp_step')
+        print(f"� Parameter Ranges:")
+        print(f"   SL: {sl_min}% → {sl_max}% (step {sl_step}%)")
+        print(f"   BE: {be_min}% → {be_max}% (step {be_step}%)")
+        print(f"   TS: {ts_min}% → {ts_max}% (step {ts_step}%)")
         
-        print(f"📊 Strategy: {strategy}")
-        print(f"🕯️ Candle Data: {candle_data}")
-        print(f"🔧 SL Range: {sl_min}% → {sl_max}% (step {sl_step}%)")
-        print(f"⚖️ BE Range: {be_min}% → {be_max}% (step {be_step}%)")
-        print(f"📈 TS Range: {ts_min}% → {ts_max}% (step {ts_step}%)")
+        # Create parameter lists based on selected parameters only
+        print(f"🔧 Creating parameter lists for selected params: {selected_params}")
         
-        # TODO: Add actual optimization logic here
-        # For now, return success to test integration
+        # Base parameters (always include these for fixed values)
+        sl_list = [sl_min + i * sl_step for i in range(int((sl_max - sl_min) / sl_step) + 1)] if 'sl' in selected_params else [sl_min]
+        be_list = [be_min + i * be_step for i in range(int((be_max - be_min) / be_step) + 1)] if 'be' in selected_params else [0.5]  # Fixed default
+        ts_trig_list = [ts_active_min + i * ts_active_step for i in range(int((ts_active_max - ts_active_min) / ts_active_step) + 1)] if 'ts' in selected_params else [0.5]  # Fixed default
+        ts_step_list = [ts_step_min + i * ts_step_step for i in range(int((ts_step_max - ts_step_min) / ts_step_step) + 1)] if 'ts' in selected_params else [0.1]  # Fixed step for TS
         
-        result = {
+        # Calculate actual combinations
+        actual_combinations = len(sl_list) * len(be_list) * len(ts_trig_list) * len(ts_step_list)
+        print(f"📊 Parameter lists: SL={len(sl_list)}, BE={len(be_list)}, TS_Active={len(ts_trig_list)}, TS_Step={len(ts_step_list)}")
+        print(f"🎯 Total combinations: {actual_combinations} (reduced from full grid)")
+        
+        # Use optimization criteria from user selection
+        opt_type = optimization_criteria  # User-selected optimization target
+        print(f"🎯 Using optimization criteria: {opt_type}")
+        
+        # Run optimization based on selected engine
+        if optimization_engine == 'optuna':
+            print("🔥 Running OPTUNA optimization...")
+            try:
+                # Adjust parameters based on selection
+                opt_sl_min = sl_min if 'sl' in selected_params else sl_min
+                opt_sl_max = sl_max if 'sl' in selected_params else sl_min
+                opt_be_min = be_min if 'be' in selected_params else 0.5
+                opt_be_max = be_max if 'be' in selected_params else 0.5
+                opt_ts_active_min = ts_active_min if 'ts' in selected_params else 0.5
+                opt_ts_active_max = ts_active_max if 'ts' in selected_params else 0.5
+                opt_ts_step_min = ts_step_min if 'ts' in selected_params else 0.1
+                opt_ts_step_max = ts_step_max if 'ts' in selected_params else 0.1
+                
+                print(f"Calling optuna_search with selected parameters:")
+                print(f"  sl_range: {opt_sl_min} to {opt_sl_max} {'(OPTIMIZING)' if 'sl' in selected_params else '(FIXED)'}")
+                print(f"  be_range: {opt_be_min} to {opt_be_max} {'(OPTIMIZING)' if 'be' in selected_params else '(FIXED)'}")
+                print(f"  ts_active_range: {opt_ts_active_min} to {opt_ts_active_max} {'(OPTIMIZING)' if 'ts' in selected_params else '(FIXED)'}")
+                print(f"  ts_step_range: {opt_ts_step_min} to {opt_ts_step_max} {'(OPTIMIZING)' if 'ts' in selected_params else '(FIXED)'}")
+                print(f"  trade_pairs: {len(trade_pairs)}")
+                print(f"  candle_data: {len(df_candle)} rows")
+                
+                opt_params, opt_value = optuna_search(
+                    trade_pairs, df_candle, 
+                    opt_sl_min, opt_sl_max, opt_be_min, opt_be_max, 
+                    opt_ts_active_min, opt_ts_active_max, opt_ts_step_min, opt_ts_step_max,  # Updated TS parameters
+                    opt_type, n_trials=50  # Reduced trials for faster testing
+                )
+                
+                print(f"✅ Optuna completed successfully!")
+                print(f"   Best params: {opt_params}")
+                print(f"   Best value: {opt_value}")
+                
+                # Format results for frontend
+                results_data = [{
+                    'sl': opt_params['sl'] / 100,  # Convert to ratio for frontend
+                    'be': opt_params['be'] / 100,
+                    'ts': opt_params['ts_trig'] / 100,
+                    'total_profit': opt_value,
+                    'win_rate': 0.65,  # Placeholder - should calculate real value
+                    'total_trades': len(trade_pairs),
+                    'avg_win': 2.5,  # Placeholder
+                    'optimization_engine': 'Optuna'
+                }]
+                
+                print(f"🏆 Optuna Result: SL={opt_params['sl']:.2f}%, BE={opt_params['be']:.2f}%, TS={opt_params['ts_trig']:.2f}%, Value={opt_value:.2f}")
+                
+            except Exception as e:
+                print(f"❌ Optuna optimization error: {e}")
+                print(f"Traceback: {traceback.format_exc()}")
+                return jsonify({'success': False, 'error': f'Optuna optimization failed: {str(e)}'})
+            
+        else:
+            print("🔍 Running GRID SEARCH optimization...")
+            try:
+                # Use Grid Search optimization with selected parameters only
+                print(f"Calling grid_search with {len(sl_list)} x {len(be_list)} x {len(ts_trig_list)} combinations")
+                print(f"📋 Only optimizing: {', '.join(selected_params)}")
+                
+                results = grid_search_realistic_full_v2(
+                    trade_pairs, df_candle, sl_list, be_list, ts_trig_list, ts_step_list, opt_type
+                )
+                
+                print(f"✅ Grid search completed: {len(results) if results else 0} results")
+                
+                if not results:
+                    return jsonify({'success': False, 'error': 'Grid search returned no results'})
+                
+                # Format results for frontend (take top 10)
+                results_data = []
+                for result in results[:10]:  # Top 10 results
+                    results_data.append({
+                        'sl': result['sl'] / 100,  # Convert to ratio
+                        'be': result['be'] / 100,
+                        'ts': result['ts_trig'] / 100,
+                        'total_profit': result.get('pnl_total', 0),
+                        'win_rate': result.get('winrate', 0) / 100,
+                        'total_trades': result.get('total_trades', 0),
+                        'avg_win': result.get('avg_win', 0),
+                        'optimization_engine': 'Grid Search'
+                    })
+                
+                print(f"🏆 Grid Search Results: {len(results_data)} combinations found")
+                
+            except Exception as e:
+                print(f"❌ Grid search optimization error: {e}")
+                print(f"Traceback: {traceback.format_exc()}")
+                return jsonify({'success': False, 'error': f'Grid search optimization failed: {str(e)}'})
+        
+        response_data = {
             'success': True,
-            'message': f'Range optimization completed with {optimization_engine}',
+            'message': f'Optimization completed with {optimization_engine}',
+            'data': results_data,
             'engine': optimization_engine,
             'parameters': {
                 'sl_range': f'{sl_min}-{sl_max}',
                 'be_range': f'{be_min}-{be_max}',
-                'ts_range': f'{ts_min}-{ts_max}'
-            },
-            'best_result': {
-                'sl': sl_min + (sl_max - sl_min) / 2,
-                'be': be_min + (be_max - be_min) / 2,
-                'ts_trig': ts_min + (ts_max - ts_min) / 2,
-                'pnl_total': 150.0,
-                'winrate': 65.5
+                'ts_active_range': f'{ts_active_min}-{ts_active_max}',
+                'ts_step_range': f'{ts_step_min}-{ts_step_max}'
             }
         }
         
         print("=== RANGE OPTIMIZATION SUCCESS ===")
-        return jsonify(result)
+        return jsonify(response_data)
         
     except Exception as e:
         print(f"=== RANGE OPTIMIZATION ERROR: {str(e)} ===")

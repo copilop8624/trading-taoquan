@@ -151,19 +151,22 @@
                 </div>
             </div>
 
-            <!-- Tổng kết nhanh Tradelist -->
+            <!-- Strategy Analysis & Quick Summary -->
             <div class="card">
-                <h3>📈 Tổng kết nhanh Tradelist</h3>
-                <div id="tradelistSummary" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                    <p style="text-align: center; color: #666;">Chọn strategy để xem tổng kết nhanh</p>
+                <h3>� Strategy Analysis & Quick Summary</h3>
+                <div id="strategyAnalysis" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                    <p style="text-align: center; color: #666;"><i class="fas fa-info-circle"></i> Chọn strategy và candle data để xem phân tích chi tiết</p>
                 </div>
                 
                 <div class="form-group">
-                    <button type="button" class="btn btn-warning" onclick="analyzeCurrentTradelist()">
-                        <i class="fas fa-chart-line"></i> Phân tích chi tiết
+                    <button type="button" class="btn btn-success" onclick="showQuickSummary()">
+                        <i class="fas fa-bolt"></i> Quick Summary
                     </button>
-                    <button type="button" class="btn btn-info" onclick="compareWithPrevious()">
-                        <i class="fas fa-balance-scale"></i> So sánh
+                    <button type="button" class="btn btn-primary" onclick="previewData()">
+                        <i class="fas fa-eye"></i> Preview Data
+                    </button>
+                    <button type="button" class="btn btn-warning" onclick="analyzeCurrentTradelist()">
+                        <i class="fas fa-chart-line"></i> Deep Analysis
                     </button>
                 </div>
             </div>
@@ -195,6 +198,49 @@
                             💡 <strong>Khuyến nghị:</strong> Dùng Optuna cho tối ưu nhanh, Grid Search cho kiểm tra đầy đủ
                         </div>
                     </div>
+
+                    <!-- Optimization Criteria Selection -->
+                    <div class="form-group" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 15px 0; color: white;">🎯 Chọn Tiêu Chí Tối Ưu Hóa</h4>
+                        <select name="optimization_criteria" style="width: 100%; padding: 10px; border: none; border-radius: 6px; font-size: 14px; background: white; color: #333;">
+                            <option value="pnl">💰 PnL Total - Tổng lợi nhuận</option>
+                            <option value="winrate">🎯 Win Rate - Tỷ lệ thắng</option>
+                            <option value="pf">📈 Profit Factor - Hệ số lợi nhuận</option>
+                            <option value="drawdown">📉 Minimize Drawdown - Giảm thiểu DD</option>
+                            <option value="sharpe">⚡ Sharpe Ratio - Chỉ số Sharpe</option>
+                            <option value="recovery">🔄 Recovery Factor - Hệ số phục hồi</option>
+                        </select>
+                        <div style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 4px; font-size: 0.85em;">
+                            📊 <strong>Mặc định:</strong> PnL Total (tối ưu tổng lợi nhuận). Chọn tiêu chí phù hợp với mục tiêu trading của bạn.
+                        </div>
+                    </div>
+
+                    <!-- Parameter Selection for Optimization -->
+                    <div class="form-group" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 15px 0; color: white;">⚙️ Chọn Parameters để Tối Ưu</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">
+                            <label style="background: rgba(255,255,255,0.1); padding: 8px; border-radius: 4px; cursor: pointer;">
+                                <input type="checkbox" name="optimize_params" value="sl" checked style="margin-right: 5px;">
+                                📍 Stop Loss
+                            </label>
+                            <label style="background: rgba(255,255,255,0.1); padding: 8px; border-radius: 4px; cursor: pointer;">
+                                <input type="checkbox" name="optimize_params" value="be" style="margin-right: 5px;">
+                                🛡️ Break Even
+                            </label>
+                            <label style="background: rgba(255,255,255,0.1); padding: 8px; border-radius: 4px; cursor: pointer;">
+                                <input type="checkbox" name="optimize_params" value="ts" style="margin-right: 5px;">
+                                📈 Trailing Stop
+                            </label>
+                            <label style="background: rgba(255,255,255,0.1); padding: 8px; border-radius: 4px; cursor: pointer;">
+                                <input type="checkbox" name="optimize_params" value="tp" style="margin-right: 5px;">
+                                🎯 Take Profit
+                            </label>
+                        </div>
+                        <div style="margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.85em;">
+                            💡 <strong>Tip:</strong> Chọn chỉ SL để tối ưu nhanh, hoặc SL+BE, SL+TS theo nhu cầu. Ít parameters = nhanh hơn!
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>📍 Stop Loss (SL) - Range:</label>
                         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
@@ -234,22 +280,51 @@
                     </div>
                     
                     <div class="form-group">
-                        <label>📈 Trailing Stop (TS) - Range:</label>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
-                            <div>
-                                <label style="font-size: 0.9em;">Min (%):</label>
-                                <input type="number" id="ts_min" name="ts_min" value="0.1" step="0.01" min="0.01" max="5">
+                        <label>📈 Trailing Stop (TS) - 2 Parameters:</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 10px;">
+                            <!-- TS Active (Trigger) -->
+                            <div style="border: 2px solid #007bff; padding: 12px; border-radius: 8px; background: #f8f9ff;">
+                                <h5 style="margin: 0 0 10px 0; color: #007bff; font-weight: bold;">🎯 TS Active (Trigger %)</h5>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Min:</label>
+                                        <input type="number" id="ts_active_min" name="ts_active_min" value="0.1" step="0.01" min="0.01" max="5">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Max:</label>
+                                        <input type="number" id="ts_active_max" name="ts_active_max" value="1.0" step="0.01" min="0.01" max="5">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Step:</label>
+                                        <input type="number" id="ts_active_step" name="ts_active_step" value="0.1" step="0.01" min="0.01" max="0.5">
+                                    </div>
+                                </div>
+                                <small style="color: #007bff; font-weight: bold;">Lợi nhuận % để BẮT ĐẦU trailing</small>
                             </div>
-                            <div>
-                                <label style="font-size: 0.9em;">Max (%):</label>
-                                <input type="number" id="ts_max" name="ts_max" value="1.0" step="0.01" min="0.01" max="5">
-                            </div>
-                            <div>
-                                <label style="font-size: 0.9em;">Step (%):</label>
-                                <input type="number" id="ts_step" name="ts_step" value="0.02" step="0.01" min="0.01" max="0.2">
+                            
+                            <!-- TS Step (Trailing Distance) -->
+                            <div style="border: 2px solid #28a745; padding: 12px; border-radius: 8px; background: #f8fff8;">
+                                <h5 style="margin: 0 0 10px 0; color: #28a745; font-weight: bold;">⚡ TS Step (Trailing Distance %)</h5>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Min:</label>
+                                        <input type="number" id="ts_step_min" name="ts_step_min" value="0.05" step="0.01" min="0.01" max="2">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Max:</label>
+                                        <input type="number" id="ts_step_max" name="ts_step_max" value="0.5" step="0.01" min="0.01" max="2">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Step:</label>
+                                        <input type="number" id="ts_step_step" name="ts_step_step" value="0.05" step="0.01" min="0.01" max="0.2">
+                                    </div>
+                                </div>
+                                <small style="color: #28a745; font-weight: bold;">Khoảng cách % trailing từ giá cao nhất</small>
                             </div>
                         </div>
-                        <small>TS phải nhỏ hơn BE để hợp lệ</small>
+                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px; border-radius: 6px; font-size: 0.9em;">
+                            📖 <strong>Logic thực tế:</strong> TS Active = khi nào bắt đầu trail (vd: +0.5%), TS Step = trail cách giá cao nhất bao nhiêu % (vd: 0.1%)
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -364,14 +439,6 @@
             </div>
         </div>
 
-        <!-- Preview Area -->
-        <div class="card full-width">
-            <h3>📊 Data Preview</h3>
-            <div id="previewArea" style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 20px; text-align: center; color: #6c757d; margin: 20px 0;">
-                <i class="fas fa-info-circle"></i> Chọn strategy và candle data để xem preview
-            </div>
-        </div>
-
         <!-- Results Section -->
         <div id="resultsSection" style="display: none;">
             <div class="card full-width">
@@ -459,7 +526,7 @@
         async function previewData() {
             const strategySelect = document.getElementById('strategySelect');
             const candleSelect = document.getElementById('candleSelect');
-            const previewArea = document.getElementById('previewArea');
+            const analysisArea = document.getElementById('strategyAnalysis');
             
             if (!strategySelect.value || !candleSelect.value) {
                 alert('❌ Vui lòng chọn cả Strategy và Candle Data');
@@ -467,7 +534,7 @@
             }
             
             try {
-                previewArea.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải preview...';
+                analysisArea.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải preview...';
                 
                 const selectedOption = strategySelect.options[strategySelect.selectedIndex];
                 const symbol = selectedOption.dataset.symbol;
@@ -482,24 +549,36 @@
                 let previewHTML = `
                     <div style="text-align: left;">
                         <h4><i class="fas fa-info-circle"></i> Data Preview</h4>
-                        <p><strong>Strategy:</strong> ${strategyName} v${version}</p>
-                        <p><strong>Symbol:</strong> ${symbol}</p>
-                        <p><strong>Timeframe:</strong> ${timeframe}</p>
-                        <p><strong>Candle Source:</strong> ${candleSelect.value}</p>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 15px 0;">
+                            <div><strong>Strategy:</strong> ${strategyName} v${version}</div>
+                            <div><strong>Symbol:</strong> ${symbol}</div>
+                            <div><strong>Timeframe:</strong> ${timeframe}</div>
+                            <div><strong>Candle Source:</strong> ${candleSelect.value}</div>
+                        </div>
                 `;
                 
                 if (strategyInfo.success && strategyInfo.data) {
                     previewHTML += `
-                        <p><strong>Total Trades:</strong> ${strategyInfo.total_rows}</p>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 15px 0; background: white; padding: 15px; border-radius: 8px;">
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.3em; font-weight: bold; color: #007bff;">${strategyInfo.total_rows}</div>
+                                <div style="color: #666; font-size: 0.85em;">Total Trades</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.3em; font-weight: bold; color: #28a745;">${strategyInfo.columns.length}</div>
+                                <div style="color: #666; font-size: 0.85em;">Columns</div>
+                            </div>
+                        </div>
                         <p><strong>Columns:</strong> ${strategyInfo.columns.join(', ')}</p>
                         <div style="margin-top: 15px;">
                             <strong>Sample Trades:</strong>
-                            <ul>
+                            <ul style="max-height: 150px; overflow-y: auto;">
                     `;
-                    strategyInfo.data.slice(0, 3).forEach((trade, i) => {
+                    strategyInfo.data.slice(0, 5).forEach((trade, i) => {
                         const dateField = trade.datetime || trade.date || trade.Date || 'Unknown date';
                         const typeField = trade.type || trade.Type || trade.side || 'Unknown type';
-                        previewHTML += `<li>${dateField} - ${typeField}</li>`;
+                        const pnlField = trade.pnl || trade.PnL || trade.profit || trade.Profit || 'N/A';
+                        previewHTML += `<li>${dateField} - ${typeField} (PnL: ${pnlField})</li>`;
                     });
                     previewHTML += `</ul></div>`;
                 } else {
@@ -507,11 +586,11 @@
                 }
                 
                 previewHTML += `</div>`;
-                previewArea.innerHTML = previewHTML;
+                analysisArea.innerHTML = previewHTML;
                 
             } catch (error) {
                 console.error('❌ Error previewing data:', error);
-                previewArea.innerHTML = `<div style="color: red;"><i class="fas fa-exclamation-triangle"></i> Lỗi preview data: ${error.message}</div>`;
+                analysisArea.innerHTML = `<div style="color: red;"><i class="fas fa-exclamation-triangle"></i> Lỗi preview data: ${error.message}</div>`;
             }
         }
         
@@ -519,6 +598,7 @@
         async function showQuickSummary() {
             const strategySelect = document.getElementById('strategySelect');
             const candleSelect = document.getElementById('candleSelect');
+            const analysisArea = document.getElementById('strategyAnalysis');
             
             if (!strategySelect.value || !candleSelect.value) {
                 alert('❌ Vui lòng chọn cả Strategy và Candle Data');
@@ -526,6 +606,8 @@
             }
             
             try {
+                analysisArea.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tính toán Quick Summary...';
+                
                 const formData = new FormData();
                 formData.append('strategy', strategySelect.value);
                 formData.append('candle_data', candleSelect.value);
@@ -539,46 +621,82 @@
                 console.log('Quick summary result:', result);
                 
                 if (result.success) {
-                    displayQuickSummary(result.data);
+                    displayEnhancedQuickSummary(result.data);
                 } else {
-                    alert('❌ Lỗi: ' + result.error);
+                    analysisArea.innerHTML = `<div style="color: red;"><i class="fas fa-exclamation-triangle"></i> Lỗi: ${result.error}</div>`;
                 }
             } catch (error) {
                 console.error('❌ Error in quick summary:', error);
-                alert('❌ Lỗi kết nối: ' + error.message);
+                analysisArea.innerHTML = `<div style="color: red;"><i class="fas fa-exclamation-triangle"></i> Lỗi kết nối: ${error.message}</div>`;
             }
         }
         
-        // 📊 Display Quick Summary
-        function displayQuickSummary(data) {
-            const previewArea = document.getElementById('previewArea');
+        // 📊 Display Enhanced Quick Summary
+        function displayEnhancedQuickSummary(data) {
+            const analysisArea = document.getElementById('strategyAnalysis');
             
             const summaryHTML = `
                 <div style="text-align: left;">
-                    <h4><i class="fas fa-lightning-bolt"></i> Quick Summary</h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0;">
-                        <div style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
-                            <div style="font-size: 1.5em; font-weight: bold; color: #007bff;">${data.total_trades}</div>
-                            <div style="color: #666; font-size: 0.9em;">Total Trades</div>
+                    <h4><i class="fas fa-lightning-bolt"></i> Quick Summary - ${data.strategy_name || 'Strategy'}</h4>
+                    
+                    <!-- Main Performance Metrics -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 20px 0;">
+                        <div style="background: linear-gradient(135deg, #007bff, #0056b3); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
+                            <div style="font-size: 1.8em; font-weight: bold;">${data.total_trades || 0}</div>
+                            <div style="font-size: 0.85em; opacity: 0.9;">Total Trades</div>
                         </div>
-                        <div style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
-                            <div style="font-size: 1.5em; font-weight: bold; color: #28a745;">${data.win_rate.toFixed(2)}%</div>
-                            <div style="color: #666; font-size: 0.9em;">Win Rate</div>
+                        <div style="background: linear-gradient(135deg, #28a745, #1e7e34); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
+                            <div style="font-size: 1.8em; font-weight: bold;">${(data.win_rate || 0).toFixed(2)}%</div>
+                            <div style="font-size: 0.85em; opacity: 0.9;">Win Rate</div>
                         </div>
-                        <div style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
-                            <div style="font-size: 1.5em; font-weight: bold; color: #ffc107;">${data.profit_factor.toFixed(2)}</div>
-                            <div style="color: #666; font-size: 0.9em;">Profit Factor</div>
+                        <div style="background: linear-gradient(135deg, #ffc107, #e0a800); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
+                            <div style="font-size: 1.8em; font-weight: bold;">${(data.profit_factor || 0).toFixed(2)}</div>
+                            <div style="font-size: 0.85em; opacity: 0.9;">Profit Factor</div>
                         </div>
-                        <div style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
-                            <div style="font-size: 1.5em; font-weight: bold; color: #dc3545;">${data.total_pnl.toFixed(2)}</div>
-                            <div style="color: #666; font-size: 0.9em;">Total PnL</div>
+                        <div style="background: linear-gradient(135deg, #dc3545, #c82333); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
+                            <div style="font-size: 1.8em; font-weight: bold;">${(data.total_pnl || 0).toFixed(2)}%</div>
+                            <div style="font-size: 0.85em; opacity: 0.9;">Total PnL</div>
                         </div>
                     </div>
-                    <p><strong>Period:</strong> ${data.start_date} → ${data.end_date}</p>
+                    
+                    <!-- Additional Performance Metrics -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 15px 0;">
+                        <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #17a2b8;">
+                            <div style="font-size: 1.4em; font-weight: bold; color: #17a2b8;">${data.win_trades || 0}/${data.lose_trades || 0}</div>
+                            <div style="color: #666; font-size: 0.85em;">Win/Loss</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #6610f2;">
+                            <div style="font-size: 1.4em; font-weight: bold; color: #6610f2;">${(data.avg_win || 0).toFixed(2)}%</div>
+                            <div style="color: #666; font-size: 0.85em;">Avg Win</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #fd7e14;">
+                            <div style="font-size: 1.4em; font-weight: bold; color: #fd7e14;">${(data.avg_loss || 0).toFixed(2)}%</div>
+                            <div style="color: #666; font-size: 0.85em;">Avg Loss</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #20c997;">
+                            <div style="font-size: 1.4em; font-weight: bold; color: #20c997;">${(data.max_drawdown || 0).toFixed(2)}%</div>
+                            <div style="color: #666; font-size: 0.85em;">Max Drawdown</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Risk Metrics -->
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <h5 style="margin-bottom: 10px; color: #495057;"><i class="fas fa-shield-alt"></i> Risk Analysis</h5>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
+                            <div>
+                                <strong>Sharpe Ratio:</strong> <span style="color: #007bff;">${(data.sharpe_ratio || 0).toFixed(3)}</span><br>
+                                <strong>Recovery Factor:</strong> <span style="color: #28a745;">${(data.recovery_factor || 0).toFixed(2)}</span>
+                            </div>
+                            <div>
+                                <strong>Trading Period:</strong><br>
+                                <span style="color: #666;">${data.start_date || 'N/A'} → ${data.end_date || 'N/A'}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             `;
             
-            previewArea.innerHTML = summaryHTML;
+            analysisArea.innerHTML = summaryHTML;
         }
         
         // 🎯 Form Handler & Initialization
@@ -594,7 +712,7 @@
                     // Auto-analyze tradelist when strategy is selected
                     setTimeout(() => {
                         analyzeCurrentTradelist();
-                        getSmartSuggestions();
+                        // getSmartSuggestions(); // Function không tồn tại, đã comment out
                     }, 500);
                 }
             });
@@ -691,6 +809,12 @@
         // 📊 Update Tradelist Summary
         function updateTradelistSummary(data) {
             const summaryDiv = document.getElementById('tradelistSummary');
+            
+            // Kiểm tra element tồn tại trước khi sử dụng
+            if (!summaryDiv) {
+                console.warn('⚠️ Element tradelistSummary không tồn tại');
+                return;
+            }
             
             if (data.data && data.data.length > 0) {
                 const trades = data.data;
@@ -879,14 +1003,16 @@
             const sl_max = parseFloat(document.getElementById('sl_max').value);
             const be_min = parseFloat(document.getElementById('be_min').value);
             const be_max = parseFloat(document.getElementById('be_max').value);
-            const ts_min = parseFloat(document.getElementById('ts_min').value);
-            const ts_max = parseFloat(document.getElementById('ts_max').value);
+            const ts_active_min = parseFloat(document.getElementById('ts_active_min').value);
+            const ts_active_max = parseFloat(document.getElementById('ts_active_max').value);
+            const ts_step_min = parseFloat(document.getElementById('ts_step_min').value);
+            const ts_step_max = parseFloat(document.getElementById('ts_step_max').value);
             
             let warnings = [];
             let errors = [];
             
             // Check basic range validity (critical errors)
-            if (isNaN(sl_min) || isNaN(sl_max) || isNaN(be_min) || isNaN(be_max) || isNaN(ts_min) || isNaN(ts_max)) {
+            if (isNaN(sl_min) || isNaN(sl_max) || isNaN(be_min) || isNaN(be_max) || isNaN(ts_active_min) || isNaN(ts_active_max) || isNaN(ts_step_min) || isNaN(ts_step_max)) {
                 errors.push('❌ All parameters must be valid numbers');
             }
             if (sl_min >= sl_max) errors.push('❌ SL Min phải nhỏ hơn SL Max');
@@ -895,26 +1021,30 @@
             
             // Check logical constraints (warnings - overlaps are OK for optimization testing)
             if (be_min >= sl_max) warnings.push('⚠️ BE Min >= SL Max - có thể không hợp lý');
-            if (ts_min >= be_max) warnings.push('⚠️ TS Min >= BE Max - có thể không hợp lý');
+            if (ts_active_min >= be_max) warnings.push('⚠️ TS Active Min >= BE Max - có thể không hợp lý');
             
             // Check reasonable ranges (warnings)
             if (sl_max > 10) warnings.push('⚠️ SL Max quá cao (>10%)');
             if (sl_min < 0.01) warnings.push('⚠️ SL Min quá thấp (<0.01%)');
-            if (ts_min < 0.001) warnings.push('⚠️ TS Min quá thấp (<0.001%)');
+            if (ts_active_min < 0.001) warnings.push('⚠️ TS Active Min quá thấp (<0.001%)');
+            if (ts_step_min < 0.001) warnings.push('⚠️ TS Step Min quá thấp (<0.001%)');
             if (be_max > 5) warnings.push('⚠️ BE Max quá cao (>5%)');
             
             // Check step sizes
             const sl_step = parseFloat(document.getElementById('sl_step').value);
             const be_step = parseFloat(document.getElementById('be_step').value);
-            const ts_step = parseFloat(document.getElementById('ts_step').value);
+            const ts_active_step = parseFloat(document.getElementById('ts_active_step').value);
+            const ts_step_step = parseFloat(document.getElementById('ts_step_step').value);
             
             if (sl_step <= 0) errors.push('❌ SL Step phải > 0');
             if (be_step <= 0) errors.push('❌ BE Step phải > 0');
-            if (ts_step <= 0) errors.push('❌ TS Step phải > 0');
+            if (ts_active_step <= 0) errors.push('❌ TS Active Step phải > 0');
+            if (ts_step_step <= 0) errors.push('❌ TS Step Step phải > 0');
             
             if (sl_step > (sl_max - sl_min)) warnings.push('⚠️ SL Step quá lớn so với range');
             if (be_step > (be_max - be_min)) warnings.push('⚠️ BE Step quá lớn so với range');
-            if (ts_step > (ts_max - ts_min)) warnings.push('⚠️ TS Step quá lớn so với range');
+            if (ts_active_step > (ts_active_max - ts_active_min)) warnings.push('⚠️ TS Active Step quá lớn so với range');
+            if (ts_step_step > (ts_step_max - ts_step_min)) warnings.push('⚠️ TS Step Step quá lớn so với range');
             
             // Display results
             if (errors.length > 0) {
@@ -945,14 +1075,19 @@
                 const be_max = parseFloat(document.getElementById('be_max').value);
                 const be_step = parseFloat(document.getElementById('be_step').value);
                 
-                const ts_min = parseFloat(document.getElementById('ts_min').value);
-                const ts_max = parseFloat(document.getElementById('ts_max').value);
-                const ts_step = parseFloat(document.getElementById('ts_step').value);
+                const ts_active_min = parseFloat(document.getElementById('ts_active_min').value);
+                const ts_active_max = parseFloat(document.getElementById('ts_active_max').value);
+                const ts_active_step = parseFloat(document.getElementById('ts_active_step').value);
+                
+                const ts_step_min = parseFloat(document.getElementById('ts_step_min').value);
+                const ts_step_max = parseFloat(document.getElementById('ts_step_max').value);
+                const ts_step_step = parseFloat(document.getElementById('ts_step_step').value);
                 
                 // Calculate number of steps for each parameter
                 const sl_steps = Math.floor((sl_max - sl_min) / sl_step) + 1;
                 const be_steps = Math.floor((be_max - be_min) / be_step) + 1;
-                const ts_steps = Math.floor((ts_max - ts_min) / ts_step) + 1;
+                const ts_active_steps = Math.floor((ts_active_max - ts_active_min) / ts_active_step) + 1;
+                const ts_step_steps = Math.floor((ts_step_max - ts_step_min) / ts_step_step) + 1;
                 
                 // Check TP
                 let tp_steps = 1;
@@ -964,7 +1099,7 @@
                     tp_steps = Math.floor((parseFloat(tp_max) - parseFloat(tp_min)) / parseFloat(tp_step_val)) + 1;
                 }
                 
-                const totalCombinations = sl_steps * be_steps * ts_steps * tp_steps;
+                const totalCombinations = sl_steps * be_steps * ts_active_steps * ts_step_steps * tp_steps;
                 const estimatedMinutes = Math.ceil(totalCombinations * 0.5); // Estimate 0.5 seconds per test
                 
                 document.getElementById('totalCombinations').textContent = totalCombinations.toLocaleString();
@@ -1007,9 +1142,13 @@
             document.getElementById('be_max').value = '1.5';
             document.getElementById('be_step').value = '0.05';
             
-            document.getElementById('ts_min').value = '0.1';
-            document.getElementById('ts_max').value = '1.0';
-            document.getElementById('ts_step').value = '0.02';
+            document.getElementById('ts_active_min').value = '0.1';
+            document.getElementById('ts_active_max').value = '1.0';
+            document.getElementById('ts_active_step').value = '0.05';
+            
+            document.getElementById('ts_step_min').value = '0.01';
+            document.getElementById('ts_step_max').value = '0.3';
+            document.getElementById('ts_step_step').value = '0.01';
             
             clearTPRange();
             alert('✅ Đã reset về default ranges!');
@@ -1032,20 +1171,34 @@
             }
             
             try {
+                // Get selected parameters to optimize
+                const selectedParams = Array.from(document.querySelectorAll('input[name="optimize_params"]:checked'))
+                    .map(input => input.value);
+                
+                if (selectedParams.length === 0) {
+                    alert('❌ Vui lòng chọn ít nhất 1 parameter để tối ưu!');
+                    return;
+                }
+                
                 // Get range parameters
                 const params = {
                     strategy: strategySelect.value,
                     candle_data: candleSelect.value,
                     optimization_engine: document.querySelector('input[name="optimization_engine"]:checked').value,
+                    optimization_criteria: document.querySelector('select[name="optimization_criteria"]').value,
+                    selected_params: selectedParams,
                     sl_min: parseFloat(document.getElementById('sl_min').value),
                     sl_max: parseFloat(document.getElementById('sl_max').value),
                     sl_step: parseFloat(document.getElementById('sl_step').value),
                     be_min: parseFloat(document.getElementById('be_min').value),
                     be_max: parseFloat(document.getElementById('be_max').value),
                     be_step: parseFloat(document.getElementById('be_step').value),
-                    ts_min: parseFloat(document.getElementById('ts_min').value),
-                    ts_max: parseFloat(document.getElementById('ts_max').value),
-                    ts_step: parseFloat(document.getElementById('ts_step').value)
+                    ts_active_min: parseFloat(document.getElementById('ts_active_min').value),
+                    ts_active_max: parseFloat(document.getElementById('ts_active_max').value),
+                    ts_active_step: parseFloat(document.getElementById('ts_active_step').value),
+                    ts_step_min: parseFloat(document.getElementById('ts_step_min').value),
+                    ts_step_max: parseFloat(document.getElementById('ts_step_max').value),
+                    ts_step_step: parseFloat(document.getElementById('ts_step_step').value)
                 };
                 
                 // Add TP if specified
@@ -1070,15 +1223,39 @@
                 // Show loading with range info
                 const resultsSection = document.getElementById('resultsSection');
                 resultsSection.style.display = 'block';
+                
+                // Get criteria display name
+                const criteriaNames = {
+                    'pnl': '💰 PnL Total',
+                    'winrate': '🎯 Win Rate', 
+                    'pf': '📈 Profit Factor',
+                    'drawdown': '📉 Minimize Drawdown',
+                    'sharpe': '⚡ Sharpe Ratio',
+                    'recovery': '🔄 Recovery Factor'
+                };
+                const criteriaDisplay = criteriaNames[params.optimization_criteria] || params.optimization_criteria;
+                
+                // Get selected parameters display
+                const paramNames = {
+                    'sl': '📍 Stop Loss',
+                    'be': '🛡️ Break Even',
+                    'ts': '📈 Trailing Stop',
+                    'tp': '🎯 Take Profit'
+                };
+                const selectedParamsDisplay = params.selected_params.map(p => paramNames[p] || p).join(', ');
+                
                 resultsSection.innerHTML = `
                     <div class="card full-width">
                         <h3>⏳ Đang thực hiện optimization với ${params.optimization_engine === 'optuna' ? '🔥 Optuna (AI-Powered)' : '🔍 Grid Search (Brute Force)'}...</h3>
                         <p><strong>Engine:</strong> ${params.optimization_engine === 'optuna' ? 'Optuna - Bayesian Optimization (Thông minh & Nhanh)' : 'Grid Search - Test tất cả combinations (Chậm nhưng đầy đủ)'}</p>
+                        <p><strong>Optimization Target:</strong> ${criteriaDisplay}</p>
+                        <p><strong>Optimizing Parameters:</strong> ${selectedParamsDisplay}</p>
                         <p><strong>Parameter Ranges:</strong></p>
                         <ul style="text-align: left;">
                             <li>SL: ${params.sl_min}% → ${params.sl_max}% (step ${params.sl_step}%)</li>
                             <li>BE: ${params.be_min}% → ${params.be_max}% (step ${params.be_step}%)</li>
-                            <li>TS: ${params.ts_min}% → ${params.ts_max}% (step ${params.ts_step}%)</li>
+                            <li>TS Active: ${params.ts_active_min}% → ${params.ts_active_max}% (step ${params.ts_active_step}%)</li>
+                            <li>TS Step: ${params.ts_step_min}% → ${params.ts_step_max}% (step ${params.ts_step_step}%)</li>
                             ${params.tp_min ? `<li>TP: ${params.tp_min}% → ${params.tp_max}% (step ${params.tp_step}%)</li>` : ''}
                         </ul>
                         <p><strong>Total Combinations:</strong> ${totalCombinations}</p>
