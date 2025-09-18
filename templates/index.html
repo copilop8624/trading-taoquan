@@ -3,6 +3,86 @@
 <head>
     <title>🎯 Backtest Strategy Optimization System</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+// Global safe toFixed function
+function safeToFixed(value, digits = 2) {
+    if (value === null || value === undefined || isNaN(value)) {
+        return '0.' + '0'.repeat(digits);
+    }
+    return Number(value).toFixed(digits);
+}
+
+// Override default toFixed globally
+Number.prototype.originalToFixed = Number.prototype.toFixed;
+Number.prototype.toFixed = function(digits) {
+    try {
+        return this.originalToFixed(digits);
+    } catch (e) {
+        console.error('toFixed error on value:', this, 'digits:', digits);
+        return '0.' + '0'.repeat(digits || 2);
+    }
+};
+
+// Safe property access
+function safeGet(obj, path, defaultValue = 0) {
+    const keys = path.split('.');
+    let current = obj;
+    for (const key of keys) {
+        if (current === null || current === undefined || !(key in current)) {
+            return defaultValue;
+        }
+        current = current[key];
+    }
+    return current === null || current === undefined ? defaultValue : current;
+}
+(function() {
+    'use strict';
+    
+    // Create error display div
+    function createErrorDisplay() {
+        const errorDiv = document.createElement('div');
+        errorDiv.id = 'js-error-display';
+        errorDiv.style.cssText = 'position: fixed; top: 10px; right: 10px; width: 400px; max-height: 300px; overflow-y: auto; background: #ff0000; color: white; padding: 10px; border-radius: 5px; z-index: 10000; font-family: monospace; font-size: 12px; display: none;';
+        document.body.appendChild(errorDiv);
+        return errorDiv;
+    }
+    
+    let errorDisplay = null;
+    
+    function showError(message, source, line, col) {
+        if (!errorDisplay) {
+            errorDisplay = createErrorDisplay();
+        }
+        
+        errorDisplay.style.display = 'block';
+        const timestamp = new Date().toLocaleTimeString();
+        errorDisplay.innerHTML += '<div style="border-bottom: 1px solid #fff; margin-bottom: 5px; padding-bottom: 5px;"><strong>[' + timestamp + ']</strong><br><strong>Error:</strong> ' + message + '<br>' + (source ? '<strong>Source:</strong> ' + source + '<br>' : '') + (line ? '<strong>Line:</strong> ' + line + (col ? ', Col: ' + col : '') + '<br>' : '') + '</div>';
+        errorDisplay.scrollTop = errorDisplay.scrollHeight;
+    }
+    
+    // Override console.error
+    const originalError = console.error;
+    console.error = function() {
+        const args = Array.prototype.slice.call(arguments);
+        showError(args.join(' '));
+        originalError.apply(console, args);
+    };
+    
+    // Global error handler
+    window.onerror = function(message, source, lineno, colno, error) {
+        showError(message, source, lineno, colno);
+        return false;
+    };
+    
+    // Promise rejection handler
+    window.addEventListener('unhandledrejection', function(event) {
+        showError('Unhandled Promise Rejection: ' + event.reason);
+    });
+    
+    console.log('🔍 JavaScript Error Detector Active');
+})();
+    </script>
     <style>
         body { font-family: Arial, sans-serif; margin: 0; background: #f5f5f5; }
         
@@ -116,6 +196,7 @@
         <div class="header">
             <h1>🎯 Backtest Strategy Optimization</h1>
             <p>Tối ưu hóa thông số chiến lược giao dịch với dữ liệu thực</p>
+            <button onclick="testOptimization()" style="background: #ff6b6b; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin: 10px;">🔧 TEST OPTIMIZATION DEBUG</button>
         </div>
         
         <!-- Strategy Selection Grid -->
@@ -184,12 +265,12 @@
                         <h4 style="margin: 0 0 15px 0; color: white;">🧠 Chọn Engine Optimization (QUAN TRỌNG)</h4>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                             <label style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; cursor: pointer; transition: all 0.3s ease;">
-                                <input type="radio" name="optimization_engine" value="optuna" checked style="margin-right: 8px;">
+                                <input type="radio" name="optimization_engine" value="optuna" style="margin-right: 8px;">
                                 <strong>🔥 Optuna (AI-Powered)</strong><br>
                                 <small style="color: #e0e0e0;">Intelligent Bayesian Optimization - Nhanh & Hiệu quả</small>
                             </label>
                             <label style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; cursor: pointer; transition: all 0.3s ease;">
-                                <input type="radio" name="optimization_engine" value="grid_search" style="margin-right: 8px;">
+                                <input type="radio" name="optimization_engine" value="grid_search" checked style="margin-right: 8px;">
                                 <strong>🔍 Grid Search (Brute Force)</strong><br>
                                 <small style="color: #e0e0e0;">Test tất cả combination - Chậm nhưng đầy đủ</small>
                             </label>
@@ -432,7 +513,7 @@
                 </div>
                 
                 <div class="form-group">
-                    <button type="submit" class="btn btn-primary" onclick="startOptimization()">
+                    <button type="button" class="btn btn-primary btn-lg" onclick="startOptimization()" style="padding: 15px 30px; font-size: 18px;">
                         <i class="fas fa-play"></i> Bắt đầu Optimization
                     </button>
                 </div>
@@ -646,15 +727,15 @@
                             <div style="font-size: 0.85em; opacity: 0.9;">Total Trades</div>
                         </div>
                         <div style="background: linear-gradient(135deg, #28a745, #1e7e34); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
-                            <div style="font-size: 1.8em; font-weight: bold;">${(data.win_rate || 0).toFixed(2)}%</div>
+                            <div style="font-size: 1.8em; font-weight: bold;">${safeToFixed(data.win_rate, 2)}%</div>
                             <div style="font-size: 0.85em; opacity: 0.9;">Win Rate</div>
                         </div>
                         <div style="background: linear-gradient(135deg, #ffc107, #e0a800); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
-                            <div style="font-size: 1.8em; font-weight: bold;">${(data.profit_factor || 0).toFixed(2)}</div>
+                            <div style="font-size: 1.8em; font-weight: bold;">${safeToFixed(data.profit_factor, 2)}</div>
                             <div style="font-size: 0.85em; opacity: 0.9;">Profit Factor</div>
                         </div>
                         <div style="background: linear-gradient(135deg, #dc3545, #c82333); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
-                            <div style="font-size: 1.8em; font-weight: bold;">${(data.total_pnl || 0).toFixed(2)}%</div>
+                            <div style="font-size: 1.8em; font-weight: bold;">${safeToFixed(data.total_pnl, 2)}%</div>
                             <div style="font-size: 0.85em; opacity: 0.9;">Total PnL</div>
                         </div>
                     </div>
@@ -666,15 +747,15 @@
                             <div style="color: #666; font-size: 0.85em;">Win/Loss</div>
                         </div>
                         <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #6610f2;">
-                            <div style="font-size: 1.4em; font-weight: bold; color: #6610f2;">${(data.avg_win || 0).toFixed(2)}%</div>
+                            <div style="font-size: 1.4em; font-weight: bold; color: #6610f2;">${safeToFixed(data.avg_win, 2)}%</div>
                             <div style="color: #666; font-size: 0.85em;">Avg Win</div>
                         </div>
                         <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #fd7e14;">
-                            <div style="font-size: 1.4em; font-weight: bold; color: #fd7e14;">${(data.avg_loss || 0).toFixed(2)}%</div>
+                            <div style="font-size: 1.4em; font-weight: bold; color: #fd7e14;">${safeToFixed(data.avg_loss, 2)}%</div>
                             <div style="color: #666; font-size: 0.85em;">Avg Loss</div>
                         </div>
                         <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #20c997;">
-                            <div style="font-size: 1.4em; font-weight: bold; color: #20c997;">${(data.max_drawdown || 0).toFixed(2)}%</div>
+                            <div style="font-size: 1.4em; font-weight: bold; color: #20c997;">${safeToFixed(data.max_drawdown, 2)}%</div>
                             <div style="color: #666; font-size: 0.85em;">Max Drawdown</div>
                         </div>
                     </div>
@@ -684,8 +765,8 @@
                         <h5 style="margin-bottom: 10px; color: #495057;"><i class="fas fa-shield-alt"></i> Risk Analysis</h5>
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
                             <div>
-                                <strong>Sharpe Ratio:</strong> <span style="color: #007bff;">${(data.sharpe_ratio || 0).toFixed(3)}</span><br>
-                                <strong>Recovery Factor:</strong> <span style="color: #28a745;">${(data.recovery_factor || 0).toFixed(2)}</span>
+                                <strong>Sharpe Ratio:</strong> <span style="color: #007bff;">${safeToFixed(data.sharpe_ratio, 3)}</span><br>
+                                <strong>Recovery Factor:</strong> <span style="color: #28a745;">${safeToFixed(data.recovery_factor, 2)}</span>
                             </div>
                             <div>
                                 <strong>Trading Period:</strong><br>
@@ -727,32 +808,130 @@
             }
         });
         
-        // 📈 Display Optimization Results
+        // 📈 Display Enhanced Optimization Results
         function displayOptimizationResults(data) {
             const resultsSection = document.getElementById('resultsSection');
             
+            // Build comprehensive enhanced results HTML
             let resultsHTML = `
                 <div class="card full-width">
-                    <h3>🏆 Optimization Results</h3>
+                    <h3>🏆 Enhanced Optimization Results</h3>
+                    
+                    <!-- Baseline vs Optimized Comparison -->
+                    ${data.baseline_result ? generateBaselineComparisonSection(data) : ''}
+                    
+                    <!-- Quick Stats Overview -->
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0;">
                         <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
-                            <div style="font-size: 2em; font-weight: bold; color: #007bff;">${data.best_result.total_trades}</div>
+                            <div style="font-size: 2em; font-weight: bold; color: #007bff;">${(data.best_result && data.best_result.total_trades) || 0}</div>
                             <div style="color: #666; font-size: 0.9em;">Total Trades</div>
                         </div>
                         <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
-                            <div style="font-size: 2em; font-weight: bold; color: #28a745;">${data.best_result.winrate.toFixed(2)}%</div>
-                            <div style="color: #666; font-size: 0.9em;">Win Rate</div>
+                            <div style="font-size: 2em; font-weight: bold; color: #28a745;">${safeToFixed((data.best_result && data.best_result.winrate) || 0, 2)}%</div>
+                            <div style="color: #666; font-size: 0.9em;">Win Rate (Optimized)</div>
                         </div>
                         <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
-                            <div style="font-size: 2em; font-weight: bold; color: #ffc107;">${data.best_result.pf.toFixed(2)}</div>
+                            <div style="font-size: 2em; font-weight: bold; color: #ffc107;">${safeToFixed((data.best_result && data.best_result.pf) || 0, 2)}</div>
                             <div style="color: #666; font-size: 0.9em;">Profit Factor</div>
                         </div>
                         <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
-                            <div style="font-size: 2em; font-weight: bold; color: #dc3545;">${data.best_result.total_pnl.toFixed(2)}</div>
-                            <div style="color: #666; font-size: 0.9em;">Best PnL</div>
+                            <div style="font-size: 2em; font-weight: bold; color: ${data.improvement_summary && data.improvement_summary.pnl_improvement > 0 ? '#28a745' : '#dc3545'};">${safeToFixed((data.best_result && (data.best_result.pnl_total || data.best_result.total_pnl)) || 0, 2)}%</div>
+                            <div style="color: #666; font-size: 0.9em;">Optimized PnL</div>
+                            ${data.improvement_summary ? `<div style="color: ${data.improvement_summary.pnl_improvement > 0 ? '#28a745' : '#dc3545'}; font-size: 0.8em;">${data.improvement_summary.pnl_improvement > 0 ? '↗️' : '↘️'} ${safeToFixed(data.improvement_summary.pnl_improvement || 0, 2)}%</div>` : ''}
                         </div>
                     </div>
-                    
+            `;
+            
+            // Top 5-10 Results Display
+            if (data.top_results && data.top_results.length > 0) {
+                resultsHTML += generateTopResultsDisplay(data.top_results);
+            }
+            
+            // Best Parameters Table
+            resultsHTML += generateBestParametersTable(data.best_result.parameters);
+            
+            // Trade Comparison Section
+            if (data.trade_comparison && data.trade_comparison.length > 0) {
+                resultsHTML += generateTradeComparisonTable(data.trade_comparison);
+            }
+            
+            resultsHTML += `</div>`;
+            
+            // Cumulative PnL Chart Section
+            if (data.cumulative_comparison && data.cumulative_comparison.labels && data.cumulative_comparison.labels.length > 0) {
+                resultsHTML += generateCumulativePnlChartSection(data.cumulative_comparison);
+            }
+            
+            resultsSection.innerHTML = resultsHTML;
+            
+            // Draw chart after DOM is updated
+            if (data.cumulative_comparison && data.cumulative_comparison.labels && data.cumulative_comparison.labels.length > 0) {
+                setTimeout(() => drawCumulativePnlChart(data.cumulative_comparison), 100);
+            }
+        }
+        
+        // 🏆 Generate Top Results Display
+        function generateTopResultsDisplay(topResults) {
+            const topCount = Math.min(10, topResults.length);
+            let html = `
+                <div style="margin-top: 30px; padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                    <h3 style="color: #333; margin-bottom: 15px;">🥇 Top ${topCount} Optimization Results</h3>
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; min-width: 800px;">
+                            <thead>
+                                <tr style="background: #f8f9fa;">
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">Rank</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">PnL %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">Win Rate</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">Profit Factor</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">Max DD</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">SL %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">BE %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">TS Active %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">TS Step %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            topResults.slice(0, topCount).forEach((result, index) => {
+                const rank = index + 1;
+                const pnlColor = (result.pnl_total || 0) >= 0 ? '#28a745' : '#dc3545';
+                const winRateColor = result.winrate >= 50 ? '#28a745' : '#dc3545';
+                const pfColor = result.pf >= 1.0 ? '#28a745' : '#dc3545';
+                const ddColor = result.max_drawdown <= 20 ? '#28a745' : '#dc3545';
+                
+                const rowColor = rank <= 3 ? (rank === 1 ? '#fff3cd' : rank === 2 ? '#e2e3e5' : '#f8d7da') : '#ffffff';
+                
+                html += `
+                    <tr style="background: ${rowColor};">
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; font-weight: bold;">${rank}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; color: ${pnlColor}; font-weight: bold;">${safeToFixed(result.pnl_total, 2)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; color: ${winRateColor};">${safeToFixed(result.winrate, 2)}%</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; color: ${pfColor};">${safeToFixed(result.pf, 2)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; color: ${ddColor};">${safeToFixed(result.max_drawdown, 2)}%</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.sl || 'N/A'}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.be || 'N/A'}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.ts_active || 'N/A'}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.ts_step || 'N/A'}</td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+        
+        // 📊 Generate Best Parameters Table
+        function generateBestParametersTable(parameters) {
+            let html = `
+                <div style="margin-top: 20px;">
                     <h4>📊 Best Parameters:</h4>
                     <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                         <thead>
@@ -764,17 +943,378 @@
                         <tbody>
             `;
             
-            Object.entries(data.best_result.parameters).forEach(([key, value]) => {
-                resultsHTML += `<tr><td style="padding: 12px; border-bottom: 1px solid #e1e5e9;">${key}</td><td style="padding: 12px; border-bottom: 1px solid #e1e5e9;">${value}</td></tr>`;
+            Object.entries(parameters).forEach(([key, value]) => {
+                html += `<tr><td style="padding: 12px; border-bottom: 1px solid #e1e5e9;">${key}</td><td style="padding: 12px; border-bottom: 1px solid #e1e5e9;">${value}</td></tr>`;
             });
             
-            resultsHTML += `
+            html += `
                         </tbody>
                     </table>
                 </div>
             `;
             
-            resultsSection.innerHTML = resultsHTML;
+            return html;
+        }
+        
+        // 📈 Generate Trade Comparison Table
+        function generateTradeComparisonTable(tradeComparison) {
+            const recentTrades = tradeComparison.slice(-50); // Get last 50 trades
+            
+            let html = `
+                <div style="margin-top: 30px; padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                    <h3 style="color: #333; margin-bottom: 15px;">📊 Recent Trades Comparison (Last ${recentTrades.length} trades)</h3>
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; min-width: 1000px;">
+                            <thead>
+                                <tr style="background: #f8f9fa;">
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Trade #</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Entry Time</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Side</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Entry Price</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Original Exit</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Original Type</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Original PnL %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Optimized Exit</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Optimized Type</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Optimized PnL %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Improvement</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            recentTrades.forEach(trade => {
+                const baselinePnlColor = trade.baseline_pnl >= 0 ? '#28a745' : '#dc3545';
+                const optimizedPnlColor = trade.optimized_pnl >= 0 ? '#28a745' : '#dc3545';
+                const improvementColor = trade.improvement >= 0 ? '#28a745' : '#dc3545';
+                const rowColor = trade.improvement > 0 ? '#e8f5e8' : (trade.improvement < 0 ? '#ffe8e8' : '#ffffff');
+                
+                // Exit type color function
+                const getExitTypeColor = (exitType) => {
+                    if (exitType.includes('SL')) return '#dc3545';
+                    if (exitType.includes('BE')) return '#ffc107';
+                    if (exitType.includes('TS')) return '#17a2b8';
+                    return '#6c757d';
+                };
+                
+                // Dynamic price formatting
+                const formatPrice = (price) => {
+                    if (price < 0.01) return price.toFixed(6);
+                    else if (price < 1) return price.toFixed(4);
+                    else if (price < 100) return price.toFixed(2);
+                    else return price.toFixed(0);
+                };
+                
+                html += `
+                    <tr style="background: ${rowColor};">
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; font-weight: bold;">${trade.trade_num}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${trade.entry_time}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; font-weight: bold; color: ${trade.side === 'LONG' ? '#28a745' : '#dc3545'};">${trade.side}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${formatPrice(trade.entry_price)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${formatPrice(trade.baseline_exit_price)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${getExitTypeColor(trade.baseline_exit_type)}; font-weight: bold;">${trade.baseline_exit_type}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${baselinePnlColor}; font-weight: bold;">${safeToFixed(trade.baseline_pnl, 2)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${formatPrice(trade.optimized_exit_price)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${getExitTypeColor(trade.optimized_exit_type)}; font-weight: bold;">${trade.optimized_exit_type}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${optimizedPnlColor}; font-weight: bold;">${safeToFixed(trade.optimized_pnl, 2)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${improvementColor}; font-weight: bold;">${(trade.improvement || 0) > 0 ? '+' : ''}${safeToFixed(trade.improvement, 2)}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table></div>';
+            
+            // Add improvement statistics
+            const improvedTrades = tradeComparison.filter(t => t.improvement > 0).length;
+            const worsenedTrades = tradeComparison.filter(t => t.improvement < 0).length;
+            const unchangedTrades = tradeComparison.filter(t => t.improvement === 0).length;
+            const avgImprovement = tradeComparison.reduce((sum, t) => sum + t.improvement, 0) / tradeComparison.length;
+            
+            html += `
+                <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <strong>📈 Trade Improvement Statistics:</strong><br>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;">
+                        <div>✅ Improved: <span style="color: #28a745; font-weight: bold;">${improvedTrades} trades</span></div>
+                        <div>❌ Worsened: <span style="color: #dc3545; font-weight: bold;">${worsenedTrades} trades</span></div>
+                        <div>➖ Unchanged: <span style="color: #6c757d; font-weight: bold;">${unchangedTrades} trades</span></div>
+                        <div>📊 Average: <span style="color: ${(avgImprovement || 0) >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">${(avgImprovement || 0) > 0 ? '+' : ''}${safeToFixed(avgImprovement, 2)}%</span></div>
+                    </div>
+                </div>
+            </div>`;
+            
+            return html;
+        }
+        
+        // 📈 Generate Cumulative PnL Chart Section
+        function generateCumulativePnlChartSection(cumulativeData) {
+            return `
+                <div style="margin-top: 30px; padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                    <h3 style="color: #333; margin-bottom: 15px;">📈 Cumulative PnL Comparison Chart</h3>
+                    <canvas id="cumulativePnlChart" width="800" height="400" style="max-width: 100%; height: 400px;"></canvas>
+                    <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.9em;">
+                        <strong>📊 Legend:</strong><br>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-top: 8px;">
+                            <div><span style="color: #dc3545; font-weight: bold;">●</span> ${cumulativeData.baseline_label || 'Original Results'}</div>
+                            <div><span style="color: #28a745; font-weight: bold;">●</span> ${cumulativeData.optimized_label || 'Optimized Results'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // � Generate Baseline vs Optimized Comparison Section
+        function generateBaselineComparisonSection(data) {
+            const baseline = data.baseline_result;
+            const optimized = data.best_result;
+            const improvement = data.improvement_summary;
+            
+            if (!baseline || !optimized || !improvement) return '';
+            
+            return `
+                <div style="margin-bottom: 30px; padding: 20px; background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 10px; border: 2px solid #28a745;">
+                    <h3 style="color: #333; margin-bottom: 20px; text-align: center;">🔄 BASELINE vs OPTIMIZED COMPARISON</h3>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center;">
+                        <!-- Baseline Results -->
+                        <div style="background: white; padding: 20px; border-radius: 8px; border: 2px solid #dc3545;">
+                            <h4 style="color: #dc3545; text-align: center; margin-bottom: 15px;">📊 BASELINE Strategy</h4>
+                            <div style="text-align: center;">
+                                <div style="margin: 10px 0;">
+                                    <strong>PnL:</strong> <span style="color: #dc3545; font-size: 1.2em;">${safeToFixed(baseline.pnl_total, 2)}%</span>
+                                </div>
+                                <div style="margin: 10px 0;">
+                                    <strong>Win Rate:</strong> <span style="color: #dc3545;">${safeToFixed(baseline.winrate, 1)}%</span>
+                                </div>
+                                <div style="margin: 10px 0;">
+                                    <strong>Profit Factor:</strong> <span style="color: #dc3545;">${safeToFixed(baseline.pf, 2)}</span>
+                                </div>
+                                <div style="margin: 15px 0; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
+                                    SL: ${baseline.parameters?.sl || 'N/A'}% | BE: ${baseline.parameters?.be || 'N/A'}% | TS: ${baseline.parameters?.ts_active || 'N/A'}%
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Improvement Arrow -->
+                        <div style="text-align: center; font-size: 2em;">
+                            <div style="color: #28a745; font-weight: bold;">➡️</div>
+                            <div style="font-size: 0.4em; color: #28a745; font-weight: bold; margin-top: 5px;">
+                                ${(improvement.pnl_improvement || 0) > 0 ? 'IMPROVED' : 'DECREASED'}
+                            </div>
+                            <div style="font-size: 0.3em; color: ${(improvement.pnl_improvement || 0) > 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
+                                ${(improvement.pnl_improvement || 0) > 0 ? '+' : ''}${safeToFixed(improvement.pnl_improvement, 2)}%
+                            </div>
+                        </div>
+                        
+                        <!-- Optimized Results -->
+                        <div style="background: white; padding: 20px; border-radius: 8px; border: 2px solid #28a745;">
+                            <h4 style="color: #28a745; text-align: center; margin-bottom: 15px;">🚀 OPTIMIZED Strategy</h4>
+                            <div style="text-align: center;">
+                                <div style="margin: 10px 0;">
+                                    <strong>PnL:</strong> <span style="color: #28a745; font-size: 1.2em;">${safeToFixed(optimized?.pnl_total, 2)}%</span>
+                                </div>
+                                <div style="margin: 10px 0;">
+                                    <strong>Win Rate:</strong> <span style="color: #28a745;">${(optimized?.winrate || 0).toFixed(1)}%</span>
+                                </div>
+                                <div style="margin: 10px 0;">
+                                    <strong>Profit Factor:</strong> <span style="color: #28a745;">${(optimized?.pf || 0).toFixed(2)}</span>
+                                </div>
+                                <div style="margin: 15px 0; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
+                                    SL: ${(optimized.parameters?.sl || 0).toFixed(1)}% | BE: ${(optimized.parameters?.be || 0).toFixed(1)}% | TS: ${(optimized.parameters?.ts_active || 0).toFixed(1)}%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Improvement Summary -->
+                    <div style="margin-top: 20px; padding: 15px; background: white; border-radius: 8px; text-align: center; border: 1px solid #ddd;">
+                        <h4 style="color: #333; margin-bottom: 10px;">📈 IMPROVEMENT SUMMARY</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div>
+                                <strong>PnL Improvement:</strong><br>
+                                <span style="color: ${improvement.pnl_improvement > 0 ? '#28a745' : '#dc3545'}; font-size: 1.2em; font-weight: bold;">
+                                    ${(improvement?.pnl_improvement || 0) > 0 ? '+' : ''}${(improvement?.pnl_improvement || 0).toFixed(2)}%
+                                </span>
+                            </div>
+                            <div>
+                                <strong>Win Rate Change:</strong><br>
+                                <span style="color: ${improvement.winrate_improvement > 0 ? '#28a745' : '#dc3545'}; font-size: 1.2em; font-weight: bold;">
+                                    ${(improvement?.winrate_improvement || 0) > 0 ? '+' : ''}${(improvement?.winrate_improvement || 0).toFixed(1)}%
+                                </span>
+                            </div>
+                            <div>
+                                <strong>Relative Improvement:</strong><br>
+                                <span style="color: ${improvement.pnl_improvement_pct > 0 ? '#28a745' : '#dc3545'}; font-size: 1.2em; font-weight: bold;">
+                                    ${(improvement?.pnl_improvement_pct || 0) > 0 ? '+' : ''}${(improvement?.pnl_improvement_pct || 0).toFixed(1)}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // �📊 Draw Cumulative PnL Chart using Canvas
+        function drawCumulativePnlChart(cumulativeData) {
+            const canvas = document.getElementById('cumulativePnlChart');
+            if (!canvas) {
+                console.error('Canvas element not found');
+                return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+            
+            const { labels, baseline_cumulative, optimized_cumulative } = cumulativeData;
+            
+            if (!labels || labels.length === 0) return;
+            
+            // Calculate min/max values for scaling
+            const allValues = [...(baseline_cumulative || []), ...(optimized_cumulative || [])];
+            const minValue = Math.min(...allValues, 0);
+            const maxValue = Math.max(...allValues, 0);
+            const valueRange = maxValue - minValue;
+            
+            // Margins
+            const margin = { top: 20, right: 80, bottom: 60, left: 80 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            // Helper functions
+            const xScale = (index) => margin.left + (index / (labels.length - 1)) * chartWidth;
+            const yScale = (value) => margin.top + ((maxValue - value) / valueRange) * chartHeight;
+            
+            // Draw grid
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            
+            // Horizontal grid lines
+            for (let i = 0; i <= 5; i++) {
+                const value = minValue + (valueRange * i / 5);
+                const y = yScale(value);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, y);
+                ctx.lineTo(margin.left + chartWidth, y);
+                ctx.stroke();
+                
+                // Y-axis labels
+                ctx.fillStyle = '#666';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText((value || 0).toFixed(1) + '%', margin.left - 10, y + 4);
+            }
+            
+            // Draw zero line
+            if (minValue <= 0 && maxValue >= 0) {
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                const zeroY = yScale(0);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, zeroY);
+                ctx.lineTo(margin.left + chartWidth, zeroY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // Draw baseline line (red)
+            if (baseline_cumulative && baseline_cumulative.length > 0) {
+                ctx.strokeStyle = '#dc3545';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = 0; i < baseline_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(baseline_cumulative[i]);
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+                
+                // Draw points
+                ctx.fillStyle = '#dc3545';
+                for (let i = 0; i < baseline_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(baseline_cumulative[i]);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+            
+            // Draw optimized line (green)
+            if (optimized_cumulative && optimized_cumulative.length > 0) {
+                ctx.strokeStyle = '#28a745';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = 0; i < optimized_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(optimized_cumulative[i]);
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+                
+                // Draw points
+                ctx.fillStyle = '#28a745';
+                for (let i = 0; i < optimized_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(optimized_cumulative[i]);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+            
+            // Draw axes
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            // Y-axis
+            ctx.moveTo(margin.left, margin.top);
+            ctx.lineTo(margin.left, margin.top + chartHeight);
+            // X-axis
+            ctx.moveTo(margin.left, margin.top + chartHeight);
+            ctx.lineTo(margin.left + chartWidth, margin.top + chartHeight);
+            ctx.stroke();
+            
+            // Chart title
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Cumulative PnL Comparison (%)', width / 2, 20);
+            
+            // Final values display
+            if (baseline_cumulative && baseline_cumulative.length > 0) {
+                const finalBaseline = baseline_cumulative[baseline_cumulative.length - 1];
+                ctx.fillStyle = '#dc3545';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Original: ${(finalBaseline || 0).toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 20);
+            }
+            
+            if (optimized_cumulative && optimized_cumulative.length > 0) {
+                const finalOptimized = optimized_cumulative[optimized_cumulative.length - 1];
+                ctx.fillStyle = '#28a745';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Optimized: ${finalOptimized.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 40);
+                
+                // Show improvement
+                if (baseline_cumulative && baseline_cumulative.length > 0) {
+                    const improvement = finalOptimized - baseline_cumulative[baseline_cumulative.length - 1];
+                    ctx.fillStyle = improvement >= 0 ? '#28a745' : '#dc3545';
+                    ctx.fillText(`Improvement: ${improvement >= 0 ? '+' : ''}${improvement.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 60);
+                }
+            }
         }
         
         // 📈 Analyze Current Tradelist
@@ -1278,12 +1818,66 @@
                 });
                 
                 const result = await response.json();
-                console.log('Range Optimization result:', result);
+                
+                // 🔍 COMPREHENSIVE DEBUG LOGGING
+                console.log('🎯 Optimization result:', result);
+                console.log('🔍 Result type:', typeof result);
+                console.log('🔍 Result keys:', Object.keys(result || {}));
+                
+                // Check main data structure
+                if (result && result.data) {
+                    console.log('🔍 Result.data type:', typeof result.data);
+                    console.log('🔍 Result.data is array:', Array.isArray(result.data));
+                    if (Array.isArray(result.data) && result.data.length > 0) {
+                        console.log('🔍 First result item:', result.data[0]);
+                        console.log('🔍 First result keys:', Object.keys(result.data[0] || {}));
+                    }
+                }
+                
+                // Check for undefined/null values that might cause toFixed errors
+                function debugCheckObject(obj, path = '') {
+                    if (obj === null) {
+                        console.error(`❌ NULL VALUE at ${path}`);
+                        return;
+                    }
+                    if (obj === undefined) {
+                        console.error(`❌ UNDEFINED VALUE at ${path}`);
+                        return;
+                    }
+                    if (typeof obj === 'object' && !Array.isArray(obj)) {
+                        Object.keys(obj).forEach(key => {
+                            const newPath = path ? `${path}.${key}` : key;
+                            debugCheckObject(obj[key], newPath);
+                        });
+                    } else if (Array.isArray(obj)) {
+                        obj.forEach((item, index) => {
+                            debugCheckObject(item, `${path}[${index}]`);
+                        });
+                    }
+                }
+                
+                debugCheckObject(result, 'result');
                 
                 if (result.success) {
-                    displayRangeOptimizationResults(result.data);
+                    // Use the correct data structure from the enhanced API response
+                    console.log('🎯 Full result structure:', result);
+                    console.log('🎯 Results data:', result.data);
+                    
+                    if (result.data && Array.isArray(result.data)) {
+                        // Pass the full result object containing comparison data
+                        displayRangeOptimizationResults(result);
+                    } else {
+                        console.error('❌ Invalid result structure:', result);
+                        alert('❌ Invalid optimization results format');
+                    }
+                    
+                    // Scroll to results
+                    setTimeout(() => {
+                        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+                    }, 500);
+                    
                 } else {
-                    resultsSection.innerHTML = `<div class="card full-width"><h3 style="color: red;">❌ Range Optimization Failed</h3><p>${result.error}</p></div>`;
+                    resultsSection.innerHTML = `<div class="card full-width"><h3 style="color: red;">❌ Optimization Failed</h3><p>${result.error}</p></div>`;
                 }
             } catch (error) {
                 console.error('❌ Range Optimization error:', error);
@@ -1292,8 +1886,11 @@
             }
         }
         
-        // 📊 Display Range Optimization Results
-        function displayRangeOptimizationResults(results) {
+        // 📊 Display Range Optimization Results with Enhanced Comparison
+        function displayRangeOptimizationResults(data) {
+            // Handle both array of results and full response data structure
+            let results = Array.isArray(data) ? data : data.data || [];
+            
             if (!results || results.length === 0) {
                 document.getElementById('resultsSection').innerHTML = `
                     <div class="card full-width">
@@ -1304,6 +1901,9 @@
                 return;
             }
             
+            // Extract comparison data if available (when data is object with full response)
+            const comparisonData = data.baseline_result ? data : null;
+            
             // Sort by performance metric (total profit)
             results.sort((a, b) => (b.total_profit || 0) - (a.total_profit || 0));
             
@@ -1312,6 +1912,58 @@
             let resultsHTML = `
                 <div class="card full-width">
                     <h3>🏆 Range Optimization Results</h3>
+                    
+                    ${comparisonData ? `
+                    <!-- ====== BASELINE vs OPTIMIZED COMPARISON ====== -->
+                    <div style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border: 2px solid #6c757d; border-radius: 12px; padding: 20px; margin: 15px 0;">
+                        <h4 style="margin: 0 0 15px 0; color: #495057; text-align: center;">📊 BASELINE vs OPTIMIZED COMPARISON</h4>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 15px 0;">
+                            <!-- Baseline Results -->
+                            <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 15px;">
+                                <h5 style="margin: 0 0 10px 0; color: #856404; text-align: center;">📈 Original Tradelist (Baseline)</h5>
+                                <div style="display: grid; gap: 8px;">
+                                    <div><strong>Total PnL:</strong> <span style="color: ${(comparisonData.baseline_result.pnl_total || 0) >= 0 ? '#28a745' : '#dc3545'}; font-size: 1.1em;">${(comparisonData.baseline_result.pnl_total || 0).toFixed(2)}%</span></div>
+                                    <div><strong>Win Rate:</strong> ${(comparisonData.baseline_result?.winrate || 0).toFixed(1)}%</div>
+                                    <div><strong>Total Trades:</strong> ${comparisonData.baseline_result.total_trades}</div>
+                                    <div><strong>Profit Factor:</strong> ${(comparisonData.baseline_result?.pf || 0).toFixed(2)}</div>
+                                    <div style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; font-size: 0.9em;">
+                                        <strong>Parameters:</strong> ${comparisonData.baseline_result?.parameters?.sl || 'N/A'}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Optimized Results -->
+                            <div style="background: #d4edda; border: 2px solid #28a745; border-radius: 8px; padding: 15px;">
+                                <h5 style="margin: 0 0 10px 0; color: #155724; text-align: center;">🚀 Optimized Strategy</h5>
+                                <div style="display: grid; gap: 8px;">
+                                    <div><strong>Total PnL:</strong> <span style="color: ${(comparisonData.best_result.pnl_total || 0) >= 0 ? '#28a745' : '#dc3545'}; font-size: 1.1em;">${(comparisonData.best_result.pnl_total || 0).toFixed(2)}%</span></div>
+                                    <div><strong>Win Rate:</strong> ${(comparisonData.best_result?.winrate || 0).toFixed(1)}%</div>
+                                    <div><strong>Total Trades:</strong> ${comparisonData.best_result.total_trades}</div>
+                                    <div><strong>Profit Factor:</strong> ${(comparisonData.best_result?.pf || 0).toFixed(2)}</div>
+                                    <div style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; font-size: 0.9em;">
+                                        <strong>SL:</strong> ${((comparisonData.best_result?.parameters?.sl || 0) * 100).toFixed(2)}% 
+                                        <strong>BE:</strong> ${((comparisonData.best_result?.parameters?.be || 0) * 100).toFixed(2)}% 
+                                        <strong>TS:</strong> ${((comparisonData.best_result?.parameters?.ts_active || 0) * 100).toFixed(2)}%
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Improvement Summary -->
+                        <div style="background: ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '#d4edda' : '#f8d7da'}; border: 2px solid ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '#28a745' : '#dc3545'}; border-radius: 8px; padding: 15px; margin: 15px 0;">
+                            <h5 style="margin: 0 0 10px 0; text-align: center; color: ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '#155724' : '#721c24'};">
+                                ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '📈 IMPROVEMENT ACHIEVED' : '📉 PERFORMANCE DECLINE'}
+                            </h5>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                                <div><strong>PnL Improvement:</strong> <span style="color: ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '#28a745' : '#dc3545'}; font-size: 1.1em; font-weight: bold;">${comparisonData.improvement_summary.pnl_improvement >= 0 ? '+' : ''}${comparisonData.improvement_summary.pnl_improvement.toFixed(2)}%</span></div>
+                                <div><strong>Win Rate Change:</strong> <span style="color: ${comparisonData.improvement_summary.winrate_improvement >= 0 ? '#28a745' : '#dc3545'};">${comparisonData.improvement_summary.winrate_improvement >= 0 ? '+' : ''}${comparisonData.improvement_summary.winrate_improvement.toFixed(1)}%</span></div>
+                                <div><strong>PF Change:</strong> <span style="color: ${comparisonData.improvement_summary.pf_improvement >= 0 ? '#28a745' : '#dc3545'};">${comparisonData.improvement_summary.pf_improvement >= 0 ? '+' : ''}${comparisonData.improvement_summary.pf_improvement.toFixed(2)}</span></div>
+                                <div><strong>Relative Improvement:</strong> <span style="color: ${comparisonData.improvement_summary.relative_improvement >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">${comparisonData.improvement_summary.relative_improvement >= 0 ? '+' : ''}${comparisonData.improvement_summary.relative_improvement.toFixed(1)}%</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
                     
                     <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin: 15px 0;">
                         <h4>🥇 Best Parameters Found:</h4>
@@ -1401,6 +2053,73 @@
                         </div>
                     </div>
                     
+                    ${comparisonData && comparisonData.cumulative_comparison ? `
+                    <!-- ====== CUMULATIVE PnL CHART ====== -->
+                    <div style="background: #f8f9fa; border: 2px solid #6c757d; border-radius: 8px; padding: 20px; margin: 15px 0;">
+                        <h4 style="margin: 0 0 15px 0; text-align: center;">📈 Cumulative PnL Comparison</h4>
+                        <canvas id="cumulativePnlChart" width="800" height="400" style="max-width: 100%; height: 400px; background: white; border-radius: 4px;"></canvas>
+                        <div style="margin-top: 15px; padding: 10px; background: #e9ecef; border-radius: 6px; font-size: 0.9em; text-align: center;">
+                            <strong>📊 Chart Legend:</strong><br>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-top: 8px;">
+                                <div><span style="color: #ffc107; font-weight: bold;">●</span> ${comparisonData.cumulative_comparison.baseline_label || 'Original Tradelist Results'}</div>
+                                <div><span style="color: #28a745; font-weight: bold;">●</span> ${comparisonData.cumulative_comparison.optimized_label || 'Optimized Strategy Results'}</div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    ${comparisonData && comparisonData.trade_comparison ? `
+                    <!-- ====== TRADE-BY-TRADE COMPARISON TABLE ====== -->
+                    <div style="background: #f8f9fa; border: 2px solid #6c757d; border-radius: 8px; padding: 20px; margin: 15px 0;">
+                        <h4 style="margin: 0 0 15px 0; text-align: center;">🔍 Trade-by-Trade Comparison (First 20 trades)</h4>
+                        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+                            <table style="width: 100%; font-size: 0.8em; border-collapse: collapse; background: white;">
+                                <thead style="position: sticky; top: 0; background: #e9ecef;">
+                                    <tr>
+                                        <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Trade #</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Entry Price</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Baseline Exit</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Baseline PnL</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Optimized Exit</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Optimized PnL</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Improvement</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Exit Type</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tradeComparisonTableBody">
+                                    ${comparisonData.trade_comparison.slice(0, 20).map((trade, index) => {
+                                        const baselinePnlClass = trade.baseline_pnl >= 0 ? 'text-success' : 'text-danger';
+                                        const optimizedPnlClass = trade.optimized_pnl >= 0 ? 'text-success' : 'text-danger';
+                                        const improvementClass = trade.improvement >= 0 ? 'text-success' : 'text-danger';
+                                        const bgColor = trade.improvement > 0 ? '#d4edda' : (trade.improvement < 0 ? '#f8d7da' : 'white');
+                                        
+                                        return `
+                                        <tr style="background: ${bgColor};">
+                                            <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-weight: bold;">${index + 1}</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;">$${trade.entry_price.toFixed(2)}</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;">$${trade.baseline_exit_price.toFixed(2)} (${trade.baseline_exit_type})</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;" class="${baselinePnlClass}">${trade.baseline_pnl.toFixed(2)}%</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;">$${trade.optimized_exit_price.toFixed(2)} (${trade.optimized_exit_type})</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;" class="${optimizedPnlClass}">${trade.optimized_pnl.toFixed(2)}%</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;" class="${improvementClass}">${trade.improvement >= 0 ? '+' : ''}${trade.improvement.toFixed(2)}%</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;"><span class="badge ${trade.optimized_exit_type === 'TS' ? 'badge-success' : (trade.optimized_exit_type === 'BE' ? 'badge-warning' : 'badge-danger')}">${trade.optimized_exit_type}</span></td>
+                                        </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style="margin-top: 10px; padding: 10px; background: #e9ecef; border-radius: 4px; font-size: 0.85em; text-align: center;">
+                            <strong>📋 Legend:</strong> 
+                            <span class="badge badge-success">TS</span> = Trailing Stop | 
+                            <span class="badge badge-warning">BE</span> = Break Even | 
+                            <span class="badge badge-danger">SL</span> = Stop Loss |
+                            <span style="color: #28a745;">Green rows</span> = Improved trades | 
+                            <span style="color: #dc3545;">Red rows</span> = Worse trades
+                        </div>
+                    </div>
+                    ` : ''}
+                    
                     <div style="margin-top: 15px; text-align: center;">
                         <button class="btn btn-success" onclick="applyCombination(${topResult.sl}, ${topResult.be}, ${topResult.ts}, ${topResult.tp || 'null'})">
                             <i class="fas fa-star"></i> Use Best Parameters
@@ -1416,6 +2135,159 @@
             `;
             
             document.getElementById('resultsSection').innerHTML = resultsHTML;
+            
+            // Draw cumulative PnL chart if comparison data exists
+            if (comparisonData && comparisonData.cumulative_comparison && comparisonData.cumulative_comparison.labels) {
+                drawCumulativePnlChart(comparisonData.cumulative_comparison);
+            }
+        }
+        
+        // 📈 Draw Cumulative PnL Chart
+        function drawCumulativePnlChart(cumulativeData) {
+            const canvas = document.getElementById('cumulativePnlChart');
+            if (!canvas) {
+                console.error('Canvas element not found');
+                return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+            
+            const { labels, baseline_cumulative, optimized_cumulative } = cumulativeData;
+            
+            if (!labels || labels.length === 0) {
+                ctx.fillStyle = '#6c757d';
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('No data available for chart', width / 2, height / 2);
+                return;
+            }
+            
+            // Calculate chart dimensions
+            const margin = { left: 60, right: 20, top: 40, bottom: 40 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            // Get all values for scaling
+            const allValues = [...(baseline_cumulative || []), ...(optimized_cumulative || [])];
+            const minValue = Math.min(...allValues, 0);
+            const maxValue = Math.max(...allValues, 0);
+            const valueRange = maxValue - minValue || 1;
+            
+            // Draw grid lines
+            ctx.strokeStyle = '#e9ecef';
+            ctx.lineWidth = 1;
+            
+            // Horizontal grid lines
+            for (let i = 0; i <= 5; i++) {
+                const y = margin.top + (chartHeight * i) / 5;
+                ctx.beginPath();
+                ctx.moveTo(margin.left, y);
+                ctx.lineTo(margin.left + chartWidth, y);
+                ctx.stroke();
+                
+                // Y-axis labels
+                const value = maxValue - (valueRange * i) / 5;
+                ctx.fillStyle = '#6c757d';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(value.toFixed(1) + '%', margin.left - 5, y + 4);
+            }
+            
+            // Vertical grid lines
+            const stepX = chartWidth / (labels.length - 1 || 1);
+            for (let i = 0; i < labels.length; i += Math.ceil(labels.length / 10)) {
+                const x = margin.left + i * stepX;
+                ctx.beginPath();
+                ctx.moveTo(x, margin.top);
+                ctx.lineTo(x, margin.top + chartHeight);
+                ctx.stroke();
+            }
+            
+            // Draw baseline line
+            if (baseline_cumulative && baseline_cumulative.length > 0) {
+                ctx.strokeStyle = '#ffc107';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                
+                for (let i = 0; i < baseline_cumulative.length; i++) {
+                    const x = margin.left + (i * chartWidth) / (labels.length - 1 || 1);
+                    const y = margin.top + chartHeight - ((baseline_cumulative[i] - minValue) / valueRange) * chartHeight;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            }
+            
+            // Draw optimized line
+            if (optimized_cumulative && optimized_cumulative.length > 0) {
+                ctx.strokeStyle = '#28a745';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                
+                for (let i = 0; i < optimized_cumulative.length; i++) {
+                    const x = margin.left + (i * chartWidth) / (labels.length - 1 || 1);
+                    const y = margin.top + chartHeight - ((optimized_cumulative[i] - minValue) / valueRange) * chartHeight;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            }
+            
+            // Draw zero line
+            if (minValue < 0 && maxValue > 0) {
+                ctx.strokeStyle = '#6c757d';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                const zeroY = margin.top + chartHeight - ((0 - minValue) / valueRange) * chartHeight;
+                ctx.beginPath();
+                ctx.moveTo(margin.left, zeroY);
+                ctx.lineTo(margin.left + chartWidth, zeroY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // Chart title
+            ctx.fillStyle = '#495057';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Cumulative PnL Comparison (%)', width / 2, 25);
+            
+            // Final values display
+            if (baseline_cumulative && baseline_cumulative.length > 0) {
+                const finalBaseline = baseline_cumulative[baseline_cumulative.length - 1];
+                ctx.fillStyle = '#ffc107';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Baseline: ${finalBaseline.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 20);
+            }
+            
+            if (optimized_cumulative && optimized_cumulative.length > 0) {
+                const finalOptimized = optimized_cumulative[optimized_cumulative.length - 1];
+                ctx.fillStyle = '#28a745';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Optimized: ${finalOptimized.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 40);
+                
+                // Show improvement
+                if (baseline_cumulative && baseline_cumulative.length > 0) {
+                    const improvement = finalOptimized - baseline_cumulative[baseline_cumulative.length - 1];
+                    ctx.fillStyle = improvement >= 0 ? '#28a745' : '#dc3545';
+                    ctx.fillText(`Improvement: ${improvement >= 0 ? '+' : ''}${improvement.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 60);
+                }
+            }
         }
         
         // 📋 Apply Combination to Form
@@ -1491,7 +2363,116 @@
             setTimeout(calculateCombinations, 500);
         });
         
-        // 🎯 Set Focus and Initialize
+        // � Test Enhanced Visualization Function
+        async function demoEnhancedVisualization() {
+            const confirmed = confirm(
+                '🎨 DEMO GIAO DIỆN MỚI\n\n' +
+                'Đây chỉ là demo với dữ liệu mẫu để xem giao diện mới.\n' +
+                'Để có kết quả thực tế, bạn cần chạy "Bắt đầu Optimization" trước.\n\n' +
+                'Bạn có muốn xem demo không?'
+            );
+            
+            if (!confirmed) return;
+            
+            try {
+                console.log('🎨 Demo Enhanced Visualization with Mock Data...');
+                
+                const response = await fetch('/test_enhanced_visualization', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('✅ Mock visualization data received:', data);
+                
+                // Show results section and populate with enhanced visualization
+                const resultsSection = document.getElementById('resultsSection');
+                resultsSection.style.display = 'block';
+                
+                // Call the enhanced display function
+                displayOptimizationResults(data);
+                
+                // Scroll to results
+                resultsSection.scrollIntoView({ behavior: 'smooth' });
+                
+                alert('✅ Demo hoàn thành!\n\nLưu ý: Đây là dữ liệu mẫu, không phải kết quả thực tế.\nĐể có kết quả thật, hãy chạy "Bắt đầu Optimization".');
+                
+            } catch (error) {
+                console.error('❌ Demo error:', error);
+                alert('❌ Demo thất bại: ' + error.message);
+            }
+        }
+        
+        // 🚀 Test Real Optimization Function
+        async function testRealOptimization() {
+            if (!confirm('🚀 TEST OPTIMIZATION THỰC\n\n' +
+                      'Sẽ chạy optimization với dữ liệu thực có sẵn:\n' +
+                      '• Trade data: sample_trades_TEST.csv\n' +
+                      '• Candle data: BTCUSDT 30m từ database\n\n' +
+                      'Kết quả sẽ hiển thị so sánh TRƯỚC/SAU optimization thực.\n\n' +
+                      'Tiếp tục?')) {
+                return;
+            }
+            
+            showLoading();
+            hideResults();
+            
+            try {
+                console.log('🚀 Testing Real Optimization with Actual Data...');
+                
+                const response = await fetch('/test_real_optimization', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    console.log('✅ Real optimization test completed!');
+                    console.log(`📊 Processed ${data.real_data_info.total_trades} real trades`);
+                    console.log(`📈 Baseline PnL: ${(data.real_data_info.baseline_pnl_total || 0).toFixed(2)}%`);
+                    
+                    // Display results with enhanced visualization
+                    displayOptimizationResults(data);
+                    
+                    // Show real data info alert
+                    setTimeout(() => {
+                        alert(`✅ REAL OPTIMIZATION TEST COMPLETED!\n\n` +
+                              `📊 Data Source:\n` +
+                              `• Trade file: ${data.real_data_info.trade_file}\n` +
+                              `• Total trades: ${data.real_data_info.total_trades}\n` +
+                              `• Candle data: ${data.real_data_info.candle_source}\n` +
+                              `• Candle count: ${data.real_data_info.candle_count}\n\n` +
+                              `📈 Results:\n` +
+                              `• Baseline total PnL: ${(data.real_data_info.baseline_pnl_total || 0).toFixed(2)}%\n` +
+                              `• Optimized total PnL: ${(data.best_result.pnl_total || 0).toFixed(2)}%\n` +
+                              `• Improvement: ${((data.best_result.pnl_total || 0) - (data.real_data_info.baseline_pnl_total || 0)).toFixed(2)}%\n\n` +
+                              `Scroll down để xem chi tiết comparison!`);
+                    }, 1000);
+                    
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+                
+            } catch (error) {
+                console.error('❌ Real optimization test error:', error);
+                alert(`❌ Real Optimization Test Error:\n${error.message}`);
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        // �🎯 Set Focus and Initialize
         window.addEventListener('load', function() {
             // Focus on strategy selection to encourage user to start there
             const strategySelect = document.getElementById('strategySelect');
@@ -1505,6 +2486,87 @@
                 resetToDefaultRanges();
             }
         });
+        
+        // TEST OPTIMIZATION FUNCTION
+        async function testOptimization() {
+            console.log('🔧 Starting test optimization...');
+            
+            const testParams = {
+                symbol: 'BINANCE_BTCUSDT',
+                timeframe: '30',
+                strategy_name: 'LONGSHORT',
+                sl_min: 0.5, sl_max: 2.0, sl_step: 0.5,
+                be_min: 0.5, be_max: 1.5, be_step: 0.5,
+                ts_trig_min: 0.5, ts_trig_max: 3.0, ts_trig_step: 0.5,
+                ts_step_min: 0.5, ts_step_max: 1.0, ts_step_step: 0.5,
+                multiTrial: true
+            };
+            
+            try {
+                console.log('🔧 Sending test request with params:', testParams);
+                
+                const response = await fetch('/optimize_ranges', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testParams)
+                });
+                
+                console.log('🔧 Response status:', response.status);
+                console.log('🔧 Response headers:', response.headers);
+                
+                const result = await response.json();
+                
+                // 🔍 COMPREHENSIVE DEBUG LOGGING
+                console.log('🎯 TEST Optimization result:', result);
+                console.log('🔍 TEST Result type:', typeof result);
+                console.log('🔍 TEST Result keys:', Object.keys(result || {}));
+                
+                // Check main data structure
+                if (result && result.data) {
+                    console.log('🔍 TEST Result.data type:', typeof result.data);
+                    console.log('🔍 TEST Result.data is array:', Array.isArray(result.data));
+                    if (Array.isArray(result.data) && result.data.length > 0) {
+                        console.log('🔍 TEST First result item:', result.data[0]);
+                        console.log('🔍 TEST First result keys:', Object.keys(result.data[0] || {}));
+                    }
+                }
+                
+                // Look for properties that might be undefined and cause toFixed errors
+                function findUndefinedProperties(obj, path = '') {
+                    if (obj === null) {
+                        console.error(`❌ TEST NULL VALUE at ${path}`);
+                        return;
+                    }
+                    if (obj === undefined) {
+                        console.error(`❌ TEST UNDEFINED VALUE at ${path}`);
+                        return;
+                    }
+                    if (typeof obj === 'object' && !Array.isArray(obj)) {
+                        Object.keys(obj).forEach(key => {
+                            const newPath = path ? `${path}.${key}` : key;
+                            if (key.includes('pnl') || key.includes('winrate') || key.includes('pf') || key.includes('improvement')) {
+                                console.log(`🔍 Numeric property ${newPath}:`, typeof obj[key], obj[key]);
+                            }
+                            findUndefinedProperties(obj[key], newPath);
+                        });
+                    } else if (Array.isArray(obj)) {
+                        obj.forEach((item, index) => {
+                            findUndefinedProperties(item, `${path}[${index}]`);
+                        });
+                    }
+                }
+                
+                findUndefinedProperties(result, 'TEST_result');
+                
+                alert('Test completed! Check console for detailed logs.');
+                
+            } catch (error) {
+                console.error('🔧 TEST Error:', error);
+                alert('Test failed: ' + error.message);
+            }
+        }
     </script>
 </body>
 </html>
