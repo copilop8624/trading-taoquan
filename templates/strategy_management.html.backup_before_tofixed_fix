@@ -452,7 +452,7 @@
                             <p style="margin: 5px 0;"><strong>Filename:</strong> ${file.name}</p>
                             <p style="margin: 5px 0;"><strong>Detected Symbol:</strong> ${detected.symbol || 'Not detected'}</p>
                             <p style="margin: 5px 0;"><strong>Detected Strategy:</strong> ${detected.strategy || 'Not detected'}</p>
-                            <p style="margin: 5px 0;"><strong>File Size:</strong> ${safeToFixed(file.size / 1024, 2)} KB</p>
+                            <p style="margin: 5px 0;"><strong>File Size:</strong> ${(file.size / 1024).toFixed(2)} KB</p>
                             <p style="color: #666; font-size: 0.9em; margin-top: 10px;">
                                 <i class="fas fa-info-circle"></i> 
                                 Values have been auto-filled below. You can edit them before uploading.

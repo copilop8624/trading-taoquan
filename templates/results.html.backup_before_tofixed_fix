@@ -100,7 +100,7 @@
               }
               // numeric formatting
               const n = Number(raw);
-              if(!isNaN(n)) return `<td>${safeToFixed(n, 2)}</td>`;
+              if(!isNaN(n)) return `<td>${n.toFixed(2)}</td>`;
               return `<td>${raw}</td>`;
             }).join('');
             // set Dropped column content and style if applicable

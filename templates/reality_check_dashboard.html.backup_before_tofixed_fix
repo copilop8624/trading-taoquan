@@ -319,7 +319,7 @@
             document.getElementById('realisticResults').textContent = summary.realistic_results || 0;
             document.getElementById('fantasyResults').textContent = summary.fantasy_results || 0;
             document.getElementById('fantasyRate').textContent = 
-                summary.fantasy_rate ? safeToFixed(summary.fantasy_rate * 100, 1) + '%' : '0%';
+                summary.fantasy_rate ? (summary.fantasy_rate * 100).toFixed(1) + '%' : '0%';
         }
         
         function displayResults(results) {
@@ -349,7 +349,7 @@
                                 <span class="score-badge ${isFantasy ? 'score-fantasy' : 'score-realistic'}">
                                     ${isFantasy ? 'FANTASY' : 'REALISTIC'}
                                 </span>
-                                <span>Reality: ${safeToFixed(realityScore, 1)}%</span>
+                                <span>Reality: ${realityScore.toFixed(1)}%</span>
                             </div>
                         </div>
                         <div>

@@ -999,10 +999,10 @@ function safeGet(obj, path, defaultValue = 0) {
                 
                 // Dynamic price formatting
                 const formatPrice = (price) => {
-                    if (price < 0.01) return safeToFixed(price, 6);
-                    else if (price < 1) return safeToFixed(price, 4);
-                    else if (price < 100) return safeToFixed(price, 2);
-                    else return safeToFixed(price, 0);
+                    if (price < 0.01) return price.toFixed(6);
+                    else if (price < 1) return price.toFixed(4);
+                    else if (price < 100) return price.toFixed(2);
+                    else return price.toFixed(0);
                 };
                 
                 html += `
@@ -1119,7 +1119,7 @@ function safeGet(obj, path, defaultValue = 0) {
                                     <strong>Profit Factor:</strong> <span style="color: #28a745;">${safeToFixed(optimized?.pf || 0, 2)}</span>
                                 </div>
                                 <div style="margin: 15px 0; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
-                                    SL: ${safeToFixed(optimized.parameters?.sl || 0, 1)}% | BE: ${safeToFixed(optimized.parameters?.be || 0, 1)}% | TS: ${safeToFixed(optimized.parameters?.ts_active || 0, 1)}%
+                                    SL: ${(optimized.parameters?.sl || 0).toFixed(1)}% | BE: ${(optimized.parameters?.be || 0).toFixed(1)}% | TS: ${(optimized.parameters?.ts_active || 0).toFixed(1)}%
                                 </div>
                             </div>
                         </div>
@@ -1132,19 +1132,19 @@ function safeGet(obj, path, defaultValue = 0) {
                             <div>
                                 <strong>PnL Improvement:</strong><br>
                                 <span style="color: ${improvement.pnl_improvement > 0 ? '#28a745' : '#dc3545'}; font-size: 1.2em; font-weight: bold;">
-                                    ${(improvement?.pnl_improvement || 0) > 0 ? '+' : ''}${safeToFixed(improvement?.pnl_improvement || 0, 2)}%
+                                    ${(improvement?.pnl_improvement || 0) > 0 ? '+' : ''}${(improvement?.pnl_improvement || 0).toFixed(2)}%
                                 </span>
                             </div>
                             <div>
                                 <strong>Win Rate Change:</strong><br>
                                 <span style="color: ${improvement.winrate_improvement > 0 ? '#28a745' : '#dc3545'}; font-size: 1.2em; font-weight: bold;">
-                                    ${(improvement?.winrate_improvement || 0) > 0 ? '+' : ''}${safeToFixed(improvement?.winrate_improvement || 0, 1)}%
+                                    ${(improvement?.winrate_improvement || 0) > 0 ? '+' : ''}${(improvement?.winrate_improvement || 0).toFixed(1)}%
                                 </span>
                             </div>
                             <div>
                                 <strong>Relative Improvement:</strong><br>
                                 <span style="color: ${improvement.pnl_improvement_pct > 0 ? '#28a745' : '#dc3545'}; font-size: 1.2em; font-weight: bold;">
-                                    ${(improvement?.pnl_improvement_pct || 0) > 0 ? '+' : ''}${safeToFixed(improvement?.pnl_improvement_pct || 0, 1)}%
+                                    ${(improvement?.pnl_improvement_pct || 0) > 0 ? '+' : ''}${(improvement?.pnl_improvement_pct || 0).toFixed(1)}%
                                 </span>
                             </div>
                         </div>
@@ -1204,7 +1204,7 @@ function safeGet(obj, path, defaultValue = 0) {
                 ctx.fillStyle = '#666';
                 ctx.font = '12px Arial';
                 ctx.textAlign = 'right';
-                ctx.fillTextsafeToFixed((value || 0, 1) + '%', margin.left - 10, y + 4);
+                ctx.fillText((value || 0).toFixed(1) + '%', margin.left - 10, y + 4);
             }
             
             // Draw zero line
@@ -1298,7 +1298,7 @@ function safeGet(obj, path, defaultValue = 0) {
                 ctx.fillStyle = '#dc3545';
                 ctx.font = 'bold 12px Arial';
                 ctx.textAlign = 'left';
-                ctx.fillTextsafeToFixed(`Original: ${(finalBaseline || 0, 2)}%`, margin.left + chartWidth + 10, margin.top + 20);
+                ctx.fillText(`Original: ${(finalBaseline || 0).toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 20);
             }
             
             if (optimized_cumulative && optimized_cumulative.length > 0) {
@@ -1306,13 +1306,13 @@ function safeGet(obj, path, defaultValue = 0) {
                 ctx.fillStyle = '#28a745';
                 ctx.font = 'bold 12px Arial';
                 ctx.textAlign = 'left';
-                ctx.fillText(`Optimized: ${safeToFixed(finalOptimized, 2)}%`, margin.left + chartWidth + 10, margin.top + 40);
+                ctx.fillText(`Optimized: ${finalOptimized.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 40);
                 
                 // Show improvement
                 if (baseline_cumulative && baseline_cumulative.length > 0) {
                     const improvement = finalOptimized - baseline_cumulative[baseline_cumulative.length - 1];
                     ctx.fillStyle = improvement >= 0 ? '#28a745' : '#dc3545';
-                    ctx.fillText(`Improvement: ${improvement >= 0 ? '+' : ''}${safeToFixed(improvement, 2)}%`, margin.left + chartWidth + 10, margin.top + 60);
+                    ctx.fillText(`Improvement: ${improvement >= 0 ? '+' : ''}${improvement.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 60);
                 }
             }
         }
@@ -1923,10 +1923,10 @@ function safeGet(obj, path, defaultValue = 0) {
                             <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 15px;">
                                 <h5 style="margin: 0 0 10px 0; color: #856404; text-align: center;">📈 Original Tradelist (Baseline)</h5>
                                 <div style="display: grid; gap: 8px;">
-                                    <div><strong>Total PnL:</strong> <span style="color: ${(comparisonData.baseline_result.pnl_total || 0) >= 0 ? '#28a745' : '#dc3545'}; font-size: 1.1em;">${safeToFixed(comparisonData.baseline_result.pnl_total || 0, 2)}%</span></div>
-                                    <div><strong>Win Rate:</strong> ${safeToFixed(comparisonData.baseline_result?.winrate || 0, 1)}%</div>
+                                    <div><strong>Total PnL:</strong> <span style="color: ${(comparisonData.baseline_result.pnl_total || 0) >= 0 ? '#28a745' : '#dc3545'}; font-size: 1.1em;">${(comparisonData.baseline_result.pnl_total || 0).toFixed(2)}%</span></div>
+                                    <div><strong>Win Rate:</strong> ${(comparisonData.baseline_result?.winrate || 0).toFixed(1)}%</div>
                                     <div><strong>Total Trades:</strong> ${comparisonData.baseline_result.total_trades}</div>
-                                    <div><strong>Profit Factor:</strong> ${safeToFixed(comparisonData.baseline_result?.pf || 0, 2)}</div>
+                                    <div><strong>Profit Factor:</strong> ${(comparisonData.baseline_result?.pf || 0).toFixed(2)}</div>
                                     <div style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; font-size: 0.9em;">
                                         <strong>Parameters:</strong> ${comparisonData.baseline_result?.parameters?.sl || 'N/A'}
                                     </div>
@@ -1937,10 +1937,10 @@ function safeGet(obj, path, defaultValue = 0) {
                             <div style="background: #d4edda; border: 2px solid #28a745; border-radius: 8px; padding: 15px;">
                                 <h5 style="margin: 0 0 10px 0; color: #155724; text-align: center;">🚀 Optimized Strategy</h5>
                                 <div style="display: grid; gap: 8px;">
-                                    <div><strong>Total PnL:</strong> <span style="color: ${(comparisonData.best_result.pnl_total || 0) >= 0 ? '#28a745' : '#dc3545'}; font-size: 1.1em;">${safeToFixed(comparisonData.best_result.pnl_total || 0, 2)}%</span></div>
-                                    <div><strong>Win Rate:</strong> ${safeToFixed(comparisonData.best_result?.winrate || 0, 1)}%</div>
+                                    <div><strong>Total PnL:</strong> <span style="color: ${(comparisonData.best_result.pnl_total || 0) >= 0 ? '#28a745' : '#dc3545'}; font-size: 1.1em;">${(comparisonData.best_result.pnl_total || 0).toFixed(2)}%</span></div>
+                                    <div><strong>Win Rate:</strong> ${(comparisonData.best_result?.winrate || 0).toFixed(1)}%</div>
                                     <div><strong>Total Trades:</strong> ${comparisonData.best_result.total_trades}</div>
-                                    <div><strong>Profit Factor:</strong> ${safeToFixed(comparisonData.best_result?.pf || 0, 2)}</div>
+                                    <div><strong>Profit Factor:</strong> ${(comparisonData.best_result?.pf || 0).toFixed(2)}</div>
                                     <div style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; font-size: 0.9em;">
                                         <strong>SL:</strong> ${((comparisonData.best_result?.parameters?.sl || 0) * 100).toFixed(2)}% 
                                         <strong>BE:</strong> ${((comparisonData.best_result?.parameters?.be || 0) * 100).toFixed(2)}% 
@@ -1956,10 +1956,10 @@ function safeGet(obj, path, defaultValue = 0) {
                                 ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '📈 IMPROVEMENT ACHIEVED' : '📉 PERFORMANCE DECLINE'}
                             </h5>
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                                <div><strong>PnL Improvement:</strong> <span style="color: ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '#28a745' : '#dc3545'}; font-size: 1.1em; font-weight: bold;">${comparisonData.improvement_summary.pnl_improvement >= 0 ? '+' : ''}${safeToFixed(comparisonData.improvement_summary.pnl_improvement, 2)}%</span></div>
-                                <div><strong>Win Rate Change:</strong> <span style="color: ${comparisonData.improvement_summary.winrate_improvement >= 0 ? '#28a745' : '#dc3545'};">${comparisonData.improvement_summary.winrate_improvement >= 0 ? '+' : ''}${safeToFixed(comparisonData.improvement_summary.winrate_improvement, 1)}%</span></div>
-                                <div><strong>PF Change:</strong> <span style="color: ${comparisonData.improvement_summary.pf_improvement >= 0 ? '#28a745' : '#dc3545'};">${comparisonData.improvement_summary.pf_improvement >= 0 ? '+' : ''}${safeToFixed(comparisonData.improvement_summary.pf_improvement, 2)}</span></div>
-                                <div><strong>Relative Improvement:</strong> <span style="color: ${comparisonData.improvement_summary.relative_improvement >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">${comparisonData.improvement_summary.relative_improvement >= 0 ? '+' : ''}${safeToFixed(comparisonData.improvement_summary.relative_improvement, 1)}%</span></div>
+                                <div><strong>PnL Improvement:</strong> <span style="color: ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '#28a745' : '#dc3545'}; font-size: 1.1em; font-weight: bold;">${comparisonData.improvement_summary.pnl_improvement >= 0 ? '+' : ''}${comparisonData.improvement_summary.pnl_improvement.toFixed(2)}%</span></div>
+                                <div><strong>Win Rate Change:</strong> <span style="color: ${comparisonData.improvement_summary.winrate_improvement >= 0 ? '#28a745' : '#dc3545'};">${comparisonData.improvement_summary.winrate_improvement >= 0 ? '+' : ''}${comparisonData.improvement_summary.winrate_improvement.toFixed(1)}%</span></div>
+                                <div><strong>PF Change:</strong> <span style="color: ${comparisonData.improvement_summary.pf_improvement >= 0 ? '#28a745' : '#dc3545'};">${comparisonData.improvement_summary.pf_improvement >= 0 ? '+' : ''}${comparisonData.improvement_summary.pf_improvement.toFixed(2)}</span></div>
+                                <div><strong>Relative Improvement:</strong> <span style="color: ${comparisonData.improvement_summary.relative_improvement >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">${comparisonData.improvement_summary.relative_improvement >= 0 ? '+' : ''}${comparisonData.improvement_summary.relative_improvement.toFixed(1)}%</span></div>
                             </div>
                         </div>
                     </div>
@@ -1968,16 +1968,16 @@ function safeGet(obj, path, defaultValue = 0) {
                     <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin: 15px 0;">
                         <h4>🥇 Best Parameters Found:</h4>
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 10px 0;">
-                            <div><strong>SL:</strong> ${safeToFixed(topResult.sl * 100, 2)}%</div>
-                            <div><strong>BE:</strong> ${safeToFixed(topResult.be * 100, 2)}%</div>
-                            <div><strong>TS:</strong> ${safeToFixed(topResult.ts * 100, 2)}%</div>
-                            ${topResult.tp ? `<div><strong>TP:</strong> ${safeToFixed(topResult.tp * 100, 2)}%</div>` : ''}
+                            <div><strong>SL:</strong> ${(topResult.sl * 100).toFixed(2)}%</div>
+                            <div><strong>BE:</strong> ${(topResult.be * 100).toFixed(2)}%</div>
+                            <div><strong>TS:</strong> ${(topResult.ts * 100).toFixed(2)}%</div>
+                            ${topResult.tp ? `<div><strong>TP:</strong> ${(topResult.tp * 100).toFixed(2)}%</div>` : ''}
                         </div>
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0;">
-                            <div><strong>Total Profit:</strong> <span style="color: ${topResult.total_profit > 0 ? 'green' : 'red'};">${topResult.total_profit ? safeToFixed(topResult.total_profit, 2) : '0.00'}</span></div>
-                            <div><strong>Win Rate:</strong> ${topResult.win_rate ? safeToFixed(topResult.win_rate * 100, 1) : '0.0'}%</div>
+                            <div><strong>Total Profit:</strong> <span style="color: ${topResult.total_profit > 0 ? 'green' : 'red'};">${topResult.total_profit ? topResult.total_profit.toFixed(2) : '0.00'}</span></div>
+                            <div><strong>Win Rate:</strong> ${topResult.win_rate ? (topResult.win_rate * 100).toFixed(1) : '0.0'}%</div>
                             <div><strong>Total Trades:</strong> ${topResult.total_trades || 0}</div>
-                            <div><strong>Avg Win:</strong> ${topResult.avg_win ? safeToFixed(topResult.avg_win, 2) : '0.00'}</div>
+                            <div><strong>Avg Win:</strong> ${topResult.avg_win ? topResult.avg_win.toFixed(2) : '0.00'}</div>
                         </div>
                     </div>
                     
@@ -2007,14 +2007,14 @@ function safeGet(obj, path, defaultValue = 0) {
                 resultsHTML += `
                     <tr style="background: ${rowColor};">
                         <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${index + 1}</td>
-                        <td style="padding: 6px; border: 1px solid #ddd;">${safeToFixed(result.sl * 100, 2)}</td>
-                        <td style="padding: 6px; border: 1px solid #ddd;">${safeToFixed(result.be * 100, 2)}</td>
-                        <td style="padding: 6px; border: 1px solid #ddd;">${safeToFixed(result.ts * 100, 2)}</td>
-                        <td style="padding: 6px; border: 1px solid #ddd;">${result.tp ? safeToFixed(result.tp * 100, 2) : 'N/A'}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${(result.sl * 100).toFixed(2)}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${(result.be * 100).toFixed(2)}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${(result.ts * 100).toFixed(2)}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${result.tp ? (result.tp * 100).toFixed(2) : 'N/A'}</td>
                         <td style="padding: 6px; border: 1px solid #ddd; color: ${result.total_profit > 0 ? 'green' : 'red'};">
-                            ${result.total_profit ? safeToFixed(result.total_profit, 2) : '0.00'}
+                            ${result.total_profit ? result.total_profit.toFixed(2) : '0.00'}
                         </td>
-                        <td style="padding: 6px; border: 1px solid #ddd;">${result.win_rate ? safeToFixed(result.win_rate * 100, 1) : '0.0'}%</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${result.win_rate ? (result.win_rate * 100).toFixed(1) : '0.0'}%</td>
                         <td style="padding: 6px; border: 1px solid #ddd;">${result.total_trades || 0}</td>
                         <td style="padding: 6px; border: 1px solid #ddd;">
                             <button class="btn btn-sm btn-outline-primary" onclick="applyCombination(${result.sl}, ${result.be}, ${result.ts}, ${result.tp || 'null'})">
@@ -2096,12 +2096,12 @@ function safeGet(obj, path, defaultValue = 0) {
                                         return `
                                         <tr style="background: ${bgColor};">
                                             <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-weight: bold;">${index + 1}</td>
-                                            <td style="padding: 6px; border: 1px solid #ddd;">$${safeToFixed(trade.entry_price, 2)}</td>
-                                            <td style="padding: 6px; border: 1px solid #ddd;">$${safeToFixed(trade.baseline_exit_price, 2)} (${trade.baseline_exit_type})</td>
-                                            <td style="padding: 6px; border: 1px solid #ddd;" class="${baselinePnlClass}">${safeToFixed(trade.baseline_pnl, 2)}%</td>
-                                            <td style="padding: 6px; border: 1px solid #ddd;">$${safeToFixed(trade.optimized_exit_price, 2)} (${trade.optimized_exit_type})</td>
-                                            <td style="padding: 6px; border: 1px solid #ddd;" class="${optimizedPnlClass}">${safeToFixed(trade.optimized_pnl, 2)}%</td>
-                                            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;" class="${improvementClass}">${trade.improvement >= 0 ? '+' : ''}${safeToFixed(trade.improvement, 2)}%</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;">$${trade.entry_price.toFixed(2)}</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;">$${trade.baseline_exit_price.toFixed(2)} (${trade.baseline_exit_type})</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;" class="${baselinePnlClass}">${trade.baseline_pnl.toFixed(2)}%</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;">$${trade.optimized_exit_price.toFixed(2)} (${trade.optimized_exit_type})</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;" class="${optimizedPnlClass}">${trade.optimized_pnl.toFixed(2)}%</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;" class="${improvementClass}">${trade.improvement >= 0 ? '+' : ''}${trade.improvement.toFixed(2)}%</td>
                                             <td style="padding: 6px; border: 1px solid #ddd;"><span class="badge ${trade.optimized_exit_type === 'TS' ? 'badge-success' : (trade.optimized_exit_type === 'BE' ? 'badge-warning' : 'badge-danger')}">${trade.optimized_exit_type}</span></td>
                                         </tr>
                                         `;
@@ -2195,7 +2195,7 @@ function safeGet(obj, path, defaultValue = 0) {
                 ctx.fillStyle = '#6c757d';
                 ctx.font = '12px Arial';
                 ctx.textAlign = 'right';
-                ctx.fillText(safeToFixed(value, 1) + '%', margin.left - 5, y + 4);
+                ctx.fillText(value.toFixed(1) + '%', margin.left - 5, y + 4);
             }
             
             // Vertical grid lines
@@ -2271,7 +2271,7 @@ function safeGet(obj, path, defaultValue = 0) {
                 ctx.fillStyle = '#ffc107';
                 ctx.font = 'bold 12px Arial';
                 ctx.textAlign = 'left';
-                ctx.fillText(`Baseline: ${safeToFixed(finalBaseline, 2)}%`, margin.left + chartWidth + 10, margin.top + 20);
+                ctx.fillText(`Baseline: ${finalBaseline.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 20);
             }
             
             if (optimized_cumulative && optimized_cumulative.length > 0) {
@@ -2279,13 +2279,13 @@ function safeGet(obj, path, defaultValue = 0) {
                 ctx.fillStyle = '#28a745';
                 ctx.font = 'bold 12px Arial';
                 ctx.textAlign = 'left';
-                ctx.fillText(`Optimized: ${safeToFixed(finalOptimized, 2)}%`, margin.left + chartWidth + 10, margin.top + 40);
+                ctx.fillText(`Optimized: ${finalOptimized.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 40);
                 
                 // Show improvement
                 if (baseline_cumulative && baseline_cumulative.length > 0) {
                     const improvement = finalOptimized - baseline_cumulative[baseline_cumulative.length - 1];
                     ctx.fillStyle = improvement >= 0 ? '#28a745' : '#dc3545';
-                    ctx.fillText(`Improvement: ${improvement >= 0 ? '+' : ''}${safeToFixed(improvement, 2)}%`, margin.left + chartWidth + 10, margin.top + 60);
+                    ctx.fillText(`Improvement: ${improvement >= 0 ? '+' : ''}${improvement.toFixed(2)}%`, margin.left + chartWidth + 10, margin.top + 60);
                 }
             }
         }
@@ -2293,25 +2293,25 @@ function safeGet(obj, path, defaultValue = 0) {
         // 📋 Apply Combination to Form
         function applyCombination(sl, be, ts, tp) {
             // Apply to range inputs as single values for testing
-            document.getElementById('sl_min').value = safeToFixed(sl * 100, 3);
-            document.getElementById('sl_max').value = safeToFixed(sl * 100, 3);
+            document.getElementById('sl_min').value = (sl * 100).toFixed(3);
+            document.getElementById('sl_max').value = (sl * 100).toFixed(3);
             document.getElementById('sl_step').value = '0.001';
             
-            document.getElementById('be_min').value = safeToFixed(be * 100, 3);
-            document.getElementById('be_max').value = safeToFixed(be * 100, 3);
+            document.getElementById('be_min').value = (be * 100).toFixed(3);
+            document.getElementById('be_max').value = (be * 100).toFixed(3);
             document.getElementById('be_step').value = '0.001';
             
-            document.getElementById('ts_min').value = safeToFixed(ts * 100, 3);
-            document.getElementById('ts_max').value = safeToFixed(ts * 100, 3);
+            document.getElementById('ts_min').value = (ts * 100).toFixed(3);
+            document.getElementById('ts_max').value = (ts * 100).toFixed(3);
             document.getElementById('ts_step').value = '0.001';
             
             if (tp && tp !== 'null') {
-                document.getElementById('tp_min').value = safeToFixed(tp * 100, 3);
-                document.getElementById('tp_max').value = safeToFixed(tp * 100, 3);
+                document.getElementById('tp_min').value = (tp * 100).toFixed(3);
+                document.getElementById('tp_max').value = (tp * 100).toFixed(3);
                 document.getElementById('tp_step').value = '0.001';
             }
             
-            alertsafeToFixed(`✅ Đã apply parameters: SL=${(sl*100, 2)}%, BE=${safeToFixed(be*100, 2)}%, TS=${safeToFixed(ts*100, 2)}%${tp ? `, TP=${safeToFixed(tp*100, 2)}%` : ''}`);
+            alert(`✅ Đã apply parameters: SL=${(sl*100).toFixed(2)}%, BE=${(be*100).toFixed(2)}%, TS=${(ts*100).toFixed(2)}%${tp ? `, TP=${(tp*100).toFixed(2)}%` : ''}`);
             calculateCombinations();
         }
         
@@ -2440,7 +2440,7 @@ function safeGet(obj, path, defaultValue = 0) {
                 if (data.success) {
                     console.log('✅ Real optimization test completed!');
                     console.log(`📊 Processed ${data.real_data_info.total_trades} real trades`);
-                    console.logsafeToFixed(`📈 Baseline PnL: ${(data.real_data_info.baseline_pnl_total || 0, 2)}%`);
+                    console.log(`📈 Baseline PnL: ${(data.real_data_info.baseline_pnl_total || 0).toFixed(2)}%`);
                     
                     // Display results with enhanced visualization
                     displayOptimizationResults(data);
@@ -2454,8 +2454,8 @@ function safeGet(obj, path, defaultValue = 0) {
                               `• Candle data: ${data.real_data_info.candle_source}\n` +
                               `• Candle count: ${data.real_data_info.candle_count}\n\n` +
                               `📈 Results:\n` +
-                              `• Baseline total PnL: ${safeToFixed(data.real_data_info.baseline_pnl_total || 0, 2)}%\n` +
-                              `• Optimized total PnL: ${safeToFixed(data.best_result.pnl_total || 0, 2)}%\n` +
+                              `• Baseline total PnL: ${(data.real_data_info.baseline_pnl_total || 0).toFixed(2)}%\n` +
+                              `• Optimized total PnL: ${(data.best_result.pnl_total || 0).toFixed(2)}%\n` +
                               `• Improvement: ${((data.best_result.pnl_total || 0) - (data.real_data_info.baseline_pnl_total || 0)).toFixed(2)}%\n\n` +
                               `Scroll down để xem chi tiết comparison!`);
                     }, 1000);
