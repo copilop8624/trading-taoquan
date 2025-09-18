@@ -28,6 +28,40 @@ import random
 import tempfile
 import os
 import sqlite3
+
+# 🔧 CENTRALIZED OPTUNA CONFIGURATION
+DEFAULT_OPTUNA_TRIALS = 100  # Default number of Optuna trials, matches frontend default
+MIN_OPTUNA_TRIALS = 10      # Minimum allowed trials
+MAX_OPTUNA_TRIALS = 500     # Maximum allowed trials
+
+def validate_optuna_trials(user_input, default=DEFAULT_OPTUNA_TRIALS):
+    """
+    Validate and sanitize Optuna trials input from frontend
+    
+    Args:
+        user_input: Raw input from frontend (string, int, or None)
+        default: Default value if input is invalid
+        
+    Returns:
+        int: Validated trials count between MIN and MAX limits
+    """
+    try:
+        trials = int(user_input) if user_input else default
+        
+        # Clamp to valid range
+        if trials < MIN_OPTUNA_TRIALS:
+            print(f"⚠️ Optuna trials {trials} below minimum, using {MIN_OPTUNA_TRIALS}")
+            return MIN_OPTUNA_TRIALS
+        elif trials > MAX_OPTUNA_TRIALS:
+            print(f"⚠️ Optuna trials {trials} above maximum, using {MAX_OPTUNA_TRIALS}")
+            return MAX_OPTUNA_TRIALS
+        else:
+            print(f"✅ Optuna trials validated: {trials}")
+            return trials
+            
+    except (ValueError, TypeError):
+        print(f"⚠️ Invalid Optuna trials input '{user_input}', using default {default}")
+        return default
 import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -92,7 +126,7 @@ except Exception as e_pkg:
             # Sá»­ dá»¥ng giÃ¡ trá»‹ trung bÃ¬nh tá»« cÃ¡c dáº£i BE/TS lÃ m tham sá»‘ cá»‘ Ä‘á»‹nh
             be_default = be_list[len(be_list)//2] if be_list else 0.5
             ts_trig_default = ts_trig_list[len(ts_trig_list)//2] if ts_trig_list else 0.5
-            ts_step_default = ts_step_list[len(ts_step_list)//2] if ts_step_list else 0.5
+            ts_step_default = ts_step_list[len(ts_step_list)//2] if ts_step_list else 3.0
 
             # Gá»i hÃ m dá»± phÃ²ng chá»‰ SL vá»›i tham sá»‘ BE/TS máº·c Ä‘á»‹nh
             sl_min = min(sl_list) if sl_list else 0
@@ -443,9 +477,9 @@ def api_batch_optimize():
                 'parameters': {
                     'sl_min': 1.0,
                     'sl_max': 5.0,
-                    'be_min': 0.5,
+                    'be_min': 2.0,
                     'be_max': 2.0,
-                    'ts_min': 0.3,
+                    'ts_min': 2.0,
                     'ts_max': 1.5
                 }
             },
@@ -499,13 +533,13 @@ def api_batch_results(job_id):
             {
                 'symbol': 'BINANCE_BTCUSDT',
                 'timeframe': '30',
-                'best_params': {'sl': 2.5, 'be': 1.2, 'ts_trig': 0.8, 'ts_step': 0.3},
+                'best_params': {'sl': 2.5, 'be': 1.2, 'ts_trig': 0.8, 'ts_step': 5.0},
                 'performance': {'pnl': 15.67, 'winrate': 68.5, 'sharpe': 1.24}
             },
             {
                 'symbol': 'BINANCE_BOMEUSDT', 
                 'timeframe': '240',
-                'best_params': {'sl': 3.0, 'be': 1.5, 'ts_trig': 1.0, 'ts_step': 0.4},
+                'best_params': {'sl': 3.0, 'be': 1.5, 'ts_trig': 1.0, 'ts_step': 5.0},
                 'performance': {'pnl': 12.34, 'winrate': 72.1, 'sharpe': 1.18}
             }
         ]
@@ -527,6 +561,14 @@ def test_filter_debug():
         return send_file(test_file_path)
     except Exception as e:
         return f"Error loading test file: {e}", 404
+
+@app.route('/test_range_suggestions', methods=['GET'])
+def test_range_suggestions():
+    """Serve test range suggestions page"""
+    try:
+        return render_template('test_range_suggestions.html')
+    except Exception as e:
+        return f"Error loading test page: {e}", 404
 
 
 # ========== DATA MANAGEMENT API ENDPOINTS ==========
@@ -1769,7 +1811,7 @@ def calculate_advanced_metrics(details):
     }
 
 def grid_search_sl_fallback(pairs, df_candle, sl_min, sl_max, sl_step, opt_type, 
-                           be_min=0.5, ts_trig_min=0.5, ts_step_min=0.5):
+                           be_min=2.0, ts_trig_min=2.0, ts_step_min=3.0):
     """
     âš¡ Tá»I Æ¯U: Grid search fallback, tá»‘i giáº£n log, tÄƒng tá»‘c Ä‘á»™
     """
@@ -2031,7 +2073,7 @@ def optuna_search(trade_pairs, df_candle, sl_min, sl_max, be_min, be_max, ts_tri
     print(f"Optuna best params: {best_params}, best value: {best_value}")
     return best_params, best_value
 
-def grid_search_realistic_full_v2(pairs, df_candle, sl_list, be_list, ts_trig_list, ts_step_list, opt_type):
+def grid_search_realistic_full_v2(pairs, df_candle, sl_list, be_list, ts_trig_list, ts_step_list, opt_type, max_iterations=None):
     """
     OPTUNA: Sá»¬ Dá»¤NG OPTUNA Äá»‚ Tá»I Æ¯U HÃ“A THAM Sá» SL + BE + TS
     
@@ -2060,6 +2102,19 @@ def grid_search_realistic_full_v2(pairs, df_candle, sl_list, be_list, ts_trig_li
                                           min(ts_trig_list), max(ts_trig_list), 
                                           min(ts_step_list), max(ts_step_list), 
                                           opt_type, n_trials=50)
+    
+    # 🔧 REPLACE HARD-CODED TRIALS WITH USER INPUT
+    # Use validated max_iterations or default
+    trials_count = validate_optuna_trials(max_iterations) if max_iterations else DEFAULT_OPTUNA_TRIALS
+    print(f"🔧 Optuna trials: {trials_count} ({'user input' if max_iterations else 'default'})")
+    
+    # Re-run with correct trials count
+    opt_params, opt_value = optuna_search(pairs, df_candle, 
+                                          min(sl_list), max(sl_list), 
+                                          min(be_list), max(be_list), 
+                                          min(ts_trig_list), max(ts_trig_list), 
+                                          min(ts_step_list), max(ts_step_list), 
+                                          opt_type, n_trials=trials_count)
     
     sl_opt = opt_params['sl']
     be_opt = opt_params['be']
@@ -2947,20 +3002,72 @@ def optimize():
         for key, value in request.form.items():
             print(f"   {key} = '{value}'")
         
+        # 🔧 GET MAX_ITERATIONS FROM FORM
+        raw_max_iterations = request.form.get('max_iterations')
+        max_iterations = validate_optuna_trials(raw_max_iterations)
+        print(f"🔧 Form Max Iterations: {raw_max_iterations} → {max_iterations} (validated)")
+        
 
         # --- Dynamic parameter selection ---
         sl_min = float(request.form['sl_min'])
         sl_max = float(request.form['sl_max'])
         sl_step = float(request.form['sl_step'])
-        be_min = safe_float_parse(request.form, 'be_min', 0.5)
+        be_min = safe_float_parse(request.form, 'be_min', 2.0)
         be_max = safe_float_parse(request.form, 'be_max', 2.0)
         be_step = safe_float_parse(request.form, 'be_step', 0.5)
-        ts_trig_min = safe_float_parse(request.form, 'ts_trig_min', 0.5)
+        ts_trig_min = safe_float_parse(request.form, 'ts_trig_min', 2.0)
         ts_trig_max = safe_float_parse(request.form, 'ts_trig_max', 3.0)
         ts_trig_step = safe_float_parse(request.form, 'ts_trig_step', 0.5)
-        ts_step_min = safe_float_parse(request.form, 'ts_step_min', 0.5)
+        ts_step_min = safe_float_parse(request.form, 'ts_step_min', 3.0)
         ts_step_max = safe_float_parse(request.form, 'ts_step_max', 1.0)
         ts_step_step = safe_float_parse(request.form, 'ts_step_step', 0.2)
+
+        # 🔒 BACKEND VALIDATION: Apply same safety minimums for form route
+        def validate_and_enforce_minimums_v2(be_min, be_max, ts_trig_min, ts_trig_max, ts_step_min, ts_step_max):
+            """Enforce safety minimums for form input route"""
+            SAFETY_BE_MIN = 2.0          
+            SAFETY_TS_TRIGGER_MIN = 2.0  
+            SAFETY_TS_STEP_MIN = 3.0     
+            
+            warnings = []
+            
+            # Validate BE
+            if be_min > 0 and be_min < SAFETY_BE_MIN:
+                warnings.append(f"BE min {be_min}% → {SAFETY_BE_MIN}% (safety minimum)")
+                be_min = SAFETY_BE_MIN
+            if be_max > 0 and be_max < SAFETY_BE_MIN:
+                warnings.append(f"BE max {be_max}% → {SAFETY_BE_MIN}% (safety minimum)")
+                be_max = SAFETY_BE_MIN
+                
+            # Validate TS trigger
+            if ts_trig_min > 0 and ts_trig_min < SAFETY_TS_TRIGGER_MIN:
+                warnings.append(f"TS trigger min {ts_trig_min}% → {SAFETY_TS_TRIGGER_MIN}% (safety minimum)")
+                ts_trig_min = SAFETY_TS_TRIGGER_MIN
+            if ts_trig_max > 0 and ts_trig_max < SAFETY_TS_TRIGGER_MIN:
+                warnings.append(f"TS trigger max {ts_trig_max}% → {SAFETY_TS_TRIGGER_MIN}% (safety minimum)")
+                ts_trig_max = SAFETY_TS_TRIGGER_MIN
+                
+            # Validate TS step
+            if ts_step_min > 0 and ts_step_min < SAFETY_TS_STEP_MIN:
+                warnings.append(f"TS step min {ts_step_min}% → {SAFETY_TS_STEP_MIN}% (safety minimum)")
+                ts_step_min = SAFETY_TS_STEP_MIN
+            if ts_step_max > 0 and ts_step_max < SAFETY_TS_STEP_MIN:
+                warnings.append(f"TS step max {ts_step_max}% → {SAFETY_TS_STEP_MIN}% (safety minimum)")
+                ts_step_max = SAFETY_TS_STEP_MIN
+            
+            return be_min, be_max, ts_trig_min, ts_trig_max, ts_step_min, ts_step_max, warnings
+        
+        # Apply validation to form inputs
+        be_min, be_max, ts_trig_min, ts_trig_max, ts_step_min, ts_step_max, validation_warnings = validate_and_enforce_minimums_v2(
+            be_min, be_max, ts_trig_min, ts_trig_max, ts_step_min, ts_step_max
+        )
+        
+        if validation_warnings:
+            print(f"🔒 FORM VALIDATION APPLIED ({len(validation_warnings)} adjustments):")
+            for warning in validation_warnings:
+                print(f"   ⚠️ {warning}")
+        else:
+            print(f"✅ Form parameters above safety minimums")
 
         # Parse optimize_params (JSON string from frontend)
         optimize_params = request.form.get('optimize_params')
@@ -3148,7 +3255,7 @@ def optimize():
 
         if method_type == "optuna":
             results = grid_search_realistic_full_v2(
-                trade_pairs, df_candle, sl_list, be_list, ts_trig_list, ts_step_list, opt_type
+                trade_pairs, df_candle, sl_list, be_list, ts_trig_list, ts_step_list, opt_type, max_iterations
             )
         else:
             results = grid_search_realistic_full(
@@ -3688,6 +3795,11 @@ def optimize_ranges():
         # Get optimization engine and criteria (support multiple formats)
         raw_engine = data.get('optimization_engine', data.get('engine', 'grid_search'))  # Changed default to grid_search
         
+        # 🔧 GET MAX_ITERATIONS FROM FRONTEND
+        raw_max_iterations = data.get('max_iterations')
+        max_iterations = validate_optuna_trials(raw_max_iterations)
+        print(f"🔧 Max Iterations: {raw_max_iterations} → {max_iterations} (validated)")
+        
         print(f"🔍 DEBUG: raw_engine = '{raw_engine}' (type: {type(raw_engine)})")
         print(f"🔍 DEBUG: raw_engine.lower() = '{raw_engine.lower() if raw_engine else 'None'}'")
         
@@ -3800,15 +3912,63 @@ def optimize_ranges():
         sl_min = float(data.get('sl_min', 0.5))
         sl_max = float(data.get('sl_max', 3.0))
         sl_step = float(data.get('sl_step', 0.1))
-        be_min = float(data.get('be_min', 0.2))
+        be_min = float(data.get('be_min', 2.0))
         be_max = float(data.get('be_max', 1.5))
         be_step = float(data.get('be_step', 0.1))
-        ts_active_min = float(data.get('ts_active_min', 0.1))
+        ts_active_min = float(data.get('ts_active_min', 2.0))
         ts_active_max = float(data.get('ts_active_max', 1.0))
         ts_active_step = float(data.get('ts_active_step', 0.05))
-        ts_step_min = float(data.get('ts_step_min', 0.01))
+        ts_step_min = float(data.get('ts_step_min', 3.0))
         ts_step_max = float(data.get('ts_step_max', 0.3))
         ts_step_step = float(data.get('ts_step_step', 0.01))
+        
+        # 🔒 BACKEND VALIDATION: Enforce minimum safety values to prevent profit destruction
+        def validate_and_enforce_minimums(be_min, be_max, ts_active_min, ts_active_max, ts_step_min, ts_step_max):
+            """Enforce safety minimums and return adjusted values with warnings"""
+            SAFETY_BE_MIN = 2.0          # BE cannot be less than 2% (preserves profit buffer)
+            SAFETY_TS_TRIGGER_MIN = 2.0  # TS trigger cannot be less than 2% (prevents early activation)
+            SAFETY_TS_STEP_MIN = 3.0     # TS step cannot be less than 3% (prevents aggressive trailing)
+            
+            warnings = []
+            
+            # Validate BE ranges
+            if be_min > 0 and be_min < SAFETY_BE_MIN:
+                warnings.append(f"BE min {be_min}% → {SAFETY_BE_MIN}% (safety minimum)")
+                be_min = SAFETY_BE_MIN
+            if be_max > 0 and be_max < SAFETY_BE_MIN:
+                warnings.append(f"BE max {be_max}% → {SAFETY_BE_MIN}% (safety minimum)")
+                be_max = SAFETY_BE_MIN
+                
+            # Validate TS trigger ranges
+            if ts_active_min > 0 and ts_active_min < SAFETY_TS_TRIGGER_MIN:
+                warnings.append(f"TS trigger min {ts_active_min}% → {SAFETY_TS_TRIGGER_MIN}% (safety minimum)")
+                ts_active_min = SAFETY_TS_TRIGGER_MIN
+            if ts_active_max > 0 and ts_active_max < SAFETY_TS_TRIGGER_MIN:
+                warnings.append(f"TS trigger max {ts_active_max}% → {SAFETY_TS_TRIGGER_MIN}% (safety minimum)")
+                ts_active_max = SAFETY_TS_TRIGGER_MIN
+                
+            # Validate TS step ranges
+            if ts_step_min > 0 and ts_step_min < SAFETY_TS_STEP_MIN:
+                warnings.append(f"TS step min {ts_step_min}% → {SAFETY_TS_STEP_MIN}% (safety minimum)")
+                ts_step_min = SAFETY_TS_STEP_MIN
+            if ts_step_max > 0 and ts_step_max < SAFETY_TS_STEP_MIN:
+                warnings.append(f"TS step max {ts_step_max}% → {SAFETY_TS_STEP_MIN}% (safety minimum)")
+                ts_step_max = SAFETY_TS_STEP_MIN
+            
+            return be_min, be_max, ts_active_min, ts_active_max, ts_step_min, ts_step_max, warnings
+        
+        # Apply validation
+        be_min, be_max, ts_active_min, ts_active_max, ts_step_min, ts_step_max, validation_warnings = validate_and_enforce_minimums(
+            be_min, be_max, ts_active_min, ts_active_max, ts_step_min, ts_step_max
+        )
+        
+        # Log validation results
+        if validation_warnings:
+            print(f"🔒 SAFETY VALIDATION APPLIED ({len(validation_warnings)} adjustments):")
+            for warning in validation_warnings:
+                print(f"   ⚠️ {warning}")
+        else:
+            print(f"✅ All parameters above safety minimums")
         
         print(f"� Parameter Ranges:")
         print(f"   SL: {sl_min}% → {sl_max}% (step {sl_step}%)")
@@ -3901,7 +4061,7 @@ def optimize_ranges():
                     trade_pairs, df_candle, 
                     opt_sl_min, opt_sl_max, opt_be_min, opt_be_max, 
                     opt_ts_active_min, opt_ts_active_max, opt_ts_step_min, opt_ts_step_max,  # Updated TS parameters
-                    opt_type, n_trials=100  # Reduced trials for faster testing
+                    opt_type, n_trials=max_iterations  # 🔧 USE USER INPUT from frontend
                 )
                 
                 print(f"✅ Optuna completed successfully!")

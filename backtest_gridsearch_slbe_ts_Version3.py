@@ -221,11 +221,12 @@ def simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step):
                 if current_active_sl is not None:
                     if side == 'LONG' and price <= current_active_sl:
                         finalExitIdx = entryIdx + i
-                        finalExitPrice = max(current_active_sl, price)
+                        # LONG SL Hit: Exit at market price (worse execution)
+                        finalExitPrice = price
                         finalExitDt = nowDt
                         exitType = 'TS SL' if trailingActive else 'SL'
                         if DEBUG:
-                            log.append(f"--> Hit {'TS' if trailingActive else ''}SL tại {step}={price:.4f} (SL={current_active_sl:.4f})")
+                            log.append(f"--> Hit {'TS' if trailingActive else ''}SL tại {step}={price:.4f} (SL={current_active_sl:.4f}), exit at market={price:.4f}")
                         return {
                             'num': pair['num'],
                             'side': side,
@@ -245,11 +246,12 @@ def simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step):
                         }, log
                     elif side == 'SHORT' and price >= current_active_sl:
                         finalExitIdx = entryIdx + i
-                        finalExitPrice = min(current_active_sl, price)
+                        # SHORT SL Hit: Exit at market price (worse execution)
+                        finalExitPrice = price
                         finalExitDt = nowDt
                         exitType = 'TS SL' if trailingActive else 'SL'
                         if DEBUG:
-                            log.append(f"--> Hit {'TS' if trailingActive else ''}SL tại {step}={price:.4f} (SL={current_active_sl:.4f})")
+                            log.append(f"--> Hit {'TS' if trailingActive else ''}SL tại {step}={price:.4f} (SL={current_active_sl:.4f}), exit at market={price:.4f}")
                         return {
                             'num': pair['num'],
                             'side': side,
@@ -268,31 +270,6 @@ def simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step):
                             'tsStep': ts_step
                         }, log
 
-            # Kích hoạt BE nếu đủ điều kiện và được phép dùng BE
-            if use_BE and not BE_reached:
-                if (side=='LONG' and price >= beTrigPrice) or (side=='SHORT' and price <= beTrigPrice):
-                    BE_reached = True
-                    if use_TS:
-                        trailingActive = True
-                    trailingSL = entryPrice  # BE: dời SL về entry
-                    if DEBUG:
-                        log.append(f"--> BE kích hoạt tại {step}={price:.4f}, trailingSL dời về entry={entryPrice:.4f}")
-            # Kích hoạt trailing nếu đủ điều kiện và được phép dùng trailing
-            if use_TS and not TS_reached:
-                if (side=='LONG' and price >= tsTrigPrice) or (side=='SHORT' and price <= tsTrigPrice):
-                    TS_reached = True
-                    trailingActive = True
-                    if DEBUG:
-                        log.append(f"--> Trailing kích hoạt tại {step}={price:.4f}")
-            # Update trailing SL nếu active và đã kích hoạt trailing và được phép dùng trailing
-            if use_TS and trailingActive and TS_reached:
-                if trailingSL is not None:
-                    if side == 'LONG':
-                        trailingSL = max(trailingSL, price * (1 - ts_step/100))
-                    else:
-                        trailingSL = min(trailingSL, price * (1 + ts_step/100))
-                    if DEBUG:
-                        log.append(f"--> trailingSL update tại {step}={price:.4f}, trailingSL={trailingSL:.4f}")
             # Kích hoạt BE nếu đủ điều kiện và được phép dùng BE
             if use_BE and not BE_reached:
                 if (side=='LONG' and price >= beTrigPrice) or (side=='SHORT' and price <= beTrigPrice):

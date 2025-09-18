@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug JavaScript Errors</title>
+</head>
+<body>
+    <h1>Debug JavaScript toFixed Errors</h1>
+    <div id="output"></div>
+    
+    <script>
+        // Wrap console.error to capture errors
+        const originalError = console.error;
+        console.error = function(...args) {
+            const output = document.getElementById('output');
+            output.innerHTML += '<div style="color: red; margin: 5px 0; padding: 5px; background: #ffe6e6; border-left: 3px solid red;">' + 
+                                args.join(' ') + '</div>';
+            originalError.apply(console, args);
+        };
+        
+        // Wrap window.onerror to capture errors
+        window.onerror = function(message, source, lineno, colno, error) {
+            const output = document.getElementById('output');
+            output.innerHTML += '<div style="color: red; margin: 5px 0; padding: 5px; background: #ffe6e6; border-left: 3px solid red;">' + 
+                                `Error: ${message}<br>Source: ${source}<br>Line: ${lineno}, Column: ${colno}` + '</div>';
+            return false;
+        };
+        
+        // Test various undefined scenarios
+        console.log('Testing undefined scenarios...');
+        
+        try {
+            let undefined_obj;
+            console.log('Test 1: undefined_obj.toFixed(2)');
+            console.log(undefined_obj.toFixed(2));
+        } catch(e) {
+            console.error('Test 1 Error:', e.message);
+        }
+        
+        try {
+            let null_obj = null;
+            console.log('Test 2: null_obj.toFixed(2)');
+            console.log(null_obj.toFixed(2));
+        } catch(e) {
+            console.error('Test 2 Error:', e.message);
+        }
+        
+        try {
+            let empty_obj = {};
+            console.log('Test 3: empty_obj.property.toFixed(2)');
+            console.log(empty_obj.property.toFixed(2));
+        } catch(e) {
+            console.error('Test 3 Error:', e.message);
+        }
+        
+        try {
+            let obj_with_null = {property: null};
+            console.log('Test 4: obj_with_null.property.toFixed(2)');
+            console.log(obj_with_null.property.toFixed(2));
+        } catch(e) {
+            console.error('Test 4 Error:', e.message);
+        }
+        
+        try {
+            let obj_with_undefined = {property: undefined};
+            console.log('Test 5: obj_with_undefined.property.toFixed(2)');
+            console.log(obj_with_undefined.property.toFixed(2));
+        } catch(e) {
+            console.error('Test 5 Error:', e.message);
+        }
+        
+        // Test safe alternatives
+        console.log('Testing safe alternatives...');
+        
+        try {
+            let undefined_obj;
+            console.log('Safe test 1: (undefined_obj || 0).toFixed(2)');
+            console.log((undefined_obj || 0).toFixed(2));
+        } catch(e) {
+            console.error('Safe test 1 Error:', e.message);
+        }
+        
+        try {
+            let empty_obj = {};
+            console.log('Safe test 2: (empty_obj.property || 0).toFixed(2)');
+            console.log((empty_obj.property || 0).toFixed(2));
+        } catch(e) {
+            console.error('Safe test 2 Error:', e.message);
+        }
+        
+        try {
+            let empty_obj = {};
+            console.log('Safe test 3: (empty_obj?.property || 0).toFixed(2)');
+            console.log((empty_obj?.property || 0).toFixed(2));
+        } catch(e) {
+            console.error('Safe test 3 Error:', e.message);
+        }
+        
+        console.log('Debug testing completed');
+    </script>
+</body>
+</html>

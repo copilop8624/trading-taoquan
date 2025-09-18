@@ -37,23 +37,32 @@ class DataManager:
         """Auto-discover candle CSV files in workspace"""
         self.available_data = {}
         
+        # Search in current directory and candles subfolder
+        search_paths = [
+            self.data_directory,
+            os.path.join(self.data_directory, "candles"),
+            os.path.join(self.data_directory, "data_organized", "candles")
+        ]
+        
         # Pattern: BINANCE_SYMBOL, TIMEFRAME.csv or BINANCE_SYMBOL.P, TIMEFRAME.csv
         patterns = [
             "BINANCE_*.csv",
             "*.csv"
         ]
         
-        for pattern in patterns:
-            files = glob.glob(os.path.join(self.data_directory, pattern))
-            for file_path in files:
-                filename = os.path.basename(file_path)
-                symbol_info = self._parse_filename(filename)
-                if symbol_info:
-                    symbol, timeframe, exchange = symbol_info
-                    key = f"{exchange}_{symbol}"
-                    if key not in self.available_data:
-                        self.available_data[key] = {}
-                    self.available_data[key][timeframe] = file_path
+        for search_path in search_paths:
+            if os.path.exists(search_path):
+                for pattern in patterns:
+                    files = glob.glob(os.path.join(search_path, pattern))
+                    for file_path in files:
+                        filename = os.path.basename(file_path)
+                        symbol_info = self._parse_filename(filename)
+                        if symbol_info:
+                            symbol, timeframe, exchange = symbol_info
+                            key = f"{exchange}_{symbol}"
+                            if key not in self.available_data:
+                                self.available_data[key] = {}
+                            self.available_data[key][timeframe] = file_path
         
         print(f"📊 Discovered {len(self.available_data)} symbols with data:")
         for symbol, timeframes in self.available_data.items():
