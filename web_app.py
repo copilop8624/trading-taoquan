@@ -3605,7 +3605,8 @@ def optimize_ranges():
         print(f"� Parameter Ranges:")
         print(f"   SL: {sl_min}% → {sl_max}% (step {sl_step}%)")
         print(f"   BE: {be_min}% → {be_max}% (step {be_step}%)")
-        print(f"   TS: {ts_min}% → {ts_max}% (step {ts_step}%)")
+        print(f"   TS Active: {ts_active_min}% → {ts_active_max}% (step {ts_active_step}%)")
+        print(f"   TS Step: {ts_step_min}% → {ts_step_max}% (step {ts_step_step}%)")
         
         # Create parameter lists based on selected parameters only
         print(f"🔧 Creating parameter lists for selected params: {selected_params}")
