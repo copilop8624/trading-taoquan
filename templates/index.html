@@ -7,10 +7,37 @@
     <script>
 // Global safe toFixed function
 function safeToFixed(value, digits = 2) {
+    // Handle null, undefined, NaN
     if (value === null || value === undefined || isNaN(value)) {
         return '0.' + '0'.repeat(digits);
     }
-    return Number(value).toFixed(digits);
+    
+    // Handle Infinity and -Infinity
+    if (!isFinite(value)) {
+        if (value === Infinity) return '∞';
+        if (value === -Infinity) return '-∞';
+        return '0.' + '0'.repeat(digits);
+    }
+    
+    try {
+        return Number(value).toFixed(digits);
+    } catch (e) {
+        console.error('safeToFixed error on value:', value, 'digits:', digits, 'error:', e);
+        return '0.' + '0'.repeat(digits);
+    }
+}
+
+// Safe Math functions for arrays that might be empty
+function safeMax(arr, defaultValue = 0) {
+    if (!arr || arr.length === 0) return defaultValue;
+    const result = Math.max(...arr);
+    return isFinite(result) ? result : defaultValue;
+}
+
+function safeMin(arr, defaultValue = 0) {
+    if (!arr || arr.length === 0) return defaultValue;
+    const result = Math.min(...arr);
+    return isFinite(result) ? result : defaultValue;
 }
 
 // Override default toFixed globally
@@ -1865,7 +1892,13 @@ function safeGet(obj, path, defaultValue = 0) {
                     
                     if (result.data && Array.isArray(result.data)) {
                         // Pass the full result object containing comparison data
-                        displayRangeOptimizationResults(result);
+                        try {
+                            displayRangeOptimizationResults(result);
+                        } catch (error) {
+                            console.error('❌ Error displaying results:', error);
+                            console.error('❌ Error stack:', error.stack);
+                            alert(`❌ Error displaying results: ${error.message}\n\nCheck console for details.`);
+                        }
                     } else {
                         console.error('❌ Invalid result structure:', result);
                         alert('❌ Invalid optimization results format');
@@ -1942,9 +1975,9 @@ function safeGet(obj, path, defaultValue = 0) {
                                     <div><strong>Total Trades:</strong> ${comparisonData.best_result.total_trades}</div>
                                     <div><strong>Profit Factor:</strong> ${safeToFixed(comparisonData.best_result?.pf || 0, 2)}</div>
                                     <div style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; font-size: 0.9em;">
-                                        <strong>SL:</strong> ${((comparisonData.best_result?.parameters?.sl || 0) * 100).toFixed(2)}% 
-                                        <strong>BE:</strong> ${((comparisonData.best_result?.parameters?.be || 0) * 100).toFixed(2)}% 
-                                        <strong>TS:</strong> ${((comparisonData.best_result?.parameters?.ts_active || 0) * 100).toFixed(2)}%
+                                        <strong>SL:</strong> ${safeToFixed((comparisonData.best_result?.parameters?.sl || 0) * 100, 2)}% 
+                                        <strong>BE:</strong> ${safeToFixed((comparisonData.best_result?.parameters?.be || 0) * 100, 2)}% 
+                                        <strong>TS:</strong> ${safeToFixed((comparisonData.best_result?.parameters?.ts_active || 0) * 100, 2)}%
                                     </div>
                                 </div>
                             </div>
@@ -2040,15 +2073,15 @@ function safeGet(obj, path, defaultValue = 0) {
                             </div>
                             <div>
                                 <strong>Profitable Combinations:</strong><br>
-                                ${results.filter(r => (r.total_profit || 0) > 0).length} (${((results.filter(r => (r.total_profit || 0) > 0).length / results.length) * 100).toFixed(1)}%)
+                                ${results.filter(r => (r.total_profit || 0) > 0).length} (${safeToFixed((results.filter(r => (r.total_profit || 0) > 0).length / results.length) * 100, 1)}%)
                             </div>
                             <div>
                                 <strong>Best Profit:</strong><br>
-                                <span style="color: green;">${Math.max(...results.map(r => r.total_profit || 0)).toFixed(2)}</span>
+                                <span style="color: green;">${safeToFixed(safeMax(results.map(r => r.total_profit || 0)), 2)}</span>
                             </div>
                             <div>
                                 <strong>Worst Loss:</strong><br>
-                                <span style="color: red;">${Math.min(...results.map(r => r.total_profit || 0)).toFixed(2)}</span>
+                                <span style="color: red;">${safeToFixed(safeMin(results.map(r => r.total_profit || 0)), 2)}</span>
                             </div>
                         </div>
                     </div>
@@ -2456,7 +2489,7 @@ function safeGet(obj, path, defaultValue = 0) {
                               `📈 Results:\n` +
                               `• Baseline total PnL: ${safeToFixed(data.real_data_info.baseline_pnl_total || 0, 2)}%\n` +
                               `• Optimized total PnL: ${safeToFixed(data.best_result.pnl_total || 0, 2)}%\n` +
-                              `• Improvement: ${((data.best_result.pnl_total || 0) - (data.real_data_info.baseline_pnl_total || 0)).toFixed(2)}%\n\n` +
+                              `• Improvement: ${safeToFixed((data.best_result.pnl_total || 0) - (data.real_data_info.baseline_pnl_total || 0), 2)}%\n\n` +
                               `Scroll down để xem chi tiết comparison!`);
                     }, 1000);
                     
