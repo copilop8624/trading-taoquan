@@ -1920,7 +1920,8 @@ def grid_search_realistic_full(pairs, df_candle, sl_list, be_list, ts_trig_list,
                     
                     for pair in pairs:
                         # Sá»­ dá»¥ng hÃ m simulate_trade NÃ‚NG CAO vá»›i logic BE+TS Ä‘áº§y Ä‘á»§
-                        if ADVANCED_MODE:
+                        if True:  # 🔧 UNIFIED LOGIC: Always use simulate_trade() to match Optuna behavior (ADVANCED_MODE removed)
+                            # 🔧 UNIFIED LOGIC: Always use simulate_trade() to match Optuna behavior
                             result, log = simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step)
                         else:
                             # Dá»± phÃ²ng mÃ´ phá»ng chá»‰ SL  
@@ -2101,20 +2102,11 @@ def grid_search_realistic_full_v2(pairs, df_candle, sl_list, be_list, ts_trig_li
                                           min(be_list), max(be_list), 
                                           min(ts_trig_list), max(ts_trig_list), 
                                           min(ts_step_list), max(ts_step_list), 
-                                          opt_type, n_trials=50)
+                                          opt_type, n_trials=(validate_optuna_trials(max_iterations) if max_iterations else DEFAULT_OPTUNA_TRIALS))
     
-    # 🔧 REPLACE HARD-CODED TRIALS WITH USER INPUT
-    # Use validated max_iterations or default
-    trials_count = validate_optuna_trials(max_iterations) if max_iterations else DEFAULT_OPTUNA_TRIALS
-    print(f"🔧 Optuna trials: {trials_count} ({'user input' if max_iterations else 'default'})")
+    # NOTE: 🔧 Fixed duplicate Optuna execution - now runs once with validated user input or default trials
     
-    # Re-run with correct trials count
-    opt_params, opt_value = optuna_search(pairs, df_candle, 
-                                          min(sl_list), max(sl_list), 
-                                          min(be_list), max(be_list), 
-                                          min(ts_trig_list), max(ts_trig_list), 
-                                          min(ts_step_list), max(ts_step_list), 
-                                          opt_type, n_trials=trials_count)
+
     
     sl_opt = opt_params['sl']
     be_opt = opt_params['be']
