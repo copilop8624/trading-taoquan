@@ -1921,8 +1921,11 @@ def grid_search_realistic_full(pairs, df_candle, sl_list, be_list, ts_trig_list,
                     for pair in pairs:
                         # Sá»­ dá»¥ng hÃ m simulate_trade NÃ‚NG CAO vá»›i logic BE+TS Ä‘áº§y Ä‘á»§
                         if True:  # 🔧 UNIFIED LOGIC: Always use simulate_trade() to match Optuna behavior (ADVANCED_MODE removed)
-                            # 🔧 UNIFIED LOGIC: Always use simulate_trade() to match Optuna behavior
-                            result, log = simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step)
+                            try:
+                                result, log = simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step)
+                            except Exception as e:
+                                print(f"⚠️ Grid Search error for pair {pair.get('num', 'unknown')}: {e}")
+                                result = None
                         else:
                             # Dá»± phÃ²ng mÃ´ phá»ng chá»‰ SL  
                             result = simulate_trade_sl_only(pair, df_candle, sl)
@@ -2002,6 +2005,22 @@ def grid_search_realistic_full(pairs, df_candle, sl_list, be_list, ts_trig_list,
     return results
 
 def optuna_search(trade_pairs, df_candle, sl_min, sl_max, be_min, be_max, ts_trig_min, ts_trig_max, ts_step_min, ts_step_max, opt_type, n_trials=50):
+    """🔧 Enhanced Optuna search with parameter validation and error handling"""
+    
+    # 🔧 Validate parameter ranges
+    if sl_min >= sl_max or be_min >= be_max or ts_trig_min >= ts_trig_max or ts_step_min >= ts_step_max:
+        raise ValueError(f"Invalid parameter ranges: SL[{sl_min}-{sl_max}], BE[{be_min}-{be_max}], TS_TRIG[{ts_trig_min}-{ts_trig_max}], TS_STEP[{ts_step_min}-{ts_step_max}]")
+    
+    if len(trade_pairs) == 0:
+        raise ValueError("No trade pairs provided for optimization")
+    
+    print(f"🔧 Optuna validation: {len(trade_pairs)} pairs, {n_trials} trials")
+    # 🔧 Validate parameter ranges
+    if sl_min >= sl_max or be_min >= be_max or ts_trig_min >= ts_trig_max or ts_step_min >= ts_step_max:
+        raise ValueError(f"Invalid parameter ranges: SL[{sl_min}-{sl_max}], BE[{be_min}-{be_max}], TS_TRIG[{ts_trig_min}-{ts_trig_max}], TS_STEP[{ts_step_min}-{ts_step_max}]")
+    
+    if len(trade_pairs) == 0:
+        raise ValueError("No trade pairs provided for optimization")
     def objective(trial):
         sl = trial.suggest_float('sl', sl_min, sl_max)
         be = trial.suggest_float('be', be_min, be_max)
@@ -2021,6 +2040,10 @@ def optuna_search(trade_pairs, df_candle, sl_min, sl_max, be_min, be_max, ts_tri
             try:
                 result, _ = simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step)
                 total_trades_processed += 1
+                
+                if result is None:
+                    print(f"⚠️ Optuna: simulate_trade returned None for pair {i+1}")
+                    continue
                 
                 if result is not None:
                     details.append(result)
