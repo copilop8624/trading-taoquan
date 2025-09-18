@@ -1017,7 +1017,8 @@
             }
             if (sl_min >= sl_max) errors.push('❌ SL Min phải nhỏ hơn SL Max');
             if (be_min >= be_max) errors.push('❌ BE Min phải nhỏ hơn BE Max');
-            if (ts_min >= ts_max) errors.push('❌ TS Min phải nhỏ hơn TS Max');
+            if (ts_active_min >= ts_active_max) errors.push('❌ TS Active Min phải nhỏ hơn TS Active Max');
+            if (ts_step_min >= ts_step_max) errors.push('❌ TS Step Min phải nhỏ hơn TS Step Max');
             
             // Check logical constraints (warnings - overlaps are OK for optimization testing)
             if (be_min >= sl_max) warnings.push('⚠️ BE Min >= SL Max - có thể không hợp lý');
