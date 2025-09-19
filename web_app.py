@@ -30,7 +30,7 @@ import os
 import sqlite3
 
 # 🔧 CENTRALIZED OPTUNA CONFIGURATION
-DEFAULT_OPTUNA_TRIALS = 100  # Default number of Optuna trials, matches frontend default
+DEFAULT_OPTUNA_TRIALS = 50  # Default number of Optuna trials, matches frontend default
 MIN_OPTUNA_TRIALS = 10      # Minimum allowed trials
 MAX_OPTUNA_TRIALS = 500     # Maximum allowed trials
 
@@ -2007,25 +2007,28 @@ def grid_search_realistic_full(pairs, df_candle, sl_list, be_list, ts_trig_list,
 def optuna_search(trade_pairs, df_candle, sl_min, sl_max, be_min, be_max, ts_trig_min, ts_trig_max, ts_step_min, ts_step_max, opt_type, n_trials=50):
     """🔧 Enhanced Optuna search with parameter validation and error handling"""
     
-    # 🔧 Validate parameter ranges
-    if sl_min >= sl_max or be_min >= be_max or ts_trig_min >= ts_trig_max or ts_step_min >= ts_step_max:
+    # 🔧 Debug: print actual parameter values and types
+    print(f"🔧 Optuna parameters received:")
+    print(f"   SL: {sl_min} ({type(sl_min)}) to {sl_max} ({type(sl_max)}) | {sl_min} > {sl_max} = {sl_min > sl_max}")
+    print(f"   BE: {be_min} ({type(be_min)}) to {be_max} ({type(be_max)}) | {be_min} > {be_max} = {be_min > be_max}")
+    print(f"   TS_TRIG: {ts_trig_min} ({type(ts_trig_min)}) to {ts_trig_max} ({type(ts_trig_max)}) | {ts_trig_min} > {ts_trig_max} = {ts_trig_min > ts_trig_max}")
+    print(f"   TS_STEP: {ts_step_min} ({type(ts_step_min)}) to {ts_step_max} ({type(ts_step_max)}) | {ts_step_min} > {ts_step_max} = {ts_step_min > ts_step_max}")
+    
+    # 🔧 Validate parameter ranges - allow min = max for fixed parameters
+    if sl_min > sl_max or be_min > be_max or ts_trig_min > ts_trig_max or ts_step_min > ts_step_max:
         raise ValueError(f"Invalid parameter ranges: SL[{sl_min}-{sl_max}], BE[{be_min}-{be_max}], TS_TRIG[{ts_trig_min}-{ts_trig_max}], TS_STEP[{ts_step_min}-{ts_step_max}]")
     
     if len(trade_pairs) == 0:
         raise ValueError("No trade pairs provided for optimization")
     
     print(f"🔧 Optuna validation: {len(trade_pairs)} pairs, {n_trials} trials")
-    # 🔧 Validate parameter ranges
-    if sl_min >= sl_max or be_min >= be_max or ts_trig_min >= ts_trig_max or ts_step_min >= ts_step_max:
-        raise ValueError(f"Invalid parameter ranges: SL[{sl_min}-{sl_max}], BE[{be_min}-{be_max}], TS_TRIG[{ts_trig_min}-{ts_trig_max}], TS_STEP[{ts_step_min}-{ts_step_max}]")
     
-    if len(trade_pairs) == 0:
-        raise ValueError("No trade pairs provided for optimization")
     def objective(trial):
-        sl = trial.suggest_float('sl', sl_min, sl_max)
-        be = trial.suggest_float('be', be_min, be_max)
-        ts_trig = trial.suggest_float('ts_trig', ts_trig_min, ts_trig_max)
-        ts_step = trial.suggest_float('ts_step', ts_step_min, ts_step_max)
+        # Handle parameters: suggest when range exists, use fixed value when min = max
+        sl = trial.suggest_float('sl', sl_min, sl_max) if sl_min != sl_max else sl_min
+        be = trial.suggest_float('be', be_min, be_max) if be_min != be_max else be_min
+        ts_trig = trial.suggest_float('ts_trig', ts_trig_min, ts_trig_max) if ts_trig_min != ts_trig_max else ts_trig_min
+        ts_step = trial.suggest_float('ts_step', ts_step_min, ts_step_max) if ts_step_min != ts_step_max else ts_step_min
         
 
         
@@ -2043,6 +2046,7 @@ def optuna_search(trade_pairs, df_candle, sl_min, sl_max, be_min, be_max, ts_tri
                 
                 if result is None:
                     print(f"⚠️ Optuna: simulate_trade returned None for pair {i+1}")
+                    print(f"   Trade details: {pair.get('entryDt', 'Unknown')} | Side: {pair.get('side', 'Unknown')} | Entry: {pair.get('entry', 'Unknown')}")
                     continue
                 
                 if result is not None:
@@ -2131,10 +2135,11 @@ def grid_search_realistic_full_v2(pairs, df_candle, sl_list, be_list, ts_trig_li
     
 
     
-    sl_opt = opt_params['sl']
-    be_opt = opt_params['be']
-    ts_trig_opt = opt_params['ts_trig']
-    ts_step_opt = opt_params['ts_step']
+    # Extract parameters safely with fallbacks
+    sl_opt = opt_params.get('sl', 2.0)  # Default fallback if not optimized
+    be_opt = opt_params.get('be', 0.0)  # Default fallback if not optimized
+    ts_trig_opt = opt_params.get('ts_trig', 0.0)  # Default fallback if not optimized
+    ts_step_opt = opt_params.get('ts_step', 0.1)  # Default fallback if not optimized
     
     print(f"ðŸ† THAM Sá» Tá»I Æ¯U: SL={sl_opt:.1f}%, BE={be_opt:.1f}%, TS_TRIG={ts_trig_opt:.1f}%, TS_STEP={ts_step_opt:.1f}%")
     print(f"   GiÃ¡ trá»‹ tá»‘i Æ°u: {opt_value}")
@@ -2711,21 +2716,7 @@ def suggest_parameters():
                 step_report = calculator.generate_comprehensive_report()
                 
                 # Extract parameter ranges from balanced strategy
-
-                # Debug: print types and values to catch structure errors
-                print(f"DEBUG step_report: {type(step_report)} {step_report}")
-                if not isinstance(step_report, dict):
-                    raise TypeError(f"step_report is not a dict, got {type(step_report)} with value {step_report}")
-                if 'parameter_steps' not in step_report:
-                    raise KeyError("'parameter_steps' not in step_report. step_report keys: " + str(step_report.keys()))
-                step_data = step_report['parameter_steps']
-                print(f"DEBUG step_data: {type(step_data)} {step_data}")
-                if not isinstance(step_data, dict):
-                    raise TypeError(f"step_data is not a dict, got {type(step_data)} with value {step_data}")
-                for k in ['sl_steps', 'be_steps', 'ts_trigger_steps', 'ts_step_steps']:
-                    print(f"DEBUG step_data['{k}']: {type(step_data.get(k))} {step_data.get(k)}")
-                    if not isinstance(step_data.get(k), dict):
-                        raise TypeError(f"step_data['{k}'] is not a dict, got {type(step_data.get(k))} with value {step_data.get(k)}")
+                # Debug statements removed for performance optimization
 
                 # Build param_ranges from recommendations if available, else fallback to step_data
                 if 'parameter_ranges' in recommendations:
@@ -4034,6 +4025,19 @@ def optimize_ranges():
         # Run optimization based on selected engine
         if optimization_engine == 'optuna':
             print("🔥 Running OPTUNA optimization...")
+            
+            # Initialize variables at the beginning to avoid UnboundLocalError
+            optuna_trades = []
+            optuna_advanced_metrics = {
+                'max_drawdown': 0, 'avg_win': 0, 'avg_loss': 0, 
+                'sharpe_ratio': 0, 'recovery_factor': 0, 
+                'max_consecutive_wins': 0, 'max_consecutive_losses': 0
+            }
+            win_trades = 0
+            loss_trades = 0
+            winrate_real = 0
+            results_data = []
+            
             try:
                 # CORRECTED LOGIC: Use same default baseline values as Grid Search
                 # This ensures consistent behavior between optimization engines
@@ -4083,28 +4087,84 @@ def optimize_ranges():
                 print(f"   Best params: {opt_params}")
                 print(f"   Best value: {opt_value}")
                 
+                # Define final parameter values for use throughout the code
+                final_sl = opt_params.get('sl', opt_sl_min)
+                final_be = opt_params.get('be', opt_be_min)
+                final_ts_trig = opt_params.get('ts_trig', opt_ts_active_min)
+                final_ts_step = opt_params.get('ts_step', opt_ts_step_min)
+                
                 # Store Optuna results directly (DON'T convert to grid search format)
                 optuna_best_params = opt_params
                 optuna_best_value = opt_value
                 
+                # Calculate real advanced metrics for Optuna result
+                # Simulate all trades with best params to get detailed results
+                try:
+                    # Run simulation with best parameters to get all trade results
+                    # final_* variables already defined above
+                    print(f"🔧 Debug: About to simulate with final params: sl={final_sl}, be={final_be}, ts_trig={final_ts_trig}, ts_step={final_ts_step}")
+                    
+                    optuna_trade_results = []
+                    for i, pair in enumerate(trade_pairs):
+                        try:
+                            result, _ = simulate_trade(pair, df_candle, final_sl, final_be, final_ts_trig, final_ts_step)
+                            if result is not None:
+                                optuna_trade_results.append(result)
+                        except Exception as pair_error:
+                            print(f"🔧 Debug: Error in simulate_trade for pair {i}: {pair_error}")
+                            continue  # Skip problematic trades
+                    
+                    print(f"🔧 Debug: Completed {len(optuna_trade_results)} trade simulations")
+                    
+                    # Calculate advanced metrics from results
+                    optuna_trades = optuna_trade_results  # Store for PF calculation
+                    print(f"🔧 Debug: About to calculate advanced metrics")
+                    optuna_advanced_metrics = calculate_advanced_metrics(optuna_trade_results)
+                    print(f"🔧 Debug: Advanced metrics calculated successfully")
+                    
+                    # Calculate win/loss trades
+                    win_trades = len([t for t in optuna_trade_results if t.get('pnlPct', 0) > 0])
+                    loss_trades = len([t for t in optuna_trade_results if t.get('pnlPct', 0) <= 0])
+                    winrate_real = (win_trades / len(optuna_trade_results) * 100) if optuna_trade_results else 0
+                    
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not calculate Optuna advanced metrics: {e}")
+                    import traceback
+                    print(f"🔧 Full detailed traceback:")
+                    traceback.print_exc()
+                    print(f"⚠️ Optuna trades variable state: {type(optuna_trades) if 'optuna_trades' in locals() else 'UNDEFINED'}")
+                    # Keep fallback values initialized above
+                
                 # Format results for frontend
                 results_data = [{
-                    'sl': opt_params['sl'] / 100,  # Convert to ratio for frontend
-                    'be': opt_params['be'] / 100,
-                    'ts': opt_params['ts_trig'] / 100,
-                    'ts_step': opt_params['ts_step'] / 100,  # ADD MISSING TS_STEP!
+                    'sl': final_sl / 100,  # Convert to ratio for frontend
+                    'be': final_be / 100,
+                    'ts': final_ts_trig / 100,
+                    'ts_step': final_ts_step / 100,  # ADD MISSING TS_STEP!
                     'total_profit': opt_value,
-                    'win_rate': 0.65,  # Placeholder - should calculate real value
+                    'win_rate': winrate_real / 100,  # Real winrate calculation
                     'total_trades': len(trade_pairs),
-                    'avg_win': 2.5,  # Placeholder
+                    # Add all advanced metrics from calculation
+                    'win_trades': win_trades,
+                    'loss_trades': loss_trades,
+                    'avg_win': optuna_advanced_metrics.get('avg_win', 0),
+                    'avg_loss': optuna_advanced_metrics.get('avg_loss', 0),
+                    'max_drawdown': optuna_advanced_metrics.get('max_drawdown', 0),
+                    'sharpe_ratio': optuna_advanced_metrics.get('sharpe_ratio', 0),
+                    'recovery_factor': optuna_advanced_metrics.get('recovery_factor', 0),
+                    'max_consecutive_wins': optuna_advanced_metrics.get('max_consecutive_wins', 0),
+                    'max_consecutive_losses': optuna_advanced_metrics.get('max_consecutive_losses', 0),
+                    'pf': opt_value / abs(sum([t.get('pnlPct', 0) for t in optuna_trades if t.get('pnlPct', 0) < 0])) if optuna_trades and any(t.get('pnlPct', 0) < 0 for t in optuna_trades) else 1.0,
                     'optimization_engine': 'Optuna'
                 }]
                 
-                print(f"🏆 Optuna Result: SL={opt_params['sl']:.2f}%, BE={opt_params['be']:.2f}%, TS={opt_params['ts_trig']:.2f}%, Value={opt_value:.2f}")
+                print(f"🏆 Optuna Result: SL={final_sl:.2f}%, BE={final_be:.2f}%, TS={final_ts_trig:.2f}%, Value={opt_value:.2f}")
                 
             except Exception as e:
                 print(f"❌ Optuna optimization error: {e}")
+                import traceback
                 print(f"Traceback: {traceback.format_exc()}")
+                print(f"Error details: {type(e).__name__}: {str(e)}")
                 print(f"🔍 Debug Info:")
                 print(f"   Trade pairs loaded: {len(trade_pairs) if 'trade_pairs' in locals() else 'Not loaded'}")
                 print(f"   Candle data loaded: {len(df_candle) if 'df_candle' in locals() else 'Not loaded'}")
@@ -4133,6 +4193,12 @@ def optimize_ranges():
                 # Format results for frontend (take top 10)
                 results_data = []
                 for result in results[:10]:  # Top 10 results
+                    # Calculate win/loss trades from winrate and total_trades
+                    total_trades = result.get('total_trades', 0)
+                    winrate = result.get('winrate', 0)
+                    win_trades = int(total_trades * winrate / 100) if total_trades > 0 else 0
+                    loss_trades = total_trades - win_trades
+                    
                     results_data.append({
                         'sl': result['sl'] / 100,  # Convert to ratio
                         'be': result['be'] / 100,
@@ -4140,8 +4206,18 @@ def optimize_ranges():
                         'ts_step': result.get('ts_step', 0.1) / 100,  # ADD TS_STEP for Grid Search
                         'total_profit': result.get('pnl_total', 0),
                         'win_rate': result.get('winrate', 0) / 100,
-                        'total_trades': result.get('total_trades', 0),
+                        'total_trades': total_trades,
+                        # Calculate win/loss trades from winrate
+                        'win_trades': win_trades,
+                        'loss_trades': loss_trades,
                         'avg_win': result.get('avg_win', 0),
+                        'avg_loss': result.get('avg_loss', 0),
+                        'max_drawdown': result.get('max_drawdown', 0),
+                        'sharpe_ratio': result.get('sharpe_ratio', 0),
+                        'recovery_factor': result.get('recovery_factor', 0),
+                        'max_consecutive_wins': result.get('max_consecutive_wins', 0),
+                        'max_consecutive_losses': result.get('max_consecutive_losses', 0),
+                        'pf': result.get('pf', 1.0),
                         'optimization_engine': 'Grid Search'
                     })
                 
@@ -4168,10 +4244,10 @@ def optimize_ranges():
             # Use Optuna results directly (already in percentage format)
             optuna_best_params = opt_params
             optuna_best_value = opt_value
-            best_sl = opt_params['sl']  # Already percentage
-            best_be = opt_params['be']  # Already percentage  
-            best_ts = opt_params['ts_trig']  # Already percentage
-            best_ts_step = opt_params['ts_step']  # Already percentage
+            best_sl = final_sl  # Use final computed value
+            best_be = final_be  # Use final computed value
+            best_ts = final_ts_trig  # Use final computed value
+            best_ts_step = final_ts_step  # Use final computed value
             best_value = opt_value  # Store best value for comparison
             print(f"🏆 Optuna Best Parameters: SL={best_sl:.6f}%, BE={best_be:.6f}%, TS={best_ts:.6f}%, TS_Step={best_ts_step:.6f}% -> Value={best_value:.2f}%")
             print(f"🔍 EXACT Optuna opt_params: {opt_params}")
@@ -4199,40 +4275,47 @@ def optimize_ranges():
         # ========================================
         print("📊 Using TRADELIST data as BASELINE (original real results)...")
         
-        # Extract baseline data from original trade_pairs (real tradelist data)
+        # Use the same calculation method as Quick Summary for consistency
+        baseline_performance = calculate_original_performance(trade_pairs)
+        
+        # Create baseline_trades structure for trade-by-trade comparison
         baseline_trades = []
-        baseline_pnl_total = 0
-        baseline_win_count = 0
-        
-        for i, trade_pair in enumerate(trade_pairs):
-            # trade_pair is a dict with structure: {num, entryDt, exitDt, side, entryPrice, exitPrice}
-            entry_price = float(trade_pair.get('entryPrice', 0))
-            exit_price = float(trade_pair.get('exitPrice', 0)) 
-            side = trade_pair.get('side', 'LONG')
-            
-            if side == 'LONG':
-                pnl_pct = ((exit_price - entry_price) / entry_price) * 100
-            else:  # SHORT
-                pnl_pct = ((entry_price - exit_price) / entry_price) * 100
-            
-            baseline_pnl_total += pnl_pct
-            if pnl_pct > 0:
-                baseline_win_count += 1
+        if trade_pairs:
+            for i, trade_pair in enumerate(trade_pairs):
+                entry_price = float(trade_pair.get('entryPrice', 0))
+                exit_price = float(trade_pair.get('exitPrice', 0)) 
+                side = trade_pair.get('side', 'LONG')
                 
-            baseline_trades.append({
-                'trade_num': i + 1,
-                'entry_time': str(trade_pair.get('entryDt', f'Trade {i+1}')),
-                'side': side,
-                'entry_price': entry_price,
-                'exit_price': exit_price,
-                'exit_type': 'ORIGINAL',  # From real tradelist
-                'pnl_pct': pnl_pct
-            })
+                if side == 'LONG':
+                    pnl_pct = ((exit_price - entry_price) / entry_price) * 100
+                else:  # SHORT
+                    pnl_pct = ((entry_price - exit_price) / entry_price) * 100
+                    
+                baseline_trades.append({
+                    'trade_num': i + 1,
+                    'entry_time': str(trade_pair.get('entryDt', f'Trade {i+1}')),
+                    'side': side,
+                    'entry_price': entry_price,
+                    'exit_price': exit_price,
+                    'exit_type': 'ORIGINAL',  # From real tradelist
+                    'pnl_pct': pnl_pct
+                })
         
-        baseline_winrate = (baseline_win_count / len(trade_pairs)) * 100 if trade_pairs else 0
-        baseline_pf = 1.0  # Can calculate if needed
-        
-        print(f"✅ BASELINE (Tradelist): PnL={baseline_pnl_total:.2f}%, WR={baseline_winrate:.1f}%, Trades={len(baseline_trades)}")
+        if baseline_performance:
+            baseline_pnl_total = baseline_performance['total_pnl']
+            baseline_winrate = baseline_performance['winrate']
+            baseline_pf = baseline_performance['profit_factor']
+            baseline_stats = baseline_performance  # Complete metrics from Quick Summary calculation
+            print(f"✅ BASELINE (Quick Summary method): PnL={baseline_pnl_total:.2f}%, WR={baseline_winrate:.1f}%, PF={baseline_pf:.2f}")
+        else:
+            baseline_pnl_total = 0
+            baseline_winrate = 0
+            baseline_pf = 1.0
+            baseline_stats = {
+                'win_trades': 0, 'loss_trades': 0, 'avg_win': 0, 'avg_loss': 0,
+                'max_drawdown': 0, 'profit_factor': 1.0, 'sharpe_ratio': 0, 'recovery_factor': 0
+            }
+            print("⚠️ No baseline performance data available")
         
         # ========================================
         # 🚀 RUN OPTIMIZED BACKTEST ONLY
@@ -4345,6 +4428,16 @@ def optimize_ranges():
                 'winrate': safe_float(optimized_winrate),
                 'pf': safe_float(optimized_results.get('pf', 1.0) if 'optimized_results' in locals() and optimized_results else 1.0),
                 'pnl_total': safe_float(optimized_pnl),
+                # Add advanced metrics from grid search results or best_result
+                'trade_win': safe_int(results_data[0].get('win_trades', 0) if results_data else 0),
+                'trade_loss': safe_int(results_data[0].get('loss_trades', 0) if results_data else 0),
+                'avg_win': safe_float(results_data[0].get('avg_win', 0.0) if results_data else 0.0),
+                'avg_loss': safe_float(results_data[0].get('avg_loss', 0.0) if results_data else 0.0),
+                'max_drawdown': safe_float(results_data[0].get('max_drawdown', 0.0) if results_data else 0.0),
+                'sharpe_ratio': safe_float(results_data[0].get('sharpe_ratio', 0.0) if results_data else 0.0),
+                'recovery_factor': safe_float(results_data[0].get('recovery_factor', 0.0) if results_data else 0.0),
+                'max_consecutive_wins': safe_int(results_data[0].get('max_consecutive_wins', 0) if results_data else 0),
+                'max_consecutive_losses': safe_int(results_data[0].get('max_consecutive_losses', 0) if results_data else 0),
                 'parameters': {
                     'sl': safe_float(best_sl),
                     'be': safe_float(best_be),
@@ -4352,11 +4445,18 @@ def optimize_ranges():
                     'ts_step': safe_float(best_ts_step)
                 }
             },
-            'baseline_result': {  # BASELINE from original tradelist
-                'total_trades': len(trade_pairs) if trade_pairs else 0,
+            'baseline_result': {  # BASELINE from original tradelist using Quick Summary calculation
+                'total_trades': baseline_stats.get('total_trades', len(trade_pairs) if trade_pairs else 0),
+                'winning_trades': baseline_stats.get('win_trades', 0),
+                'losing_trades': baseline_stats.get('loss_trades', 0),
                 'winrate': safe_float(baseline_winrate),
                 'pf': safe_float(baseline_pf, 1.0),
-                'total_pnl': safe_float(baseline_pnl_total),
+                'pnl_total': safe_float(baseline_pnl_total),
+                'avg_win': safe_float(baseline_stats.get('avg_win', 0)),
+                'avg_loss': safe_float(baseline_stats.get('avg_loss', 0)),
+                'max_dd': safe_float(baseline_stats.get('max_drawdown', 0)),
+                'sharpe_ratio': safe_float(baseline_stats.get('sharpe_ratio', 0)),
+                'recovery_factor': safe_float(baseline_stats.get('recovery_factor', 0)),
                 'parameters': {
                     'sl': 'ORIGINAL',
                     'be': 'ORIGINAL', 
@@ -4373,13 +4473,23 @@ def optimize_ranges():
                 {
                     'total_pnl': result['total_profit'],
                     'winrate': result['win_rate'] * 100,
-                    'pf': 1.8 + i * 0.1,  # Mock profit factor (can be improved)
-                    'max_drawdown': 15.5 - i * 0.5,  # Mock drawdown (can be improved)
+                    'pf': result.get('pf', 1.0),
+                    'max_drawdown': result.get('max_drawdown', 0.0),
+                    # Add all advanced metrics for Top 10 Results table
+                    'win_trades': result.get('win_trades', 0),
+                    'loss_trades': result.get('loss_trades', 0),
+                    'avg_win': result.get('avg_win', 0.0),
+                    'avg_loss': result.get('avg_loss', 0.0),
+                    'sharpe_ratio': result.get('sharpe_ratio', 0.0),
+                    'recovery_factor': result.get('recovery_factor', 0.0),
+                    'max_consecutive_wins': result.get('max_consecutive_wins', 0),
+                    'max_consecutive_losses': result.get('max_consecutive_losses', 0),
+                    'total_trades': result.get('total_trades', 0),
                     'parameters': {
                         'sl': result['sl'] * 100,
                         'be': result['be'] * 100,
                         'ts_active': result['ts'] * 100,
-                        'ts_step': 0.1
+                        'ts_step': result.get('ts_step', 0.001) * 100  # Convert back to percentage
                     }
                 } for i, result in enumerate(results_data[:10])
             ],

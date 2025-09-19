@@ -1,15 +1,19 @@
-streamlit
-pandas
-numpy
-optuna
-matplotlib
-scikit-learn
-# Web server dependency required by web_app.py
-flask
-# Thêm các package khác nếu code bạn cần
+# Core dependencies for Trading Optimization App
+flask>=2.3.0
+pandas>=1.5.0
+numpy>=1.24.0
+optuna>=3.0.0
+plotly>=5.0.0
 
-# DB + migration dependencies
-alembic
-psycopg2-binary
-typer[all]
-pytest
+# Data processing & analysis
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+
+# Optional: For deployment
+gunicorn>=21.0.0  # Production WSGI server
+pyngrok>=6.0.0   # For Colab tunneling
+
+# Development dependencies (optional)
+pytest>=7.0.0
+black>=23.0.0
+isort>=5.12.0
