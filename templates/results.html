@@ -1,53 +1,337 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js"></script>
-    <title>Results Viewer</title>
-  </head>
-  <body class="bg-light">
-    <div class="container py-4">
-      <h1 class="mb-4">Backtest Results</h1>
-      <div id="results-message" class="mb-2 text-muted"></div>
-      <table class="table table-sm table-striped" id="results-table">
-        <thead><tr><th>Filename</th><th>Symbol</th><th>Timeframe</th><th>Strategy</th><th>Rows</th><th>Last Modified</th><th>Actions</th></tr></thead>
-        <tbody></tbody>
-      </table>
-
-      <h3 class="mt-4">Preview (first 20 rows)</h3>
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <div></div>
-        <div><button id="results-reset-options" class="btn btn-sm btn-outline-danger">Reset Options</button></div>
-      </div>
-      <div id="preview-area" class="mb-3"></div>
-
-      <h3 class="mt-4">PnL Chart</h3>
-      <div class="d-flex align-items-center mb-2">
-        <div>
-          <button id="res-1d" class="btn btn-sm btn-outline-primary me-2">1 day</button>
-          <button id="res-7d" class="btn btn-sm btn-outline-primary me-2">7 days</button>
-          <button id="res-all" class="btn btn-sm btn-outline-primary me-2">All</button>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimization Results - Trading Analytics</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .results-table {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .filter-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .positive { color: #28a745; }
+        .negative { color: #dc3545; }
+        
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-bottom: 30px;
+        }
+        
+        .modal-lg {
+            max-width: 90%;
+        }
+        
+        .param-badge {
+            background: #e9ecef;
+            color: #495057;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        
+        .engine-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        
+        .engine-optuna {
+            background: #007bff;
+            color: white;
+        }
+        
+        .engine-grid {
+            background: #28a745;
+            color: white;
+        }
+        
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+        
+        /* Navigation Menu */
+        .nav-menu {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .nav-item {
+            color: white;
+            text-decoration: none;
+            padding: 12px 20px;
+            margin: 0 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+        .nav-item:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+            color: white;
+        }
+        .nav-item.active {
+            background: rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-chart-line me-2"></i>
+                Trading Analytics
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">
+                    <i class="fas fa-home me-1"></i>
+                    Home
+                </a>
+                <a class="nav-link active" href="/results">
+                    <i class="fas fa-database me-1"></i>
+                    Results
+                </a>
+            </div>
         </div>
-        <small class="text-muted ms-3">Use Ctrl+Scroll to zoom Y-axis; drag to pan X-axis; Reset Zoom to restore</small>
-      </div>
-      <canvas id="pnlChart" height="150"></canvas>
+    </nav>
+
+    <!-- Navigation Menu -->
+    <div class="nav-menu">
+        <div class="container">
+            <div class="d-flex justify-content-center align-items-center flex-wrap" style="display: flex; justify-content: center; align-items: center; flex-wrap: wrap;">
+                <a href="/" class="nav-item">
+                    <i class="fas fa-home" style="margin-right: 8px;"></i>Backtest
+                </a>
+                <a href="/strategy_management" class="nav-item">
+                    <i class="fas fa-cogs" style="margin-right: 8px;"></i>Strategy Management
+                </a>
+                <a href="/data_management" class="nav-item">
+                    <i class="fas fa-database" style="margin-right: 8px;"></i>Data Management
+                </a>
+                <a href="/results" class="nav-item active">
+                    <i class="fas fa-chart-bar" style="margin-right: 8px;"></i>Results Database
+                </a>
+            </div>
+        </div>
     </div>
 
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner-border text-light" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <div class="container mt-4">
+        <!-- Statistics Cards -->
+        <div class="row" id="statisticsCards">
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6>Total Results</h6>
+                            <h3 id="totalResults">-</h3>
+                        </div>
+                        <i class="fas fa-chart-bar fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6>Unique Symbols</h6>
+                            <h3 id="uniqueSymbols">-</h3>
+                        </div>
+                        <i class="fas fa-coins fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6>Avg PnL</h6>
+                            <h3 id="avgPnl">-</h3>
+                        </div>
+                        <i class="fas fa-percentage fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6>Recent (7d)</h6>
+                            <h3 id="recentResults">-</h3>
+                        </div>
+                        <i class="fas fa-clock fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filter-card">
+            <h5><i class="fas fa-filter me-2"></i>Filters & Actions</h5>
+            <div class="row">
+                <div class="col-md-2">
+                    <label class="form-label">Symbol</label>
+                    <input type="text" class="form-control" id="filterSymbol" placeholder="e.g., BTCUSDT">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Engine</label>
+                    <select class="form-select" id="filterEngine">
+                        <option value="">All Engines</option>
+                        <option value="optuna">Optuna</option>
+                        <option value="grid_search">Grid Search</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Min PnL (%)</label>
+                    <input type="number" class="form-control" id="filterMinPnl" placeholder="0">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Max PnL (%)</label>
+                    <input type="number" class="form-control" id="filterMaxPnl" placeholder="1000">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Per Page</label>
+                    <select class="form-select" id="perPage">
+                        <option value="10">10</option>
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Actions</label>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-sm" onclick="loadResults()">
+                            <i class="fas fa-search"></i> Search
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-success btn-sm" onclick="exportResults('json')">
+                            <i class="fas fa-download"></i> Export JSON
+                        </button>
+                        <button class="btn btn-outline-success btn-sm" onclick="exportResults('csv')">
+                            <i class="fas fa-file-csv"></i> Export CSV
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="clearFilters()">
+                            <i class="fas fa-times"></i> Clear Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Table -->
+        <div class="results-table">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Timestamp</th>
+                            <th>Symbol</th>
+                            <th>Strategy</th>
+                            <th>Engine</th>
+                            <th>Total PnL (%)</th>
+                            <th>Win Rate (%)</th>
+                            <th>Trades</th>
+                            <th>Parameters</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsTableBody">
+                        <tr>
+                            <td colspan="10" class="text-center py-4">
+                                <i class="fas fa-search fa-2x text-muted"></i>
+                                <p class="text-muted mt-2">Click "Search" to load optimization results</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <nav aria-label="Results pagination" class="mt-3">
+            <ul class="pagination justify-content-center" id="pagination">
+                <!-- Pagination will be generated by JavaScript -->
+            </ul>
+        </nav>
+    </div>
+
+    <!-- Result Details Modal -->
+    <div class="modal fade" id="detailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Optimization Result Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="detailsModalBody">
+                    <!-- Details will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="exportSingleResult()">
+                        <i class="fas fa-download"></i> Export This Result
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-      async function loadList(){
-        const resp = await fetch('/api/results_list');
-        const data = await resp.json();
-        const tbody = document.querySelector('#results-table tbody');
-        tbody.innerHTML = '';
-        if(!data.results || data.results.length===0){
-          document.getElementById('results-message').innerHTML = '<div class="alert alert-info">No result CSVs found. Upload a tradelist from the <a href="/">Dashboard</a>.</div>';
-          return;
-        }
-        data.results.forEach(r=>{
-          const tr = document.createElement('tr');
+        let currentPage = 1;
+        let currentResultId = null;
           const lm = r.last_modified ? new Date(r.last_modified).toLocaleString() : '';
           tr.innerHTML = `
             <td>${r.filename}</td>
@@ -62,185 +346,426 @@
             </td>
           `;
           tbody.appendChild(tr);
+        
+        // Load statistics on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStatistics();
         });
-
-        document.querySelectorAll('.view-btn').forEach(btn=>{
-          btn.addEventListener('click', ()=>{
-            const filename = btn.getAttribute('data-filename');
-            loadPreviewAndChart(filename);
-          });
-        });
-      }
-
-  let chart = null;
-      function renderPreviewTable(rows, labels){
-        const area = document.getElementById('preview-area');
-        if(!rows || rows.length===0){ area.innerHTML = '<div class="text-muted">No preview available</div>'; return; }
-          const cols = Object.keys(rows[0]);
-          // add Dropped column if labels provided
-          const hasLabels = Array.isArray(labels) && labels.length === rows.length;
-          if(!cols.includes('Dropped from chart')) cols.push('Dropped from chart');
-          const tbl = document.createElement('table'); tbl.className='table table-sm table-bordered';
-          const thead = document.createElement('thead');
-          thead.innerHTML = '<tr>'+cols.map(c=>{ if(c==='Dropped from chart') return `<th title="Rows without valid timestamps are excluded from the chart series">${c} &#9432;</th>`; return `<th>${c}</th>` }).join('')+'</tr>';
-          const tbody = document.createElement('tbody');
-          rows.forEach(r=>{
-            const tr = document.createElement('tr');
-            tr.innerHTML = cols.map((c,ci)=>{
-              const raw = r[c];
-              if(raw === undefined || raw === null) return '<td></td>';
-              // format date-like columns
-              if(/date|time|timestamp/i.test(c)){
-                const d = new Date(raw);
-                if(!isNaN(d)){
-                  const YYYY = d.getFullYear(); const MM = String(d.getMonth()+1).padStart(2,'0'); const DD = String(d.getDate()).padStart(2,'0');
-                  const hh = String(d.getHours()).padStart(2,'0'); const mm = String(d.getMinutes()).padStart(2,'0');
-                  return `<td>${YYYY}-${MM}-${DD} ${hh}:${mm}</td>`;
+        
+        function showLoading() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+        
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+        
+        async function loadStatistics() {
+            try {
+                const response = await fetch('/api/results/statistics');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = data.statistics;
+                    document.getElementById('totalResults').textContent = stats.total_results;
+                    document.getElementById('uniqueSymbols').textContent = stats.unique_symbols;
+                    document.getElementById('avgPnl').textContent = stats.performance.avg_pnl.toFixed(2) + '%';
+                    document.getElementById('recentResults').textContent = stats.recent_results;
                 }
-              }
-              // numeric formatting
-              const n = Number(raw);
-              if(!isNaN(n)) return `<td>${safeToFixed(n, 2)}</td>`;
-              return `<td>${raw}</td>`;
-            }).join('');
-            // set Dropped column content and style if applicable
-            if(hasLabels){
-              const idx = Array.from(tbody.children).length;
-              if(!labels[idx] || labels[idx] === null){
-                tr.classList.add('dropped-row');
-                const last = tr.lastElementChild; if(last){ last.innerText = 'missing/invalid date'; last.title = 'Excluded from chart: missing/invalid timestamp'; }
-              }
+            } catch (error) {
+                console.error('Error loading statistics:', error);
             }
-            // highlight pnl-like columns
-            const pnlKeys = ['pl','pnl','pnl_usd','pnl_pct','profit'];
-            for(const k of pnlKeys){ if(r[k] !== undefined){ const val = Number(r[k]); if(!isNaN(val)){ if(val>0) tr.style.backgroundColor='rgba(0,255,0,0.04)'; else if(val<0) tr.style.backgroundColor='rgba(255,0,0,0.04)'; break; } } }
-            tbody.appendChild(tr);
-          });
-          tbl.appendChild(thead); tbl.appendChild(tbody);
-        area.innerHTML = '';
-        area.appendChild(tbl);
-      }
-
-      async function loadPreviewAndChart(filename){
-        document.getElementById('results-message').innerText = `Loading ${filename}...`;
-        const resp = await fetch(`/results/${encodeURIComponent(filename)}`);
-        const data = await resp.json();
-        if(data.error){ document.getElementById('results-message').innerText = `Error: ${data.error}`; return; }
-  renderPreviewTable(data.preview, detail.labels);
-
-        // load cumulative PnL
-        const resp2 = await fetch('/_result/'+encodeURIComponent(filename));
-        const detail = await resp2.json();
-        const cum = detail.cumulative || [];
-        const labels = detail.labels && detail.labels.length === cum.length ? detail.labels.map(s=> new Date(s)) : cum.map((_,i)=>i+1);
-        const ctx = document.getElementById('pnlChart').getContext('2d');
-        if(chart) chart.destroy();
-        chart = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: labels,
-            datasets: [
-              { label: 'Cumulative PnL', data: cum, borderColor: 'blue', tension: 0.1, yAxisID: 'y' },
-              { label: 'Drawdown', data: detail.drawdown || [], borderColor: 'red', tension: 0.1, yAxisID: 'y2' },
-              { label: 'Winrate %', data: detail.winrate || [], borderColor: 'green', tension: 0.1, yAxisID: 'y3', hidden: detail.winrate? false: true }
-            ]
-          },
-          options: {
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-              zoom: {
-                zoom: {
-                  wheel: { enabled: true, modifierKey: 'ctrl' },
-                  mode: 'y'
+        }
+        
+        async function loadResults(page = 1) {
+            showLoading();
+            currentPage = page;
+            
+            try {
+                const params = new URLSearchParams();
+                params.append('page', page);
+                params.append('per_page', document.getElementById('perPage').value);
+                
+                const symbol = document.getElementById('filterSymbol').value;
+                if (symbol) params.append('symbol', symbol);
+                
+                const engine = document.getElementById('filterEngine').value;
+                if (engine) params.append('engine', engine);
+                
+                const minPnl = document.getElementById('filterMinPnl').value;
+                if (minPnl) params.append('min_pnl', minPnl);
+                
+                const maxPnl = document.getElementById('filterMaxPnl').value;
+                if (maxPnl) params.append('max_pnl', maxPnl);
+                
+                const response = await fetch(`/api/results?${params}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderResults(data.results);
+                    renderPagination(data.pagination);
+                } else {
+                    showError('Error loading results: ' + data.error);
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        function renderResults(results) {
+            const tbody = document.getElementById('resultsTableBody');
+            
+            if (results.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="10" class="text-center py-4">
+                            <i class="fas fa-exclamation-circle fa-2x text-warning"></i>
+                            <p class="text-muted mt-2">No results found with current filters</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = results.map(result => `
+                <tr>
+                    <td>${result.id}</td>
+                    <td>${new Date(result.timestamp).toLocaleString()}</td>
+                    <td><strong>${result.symbol}</strong></td>
+                    <td>${result.strategy}</td>
+                    <td><span class="engine-badge engine-${result.engine.replace('_', '')}">${result.engine}</span></td>
+                    <td class="${result.total_pnl >= 0 ? 'positive' : 'negative'}">
+                        <strong>${result.total_pnl.toFixed(2)}%</strong>
+                    </td>
+                    <td>${result.winrate.toFixed(1)}%</td>
+                    <td>${result.total_trades}</td>
+                    <td>
+                        <small>
+                            ${Object.entries(result.parameters).map(([key, value]) => 
+                                `<span class="param-badge">${key}: ${typeof value === 'number' ? value.toFixed(2) : value}</span>`
+                            ).join(' ')}
+                        </small>
+                    </td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" onclick="viewDetails(${result.id})" title="View Details">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="deleteResult(${result.id})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        function renderPagination(pagination) {
+            const nav = document.getElementById('pagination');
+            const { page, pages, total } = pagination;
+            
+            if (pages <= 1) {
+                nav.innerHTML = '';
+                return;
+            }
+            
+            let html = '';
+            
+            // Previous button
+            html += `
+                <li class="page-item ${page === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadResults(${page - 1})">Previous</a>
+                </li>
+            `;
+            
+            // Page numbers
+            const startPage = Math.max(1, page - 2);
+            const endPage = Math.min(pages, page + 2);
+            
+            if (startPage > 1) {
+                html += `<li class="page-item"><a class="page-link" href="#" onclick="loadResults(1)">1</a></li>`;
+                if (startPage > 2) {
+                    html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                }
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                html += `
+                    <li class="page-item ${i === page ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="loadResults(${i})">${i}</a>
+                    </li>
+                `;
+            }
+            
+            if (endPage < pages) {
+                if (endPage < pages - 1) {
+                    html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                }
+                html += `<li class="page-item"><a class="page-link" href="#" onclick="loadResults(${pages})">${pages}</a></li>`;
+            }
+            
+            // Next button
+            html += `
+                <li class="page-item ${page === pages ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadResults(${page + 1})">Next</a>
+                </li>
+            `;
+            
+            nav.innerHTML = html;
+        }
+        
+        async function viewDetails(resultId) {
+            currentResultId = resultId;
+            showLoading();
+            
+            try {
+                const response = await fetch(`/api/results/${resultId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderDetailModal(data.data);
+                    new bootstrap.Modal(document.getElementById('detailsModal')).show();
+                } else {
+                    showError('Error loading details: ' + data.error);
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        function renderDetailModal(data) {
+            const { optimization, trades, pnl_curve } = data;
+            
+            const modalBody = document.getElementById('detailsModalBody');
+            modalBody.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Basic Information</h6>
+                        <table class="table table-sm table-borderless">
+                            <tr><th>Symbol:</th><td>${optimization.symbol}</td></tr>
+                            <tr><th>Strategy:</th><td>${optimization.strategy}</td></tr>
+                            <tr><th>Engine:</th><td><span class="engine-badge engine-${optimization.engine.replace('_', '')}">${optimization.engine}</span></td></tr>
+                            <tr><th>Timestamp:</th><td>${new Date(optimization.timestamp).toLocaleString()}</td></tr>
+                            <tr><th>Execution Time:</th><td>${optimization.execution_time || 0} seconds</td></tr>
+                            <tr><th>Iterations:</th><td>${optimization.iterations}</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Performance Metrics</h6>
+                        <table class="table table-sm table-borderless">
+                            <tr><th>Total PnL:</th><td class="${optimization.total_pnl >= 0 ? 'positive' : 'negative'}"><strong>${optimization.total_pnl.toFixed(2)}%</strong></td></tr>
+                            <tr><th>Win Rate:</th><td>${optimization.winrate.toFixed(1)}%</td></tr>
+                            <tr><th>Total Trades:</th><td>${optimization.total_trades}</td></tr>
+                            <tr><th>Winning Trades:</th><td class="positive">${optimization.win_count}</td></tr>
+                            <tr><th>Losing Trades:</th><td class="negative">${optimization.loss_count}</td></tr>
+                            <tr><th>Trade Pairs Count:</th><td>${optimization.trade_pairs_count}</td></tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Optimized Parameters</h6>
+                        <div class="mb-3">
+                            ${Object.entries(optimization.parameters).map(([key, value]) => 
+                                `<span class="param-badge me-2">${key}: ${typeof value === 'number' ? value.toFixed(4) : value}</span>`
+                            ).join('')}
+                        </div>
+                    </div>
+                </div>
+                
+                ${pnl_curve.length > 0 ? `
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6>PnL Curve</h6>
+                            <div class="chart-container">
+                                <canvas id="pnlChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
+                
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Recent Trades (First 10)</h6>
+                        <div class="table-responsive" style="max-height: 300px;">
+                            <table class="table table-sm table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Trade #</th>
+                                        <th>Side</th>
+                                        <th>Entry Price</th>
+                                        <th>Exit Price</th>
+                                        <th>Exit Type</th>
+                                        <th>PnL %</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${trades.slice(0, 10).map(trade => `
+                                        <tr>
+                                            <td>${trade.trade_num}</td>
+                                            <td><span class="badge bg-${trade.side === 'LONG' ? 'success' : 'danger'}">${trade.side}</span></td>
+                                            <td>${trade.entry_price.toFixed(4)}</td>
+                                            <td>${trade.exit_price.toFixed(4)}</td>
+                                            <td><span class="badge bg-secondary">${trade.exit_type}</span></td>
+                                            <td class="${trade.pnl_pct >= 0 ? 'positive' : 'negative'}">${trade.pnl_pct.toFixed(2)}%</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        ${trades.length > 10 ? `<small class="text-muted">Showing 10 of ${trades.length} trades</small>` : ''}
+                    </div>
+                </div>
+            `;
+            
+            // Render PnL chart if data available
+            if (pnl_curve.length > 0) {
+                setTimeout(() => renderPnLChart(pnl_curve), 100);
+            }
+        }
+        
+        function renderPnLChart(pnlCurve) {
+            const ctx = document.getElementById('pnlChart').getContext('2d');
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: pnlCurve.map(point => `Trade ${point.trade_number}`),
+                    datasets: [{
+                        label: 'Cumulative PnL %',
+                        data: pnlCurve.map(point => point.cumulative_pnl),
+                        borderColor: '#007bff',
+                        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                        fill: true,
+                        tension: 0.1
+                    }]
                 },
-                pan: {
-                  enabled: true,
-                  mode: 'x',
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'PnL %'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Equity Curve - Cumulative PnL'
+                        }
+                    }
                 }
-              }
-            },
-            scales: {
-              y: { type: 'linear', position: 'left' },
-              y2: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } },
-              y3: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks:{ callback: v=> v + '%' } },
-              x: { type: detail.labels? 'time' : 'category', time: { tooltipFormat: 'yyyy-MM-dd HH:mm' } }
+            });
+        }
+        
+        async function deleteResult(resultId) {
+            if (!confirm('Are you sure you want to delete this optimization result? This action cannot be undone.')) {
+                return;
             }
-          }
+            
+            showLoading();
+            
+            try {
+                const response = await fetch(`/api/results/${resultId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showSuccess('Result deleted successfully');
+                    loadResults(currentPage);
+                    loadStatistics();
+                } else {
+                    showError('Error deleting result: ' + data.error);
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        async function exportResults(format) {
+            showLoading();
+            
+            try {
+                const params = new URLSearchParams();
+                params.append('format', format);
+                
+                const symbol = document.getElementById('filterSymbol').value;
+                if (symbol) params.append('symbol', symbol);
+                
+                const engine = document.getElementById('filterEngine').value;
+                if (engine) params.append('engine', engine);
+                
+                const url = `/api/results/export?${params}`;
+                window.open(url, '_blank');
+                
+                showSuccess(`Export started. File will download shortly.`);
+            } catch (error) {
+                showError('Export error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        function clearFilters() {
+            document.getElementById('filterSymbol').value = '';
+            document.getElementById('filterEngine').value = '';
+            document.getElementById('filterMinPnl').value = '';
+            document.getElementById('filterMaxPnl').value = '';
+            document.getElementById('perPage').value = '20';
+        }
+        
+        function showError(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'top: 20px; right: 20px; z-index: 10000;';
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alert);
+            
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 5000);
+        }
+        
+        function showSuccess(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'top: 20px; right: 20px; z-index: 10000;';
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alert);
+            
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 3000);
+        }
+        
+        // Add Enter key support for filters
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && e.target.matches('#filterSymbol, #filterMinPnl, #filterMaxPnl')) {
+                loadResults();
+            }
         });
-
-        // add reset button
-        const msg = document.getElementById('results-message');
-        const resetBtnId = 'reset-zoom-btn';
-        if(!document.getElementById(resetBtnId)){
-          const btn = document.createElement('button'); btn.id = resetBtnId; btn.className='btn btn-sm btn-outline-secondary ms-2'; btn.innerText='Reset Zoom';
-          btn.addEventListener('click', ()=>{ if(chart) chart.resetZoom(); });
-          msg.appendChild(btn);
-        }
-        // attach presets
-        document.getElementById('res-1d').onclick = ()=>{ applyRange(chart, '1d'); };
-        document.getElementById('res-7d').onclick = ()=>{ applyRange(chart, '7d'); };
-        document.getElementById('res-all').onclick = ()=>{ chart.resetZoom(); };
-
-        function applyRange(chart, preset){
-          try{
-            if(!chart) return;
-            const labels = chart.data.labels;
-            if(labels && labels.length>0 && labels[0] instanceof Date){
-              const times = labels.map(d=>d.getTime());
-              const maxT = Math.max(...times);
-              let minT = Math.min(...times);
-              if(preset === '1d') minT = maxT - 24*3600*1000;
-              else if(preset === '7d') minT = maxT - 7*24*3600*1000;
-              chart.zoomScale('x', {min: minT, max: maxT});
-            }else{
-              const len = labels.length;
-              if(preset === '1d'){
-                const start = Math.max(0, len - 1440);
-                chart.zoomScale('x', {min: start, max: len});
-              }else if(preset === '7d'){
-                const start = Math.max(0, len - 10080);
-                chart.zoomScale('x', {min: start, max: len});
-              }
-            }
-          }catch(e){console.warn('applyRange error', e)}
-        }
-        document.getElementById('results-message').innerText = '';
-
-        // reset options handler (clear per-symbol keys if filename encodes symbol)
-        try{
-          const resetBtn = document.getElementById('results-reset-options');
-          resetBtn.onclick = ()=>{
-            // attempt to parse symbol from filename like SYMBOL-TF-strategy.csv
-            const parts = filename.split(/[._-]/);
-            const symbol = parts[0];
-            if(symbol){ try{ localStorage.removeItem(`parseMode_${symbol}`); localStorage.removeItem(`dropIncomplete_${symbol}`); }catch(e){console.warn('reset options results', e)} }
-            // re-render preview (defaults apply client-side if needed)
-            loadPreviewAndChart(filename);
-          };
-        }catch(e){ console.warn('attach reset handler', e) }
-      }
-
-      loadList();
-
-      // Listen for uploads from Dashboard to keep in sync
-      window.addEventListener('storage', (ev)=>{
-        if(ev.key === 'uploads-sync'){
-          try{ const payload = JSON.parse(ev.newValue || '{}'); if(payload && payload.event){ loadList(); } }catch(e){}
-        }
-      });
-
-      // Reset Options with confirm
-      document.getElementById('results-reset-options').addEventListener('click', ()=>{
-        if(!confirm('Reset saved options for this symbol? This will clear local preferences.')) return;
-        // try best-effort parsing of visible filename -> symbol
-        const firstRow = document.querySelector('#results-table tbody tr td');
-        if(!firstRow) return;
-        const filename = firstRow.innerText || '';
-        const parts = filename.split(/[._-]/);
-        const symbol = parts[0];
-        if(symbol){ try{ localStorage.removeItem(`parseMode_${symbol}`); localStorage.removeItem(`dropIncomplete_${symbol}`); }catch(e){} }
-        loadList();
-      });
     </script>
-  </body>
+</body>
 </html>

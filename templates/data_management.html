@@ -99,6 +99,9 @@
                 <a href="/data_management" class="nav-item active">
                     <i class="fas fa-database" style="margin-right: 8px;"></i>Data Management
                 </a>
+                <a href="/results" class="nav-item">
+                    <i class="fas fa-chart-bar" style="margin-right: 8px;"></i>Results Database
+                </a>
             </div>
         </div>
     </div>
@@ -132,7 +135,7 @@
                         
                         {% for symbol in symbols %}
                         <tr>
-                            <td>{{ symbol.symbol }}</td>
+                            <td>{{ symbol.symbol.replace('BINANCE_', '') }}</td>
                             <td>{{ symbol.timeframe }}</td>
                             <td>{{ "{:,}".format(symbol.count) }}</td>
                             <td>{{ symbol.last_date }}</td>

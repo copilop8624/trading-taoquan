@@ -2,8 +2,14 @@
 <html>
 <head>
     <title>🎯 Backtest Strategy Optimization System</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Bootstrap JS (for modal functionality) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
 // Global safe toFixed function
 function safeToFixed(value, digits = 2) {
@@ -209,6 +215,9 @@ function safeGet(obj, path, defaultValue = 0) {
                 <a href="/" class="nav-item active">
                     <i class="fas fa-home" style="margin-right: 8px;"></i>Backtest
                 </a>
+                <a href="/results" class="nav-item">
+                    <i class="fas fa-chart-line" style="margin-right: 8px;"></i>Results Database
+                </a>
                 <a href="/strategy_management" class="nav-item">
                     <i class="fas fa-cogs" style="margin-right: 8px;"></i>Strategy Management
                 </a>
@@ -223,7 +232,6 @@ function safeGet(obj, path, defaultValue = 0) {
         <div class="header">
             <h1>🎯 Backtest Strategy Optimization</h1>
             <p>Tối ưu hóa thông số chiến lược giao dịch với dữ liệu thực</p>
-            <button onclick="testOptimization()" style="background: #ff6b6b; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin: 10px;">🔧 TEST OPTIMIZATION DEBUG</button>
         </div>
         
         <!-- Strategy Selection Grid -->
@@ -257,6 +265,94 @@ function safeGet(obj, path, defaultValue = 0) {
                         <i class="fas fa-lightning-bolt"></i> Quick Summary
                     </button>
                 </div>
+                
+                <!-- 🚨 EMERGENCY INLINE SCRIPT -->
+                <script>
+                console.log('🚨 EMERGENCY SCRIPT LOADING...');
+                
+                function EMERGENCY_LOAD_DATA() {
+                    console.log('🚨 EMERGENCY LOAD DATA CALLED!');
+                    
+                    // Load strategies immediately with old-school JavaScript
+                    fetch('/list_strategies')
+                        .then(function(response) {
+                            console.log('📊 Strategies response:', response.status);
+                            return response.json();
+                        })
+                        .then(function(result) {
+                            console.log('📊 Strategies data:', result);
+                            var strategySelect = document.getElementById('strategySelect');
+                            if (strategySelect && result.success && result.strategies && result.strategies.length > 0) {
+                                strategySelect.innerHTML = '<option value="">-- Chọn Strategy --</option>';
+                                for (var i = 0; i < result.strategies.length; i++) {
+                                    var strategy = result.strategies[i];
+                                    var option = document.createElement('option');
+                                    var versionDisplay = strategy.version.startsWith('v') ? strategy.version : ('v' + strategy.version);
+                                    option.value = strategy.symbol + '_' + strategy.timeframe + '_' + strategy.strategy_name + '_' + versionDisplay;
+                                    option.textContent = strategy.symbol + ' ' + strategy.timeframe + ' - ' + strategy.strategy_name + ' ' + versionDisplay;
+                                    option.setAttribute('data-symbol', strategy.symbol);
+                                    option.setAttribute('data-timeframe', strategy.timeframe);
+                                    option.setAttribute('data-strategy-name', strategy.strategy_name);
+                                    option.setAttribute('data-version', strategy.version);
+                                    strategySelect.appendChild(option);
+                                }
+                                console.log('✅ EMERGENCY: Loaded ' + result.strategies.length + ' strategies!');
+                            } else {
+                                strategySelect.innerHTML = '<option value="">❌ Không có strategy nào</option>';
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('❌ EMERGENCY Strategies error:', error);
+                            var strategySelect = document.getElementById('strategySelect');
+                            if (strategySelect) {
+                                strategySelect.innerHTML = '<option value="">❌ Lỗi load strategies</option>';
+                            }
+                        });
+                    
+                    // Load candles immediately
+                    fetch('/list_candle_files')
+                        .then(function(response) {
+                            console.log('🕯️ Candles response:', response.status);
+                            return response.json();
+                        })
+                        .then(function(result) {
+                            console.log('🕯️ Candles data:', result);
+                            var candleSelect = document.getElementById('candleSelect');
+                            if (candleSelect && result.success && result.files && result.files.length > 0) {
+                                candleSelect.innerHTML = '<option value="">-- Chọn Symbol & Timeframe --</option>';
+                                for (var i = 0; i < result.files.length; i++) {
+                                    var file = result.files[i];
+                                    var option = document.createElement('option');
+                                    option.value = file;
+                                    var displayName = file.replace('BINANCE_', '').replace('.csv', '').replace('.db', '');
+                                    if (file.indexOf('.db') !== -1) {
+                                        displayName = '💾 ' + displayName;
+                                    }
+                                    option.textContent = displayName;
+                                    candleSelect.appendChild(option);
+                                }
+                                console.log('✅ EMERGENCY: Loaded ' + result.files.length + ' candle files!');
+                            } else {
+                                candleSelect.innerHTML = '<option value="">❌ Không có candle data</option>';
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('❌ EMERGENCY Candles error:', error);
+                            var candleSelect = document.getElementById('candleSelect');
+                            if (candleSelect) {
+                                candleSelect.innerHTML = '<option value="">❌ Lỗi load candles</option>';
+                            }
+                        });
+                }
+                
+                // AUTO-EXECUTE AFTER 2 SECONDS - DISABLED SINCE DATA LOADING WORKS NOW
+                // setTimeout(function() {
+                //     console.log('🚨 AUTO-EXECUTING EMERGENCY LOAD...');
+                //     EMERGENCY_LOAD_DATA();
+                // }, 2000);
+                
+                console.log('🚨 EMERGENCY SCRIPT LOADED (auto-execute disabled)');
+                </script>
             </div>
 
             <!-- Strategy Analysis & Quick Summary -->
@@ -512,6 +608,7 @@ function safeGet(obj, path, defaultValue = 0) {
                     </ul>
                 </div>
             </div>
+
         </div>
 
         <!-- Optimization Parameters -->
@@ -562,72 +659,180 @@ function safeGet(obj, path, defaultValue = 0) {
         console.log('🎯 Backtest System loaded');
 
         // 🔄 Data Loading Functions
-        async function refreshDataSources() {
+        // � DATA LOADING FUNCTIONS - FIXED VERSION
+        function refreshDataSources() {
             console.log('🔄 Refreshing data sources...');
-            document.getElementById('strategySelect').innerHTML = '<option value="">⏳ Đang tải strategies...</option>';
-            document.getElementById('candleSelect').innerHTML = '<option value="">⏳ Đang tải candle data...</option>';
             
-            await Promise.all([loadStrategies(), loadCandles()]);
+            const strategySelect = document.getElementById('strategySelect');
+            const candleSelect = document.getElementById('candleSelect');
+            
+            if (!strategySelect || !candleSelect) {
+                console.error('❌ Dropdown elements not found!');
+                return;
+            }
+            
+            strategySelect.innerHTML = '<option value="">⏳ Đang tải strategies...</option>';
+            candleSelect.innerHTML = '<option value="">⏳ Đang tải candle data...</option>';
+            
+            // Load both datasets
+            loadStrategies();
+            loadCandles();
         }
         
-        async function loadStrategies() {
+        function forceLoadData() {
+            console.log('🚨 Emergency data loading...');
+            
+            // Load strategies manually
+            fetch('/list_strategies')
+                .then(response => response.json())
+                .then(result => {
+                    console.log('📊 Strategies result:', result);
+                    const select = document.getElementById('strategySelect');
+                    if (select && result.success && result.strategies) {
+                        select.innerHTML = '<option value="">-- Chọn Strategy --</option>';
+                        result.strategies.forEach(strategy => {
+                            const option = document.createElement('option');
+                            const versionDisplay = strategy.version.startsWith('v') ? strategy.version : `v${strategy.version}`;
+                            option.value = `${strategy.symbol}_${strategy.timeframe}_${strategy.strategy_name}_${versionDisplay}`;
+                            option.textContent = `${strategy.symbol} ${strategy.timeframe} - ${strategy.strategy_name} ${versionDisplay}`;
+                            option.dataset.symbol = strategy.symbol;
+                            option.dataset.timeframe = strategy.timeframe;
+                            option.dataset.strategyName = strategy.strategy_name;
+                            option.dataset.version = strategy.version;
+                            select.appendChild(option);
+                        });
+                        console.log(`✅ Loaded ${result.strategies.length} strategies!`);
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ Strategies error:', error);
+                    const select = document.getElementById('strategySelect');
+                    if (select) select.innerHTML = '<option value="">❌ Lỗi load strategies</option>';
+                });
+            
+            // Load candles manually
+            fetch('/list_candle_files')
+                .then(response => response.json())
+                .then(result => {
+                    console.log('🕯️ Candles result:', result);
+                    const select = document.getElementById('candleSelect');
+                    if (select && result.success && result.files) {
+                        select.innerHTML = '<option value="">-- Chọn Symbol & Timeframe --</option>';
+                        result.files.forEach(file => {
+                            const option = document.createElement('option');
+                            option.value = file;
+                            let displayName = file.replace('BINANCE_', '').replace('.csv', '').replace('.db', '');
+                            if (file.includes('.db')) {
+                                displayName = '💾 ' + displayName;
+                            }
+                            option.textContent = displayName;
+                            select.appendChild(option);
+                        });
+                        console.log(`✅ Loaded ${result.files.length} candle sources!`);
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ Candles error:', error);
+                    const select = document.getElementById('candleSelect');
+                    if (select) select.innerHTML = '<option value="">❌ Lỗi load candles</option>';
+                });
+        }
+        
+        function loadStrategies() {
             console.log('📊 Loading strategies...');
-            try {
-                const response = await fetch('/list_strategies');
-                const result = await response.json();
-                console.log('Strategies response:', result);
-                
-                const select = document.getElementById('strategySelect');
-                select.innerHTML = '<option value="">-- Chọn Strategy --</option>';
-                
-                if (result.strategies && result.strategies.length > 0) {
-                    result.strategies.forEach(strategy => {
-                        const option = document.createElement('option');
-                        // Handle version format - don't add 'v' if version already starts with 'v'
-                        const versionDisplay = strategy.version.startsWith('v') ? strategy.version : `v${strategy.version}`;
-                        option.value = `${strategy.symbol}_${strategy.timeframe}_${strategy.strategy_name}_${versionDisplay}`;
-                        option.textContent = `${strategy.symbol} ${strategy.timeframe} - ${strategy.strategy_name} ${versionDisplay}`;
-                        option.dataset.symbol = strategy.symbol;
-                        option.dataset.timeframe = strategy.timeframe;
-                        option.dataset.strategyName = strategy.strategy_name;
-                        option.dataset.version = strategy.version;
-                        select.appendChild(option);
-                    });
-                    console.log(`✅ Loaded ${result.strategies.length} strategies`);
-                } else {
-                    select.innerHTML = '<option value="">❌ Không có strategy nào</option>';
-                }
-            } catch (error) {
-                console.error('❌ Error loading strategies:', error);
-                document.getElementById('strategySelect').innerHTML = '<option value="">❌ Lỗi load strategies</option>';
-            }
+            
+            console.log('🔄 Fetching from /list_strategies...');
+            fetch('/list_strategies')
+                .then(function(response) {
+                    console.log('📊 Response status:', response.status);
+                    return response.json();
+                })
+                .then(function(result) {
+                    console.log('📊 Strategies response:', result);
+                    
+                    const select = document.getElementById('strategySelect');
+                    if (!select) {
+                        console.error('❌ strategySelect element not found!');
+                        return;
+                    }
+                    
+                    select.innerHTML = '<option value="">-- Chọn Strategy --</option>';
+                    
+                    if (result.success && result.strategies && result.strategies.length > 0) {
+                        console.log('✅ Processing ' + result.strategies.length + ' strategies...');
+                        result.strategies.forEach(function(strategy, index) {
+                            console.log('🔄 Processing strategy ' + (index + 1) + ':', strategy);
+                            const option = document.createElement('option');
+                            // Handle version format - don't add 'v' if version already starts with 'v'
+                            const versionDisplay = strategy.version.startsWith('v') ? strategy.version : ('v' + strategy.version);
+                            option.value = strategy.symbol + '_' + strategy.timeframe + '_' + strategy.strategy_name + '_' + versionDisplay;
+                            option.textContent = strategy.symbol + ' ' + strategy.timeframe + ' - ' + strategy.strategy_name + ' ' + versionDisplay;
+                            option.dataset.symbol = strategy.symbol;
+                            option.dataset.timeframe = strategy.timeframe;
+                            option.dataset.strategyName = strategy.strategy_name;
+                            option.dataset.version = strategy.version;
+                            select.appendChild(option);
+                        });
+                        console.log('✅ Loaded ' + result.strategies.length + ' strategies');
+                    } else {
+                        console.warn('⚠️ No strategies found or request failed');
+                        select.innerHTML = '<option value="">❌ Không có strategy nào</option>';
+                    }
+                })
+                .catch(function(error) {
+                    console.error('❌ Error loading strategies:', error);
+                    document.getElementById('strategySelect').innerHTML = '<option value="">❌ Lỗi load strategies</option>';
+                });
         }
         
-        async function loadCandles() {
+        function loadCandles() {
             console.log('🕯️ Loading candle data...');
-            try {
-                const response = await fetch('/list_candle_files');
-                const result = await response.json();
-                console.log('Candles response:', result);
-                
-                const select = document.getElementById('candleSelect');
-                select.innerHTML = '<option value="">-- Chọn Symbol & Timeframe --</option>';
-                
-                if (result.success && result.files && result.files.length > 0) {
-                    result.files.forEach(file => {
-                        const option = document.createElement('option');
-                        option.value = file;
-                        option.textContent = file.replace('BINANCE_', '').replace('.csv', '').replace('.db', '');
-                        select.appendChild(option);
-                    });
-                    console.log(`✅ Loaded ${result.files.length} candle sources`);
-                } else {
-                    select.innerHTML = '<option value="">❌ Không có candle data</option>';
-                }
-            } catch (error) {
-                console.error('❌ Error loading candles:', error);
-                document.getElementById('candleSelect').innerHTML = '<option value="">❌ Lỗi load candles</option>';
-            }
+            
+            console.log('🔄 Fetching from /list_candle_files...');
+            fetch('/list_candle_files')
+                .then(function(response) {
+                    console.log('🕯️ Response status:', response.status);
+                    return response.json();
+                })
+                .then(function(result) {
+                    console.log('🕯️ Candles response:', result);
+                    
+                    const select = document.getElementById('candleSelect');
+                    if (!select) {
+                        console.error('❌ candleSelect element not found!');
+                        return;
+                    }
+                    
+                    select.innerHTML = '<option value="">-- Chọn Symbol & Timeframe --</option>';
+                    
+                    if (result.success && result.files && result.files.length > 0) {
+                        console.log('✅ Processing ' + result.files.length + ' candle sources...');
+                        result.files.forEach(function(file, index) {
+                            console.log('🔄 Processing candle file ' + (index + 1) + ':', file);
+                            const option = document.createElement('option');
+                            option.value = file;
+                            // Hiển thị symbol với format rõ ràng hơn
+                            let displayName = file.replace('.csv', '').replace('.db', '');
+                            // Thêm emoji cho database files  
+                            if (file.includes('.db')) {
+                                displayName = '💾 ' + displayName;
+                            }
+                            option.textContent = displayName;
+                            select.appendChild(option);
+                        });
+                        console.log('✅ Loaded ' + result.files.length + ' candle sources');
+                    } else {
+                        console.warn('⚠️ No candle data found or request failed');
+                        select.innerHTML = '<option value="">❌ Không có candle data</option>';
+                    }
+                })
+                .catch(function(error) {
+                    console.error('❌ Error loading candles:', error);
+                    const select = document.getElementById('candleSelect');
+                    if (select) {
+                        select.innerHTML = '<option value="">❌ Lỗi load candles</option>';
+                    }
+                });
         }
         
         // 👁️ Preview Data Function
@@ -811,8 +1016,10 @@ function safeGet(obj, path, defaultValue = 0) {
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🎯 DOM loaded, initializing...');
             
-            // Load data sources
-            refreshDataSources();
+            // Simple initialization - call force load directly
+            setTimeout(() => {
+                forceLoadData();
+            }, 500);
             
             // Add event listener for strategy selection change
             document.getElementById('strategySelect').addEventListener('change', function() {
@@ -1210,7 +1417,7 @@ function safeGet(obj, path, defaultValue = 0) {
                                 <div style="font-size: 1.1em; font-weight: bold; color: #155724;">
                                     <span style="background: #fff; padding: 4px 8px; margin: 0 2px; border-radius: 4px; border: 1px solid #28a745;">SL: ${safeToFixed(optimized.sl || 0, 1)}%</span> | 
                                     <span style="background: #fff; padding: 4px 8px; margin: 0 2px; border-radius: 4px; border: 1px solid #28a745;">BE: ${safeToFixed(optimized.be || 0, 1)}%</span> | 
-                                    <span style="background: #fff; padding: 4px 8px; margin: 0 2px; border-radius: 4px; border: 1px solid #28a745;">TS: ${safeToFixed(optimized.ts_trig || 0, 1)}%</span>
+                                    <span style="background: #fff; padding: 4px 8px; margin: 0 2px; border-radius: 4px; border: 1px solid #28a745;">TS: ${safeToFixed(optimized.ts_trig || 0, 1)}%/${safeToFixed(optimized.ts_step || 0, 1)}%</span>
                                 </div>
                             </div>
                         </div>
@@ -1918,45 +2125,6 @@ function safeGet(obj, path, defaultValue = 0) {
                 
                 const result = await response.json();
                 
-                // 🔍 COMPREHENSIVE DEBUG LOGGING
-                console.log('🎯 Optimization result:', result);
-                console.log('🔍 Result type:', typeof result);
-                console.log('🔍 Result keys:', Object.keys(result || {}));
-                
-                // Check main data structure
-                if (result && result.data) {
-                    console.log('🔍 Result.data type:', typeof result.data);
-                    console.log('🔍 Result.data is array:', Array.isArray(result.data));
-                    if (Array.isArray(result.data) && result.data.length > 0) {
-                        console.log('🔍 First result item:', result.data[0]);
-                        console.log('🔍 First result keys:', Object.keys(result.data[0] || {}));
-                    }
-                }
-                
-                // Check for undefined/null values that might cause toFixed errors
-                function debugCheckObject(obj, path = '') {
-                    if (obj === null) {
-                        console.error(`❌ NULL VALUE at ${path}`);
-                        return;
-                    }
-                    if (obj === undefined) {
-                        console.error(`❌ UNDEFINED VALUE at ${path}`);
-                        return;
-                    }
-                    if (typeof obj === 'object' && !Array.isArray(obj)) {
-                        Object.keys(obj).forEach(key => {
-                            const newPath = path ? `${path}.${key}` : key;
-                            debugCheckObject(obj[key], newPath);
-                        });
-                    } else if (Array.isArray(obj)) {
-                        obj.forEach((item, index) => {
-                            debugCheckObject(item, `${path}[${index}]`);
-                        });
-                    }
-                }
-                
-                debugCheckObject(result, 'result');
-                
                 if (result.success) {
                     // Use the correct data structure from the enhanced API response
                     console.log('🎯 Full result structure:', result);
@@ -1964,8 +2132,9 @@ function safeGet(obj, path, defaultValue = 0) {
                     
                     if (result.data && Array.isArray(result.data)) {
                         // Pass the full result object containing comparison data
+                        // Also pass params to track optimization engine type
                         try {
-                            displayRangeOptimizationResults(result);
+                            displayRangeOptimizationResults(result, params);
                         } catch (error) {
                             console.error('❌ Error displaying results:', error);
                             console.error('❌ Error stack:', error.stack);
@@ -1992,9 +2161,19 @@ function safeGet(obj, path, defaultValue = 0) {
         }
         
         // 📊 Display Range Optimization Results with Enhanced Comparison
-        function displayRangeOptimizationResults(data) {
+        function displayRangeOptimizationResults(data, params = null) {
             // Handle both array of results and full response data structure
             let results = Array.isArray(data) ? data : data.data || [];
+            
+            // 🔄 Store optimization results for comparison functionality
+            window.lastOptimizationResults = {
+                data: results,
+                timestamp: new Date().toISOString(),
+                engine: params?.optimization_engine || 'grid', // Use actual engine from params
+                symbol: params?.symbol || document.getElementById('symbol')?.value || '',
+                count: results.length,
+                criteria: params?.optimization_criteria || 'pnl'
+            };
             
             if (!results || results.length === 0) {
                 document.getElementById('resultsSection').innerHTML = `
@@ -2125,7 +2304,7 @@ function safeGet(obj, path, defaultValue = 0) {
                                     <div style="font-size: 0.9em; font-weight: bold; color: #155724;">
                                         <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">SL: ${safeToFixed((comparisonData.best_result?.parameters?.sl || 0) * 100, 2)}%</span>
                                         <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">BE: ${safeToFixed((comparisonData.best_result?.parameters?.be || 0) * 100, 2)}%</span>
-                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">TS: ${safeToFixed((comparisonData.best_result?.parameters?.ts_active || 0) * 100, 2)}%</span>
+                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">TS: ${safeToFixed((comparisonData.best_result?.parameters?.ts_trig || 0) * 100, 2)}%/${safeToFixed((comparisonData.best_result?.parameters?.ts_step || 0) * 100, 2)}%</span>
                                     </div>
                                 </div>
                             </div>
@@ -2155,7 +2334,7 @@ function safeGet(obj, path, defaultValue = 0) {
                             <div style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;">
                                 <span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">SL: ${safeToFixed(topResult.sl * 100, 2)}%</span>
                                 <span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">BE: ${safeToFixed(topResult.be * 100, 2)}%</span>
-                                <span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">TS: ${safeToFixed(topResult.ts * 100, 2)}%</span>
+                                <span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">TS: ${safeToFixed(topResult.ts_trig * 100, 2)}%/${safeToFixed(topResult.ts_step * 100, 2)}%</span>
                                 ${topResult.tp ? `<span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">TP: ${safeToFixed(topResult.tp * 100, 2)}%</span>` : ''}
                             </div>
                         </div>
@@ -2285,7 +2464,6 @@ function safeGet(obj, path, defaultValue = 0) {
                                         <th style="padding: 8px; border: 1px solid #ddd;">Optimized Exit</th>
                                         <th style="padding: 8px; border: 1px solid #ddd;">Optimized PnL</th>
                                         <th style="padding: 8px; border: 1px solid #ddd;">Improvement</th>
-                                        <th style="padding: 8px; border: 1px solid #ddd;">Exit Type</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tradeComparisonTableBody">
@@ -2304,7 +2482,6 @@ function safeGet(obj, path, defaultValue = 0) {
                                             <td style="padding: 6px; border: 1px solid #ddd;">$${safeToFixed(trade.optimized_exit_price, 2)} (${trade.optimized_exit_type})</td>
                                             <td style="padding: 6px; border: 1px solid #ddd;" class="${optimizedPnlClass}">${safeToFixed(trade.optimized_pnl, 2)}%</td>
                                             <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;" class="${improvementClass}">${trade.improvement >= 0 ? '+' : ''}${safeToFixed(trade.improvement, 2)}%</td>
-                                            <td style="padding: 6px; border: 1px solid #ddd;"><span class="badge ${trade.optimized_exit_type === 'TS' ? 'badge-success' : (trade.optimized_exit_type === 'BE' ? 'badge-warning' : 'badge-danger')}">${trade.optimized_exit_type}</span></td>
                                         </tr>
                                         `;
                                     }).join('')}
@@ -2517,14 +2694,177 @@ function safeGet(obj, path, defaultValue = 0) {
             calculateCombinations();
         }
         
-        // 📤 Export Optimization Results
+        // 📤 Export Optimization Results - UPDATED WITH API INTEGRATION
         function exportOptimizationResults() {
-            alert('🚧 Export functionality sẽ được implement trong phiên bản sau. Sẽ export ra CSV/Excel.');
+            // Show export options modal
+            const exportModal = document.createElement('div');
+            exportModal.innerHTML = `
+                <div class="modal fade" id="exportModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">� Export Optimization Results</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Export Format:</label>
+                                    <select class="form-select" id="exportFormat">
+                                        <option value="json">JSON (Complete Data)</option>
+                                        <option value="csv">CSV (Spreadsheet)</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Filter by Symbol (Optional):</label>
+                                    <input type="text" class="form-control" id="exportSymbol" placeholder="e.g. BTCUSDT">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Filter by Engine (Optional):</label>
+                                    <select class="form-select" id="exportEngine">
+                                        <option value="">All Engines</option>
+                                        <option value="grid">Grid Search</option>
+                                        <option value="optuna">Optuna</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-success" onclick="performExport()">
+                                    <i class="fas fa-download"></i> Export
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(exportModal);
+            new bootstrap.Modal(document.getElementById('exportModal')).show();
+            
+            // Clean up modal after close
+            document.getElementById('exportModal').addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(exportModal);
+            });
         }
         
-        // 🔄 Compare with Previous Results
+        function performExport() {
+            const format = document.getElementById('exportFormat').value;
+            const symbol = document.getElementById('exportSymbol').value.trim();
+            const engine = document.getElementById('exportEngine').value;
+            
+            // Build export URL
+            let exportUrl = `/api/results/export?format=${format}`;
+            if (symbol) exportUrl += `&symbol=${encodeURIComponent(symbol)}`;
+            if (engine) exportUrl += `&engine=${engine}`;
+            
+            // Create download link
+            const link = document.createElement('a');
+            link.href = exportUrl;
+            link.download = `optimization_results.${format}`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Close modal
+            bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+            
+            // Show success message
+            showNotification('📤 Export started! Download should begin shortly.', 'success');
+        }
+        
+        // 🔄 Compare with Previous Results - UPDATED WITH RESULTS DATABASE INTEGRATION
         function compareWithPrevious() {
-            alert('🚧 Tính năng so sánh đang được phát triển. Sẽ có thể compare với kết quả optimization trước đó.');
+            // Show comparison options modal
+            const compareModal = document.createElement('div');
+            compareModal.innerHTML = `
+                <div class="modal fade" id="compareModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">� Compare Optimization Results</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Choose how to compare optimization results:</p>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary" onclick="openResultsDatabase()">
+                                        <i class="fas fa-database"></i> Open Results Database
+                                        <small class="d-block">View all optimization history with filtering & charts</small>
+                                    </button>
+                                    <button class="btn btn-info" onclick="compareCurrentRun()">
+                                        <i class="fas fa-chart-line"></i> Compare Current Run
+                                        <small class="d-block">Compare current results with previous runs</small>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(compareModal);
+            new bootstrap.Modal(document.getElementById('compareModal')).show();
+            
+            // Clean up modal after close
+            document.getElementById('compareModal').addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(compareModal);
+            });
+        }
+        
+        function openResultsDatabase() {
+            // Close modal and redirect to Results Database
+            bootstrap.Modal.getInstance(document.getElementById('compareModal')).hide();
+            window.open('/results', '_blank');
+            showNotification('📊 Opening Results Database in new tab...', 'info');
+        }
+        
+        function compareCurrentRun() {
+            // Close modal first
+            bootstrap.Modal.getInstance(document.getElementById('compareModal')).hide();
+            
+            // Get current optimization results
+            const currentResults = window.lastOptimizationResults || null;
+            if (!currentResults) {
+                showNotification('⚠️ No current optimization results to compare. Run an optimization first.', 'warning');
+                return;
+            }
+            
+            // Redirect to Results Database with current data highlighted
+            const params = new URLSearchParams({
+                compare: 'true',
+                engine: currentResults.engine || 'grid',
+                symbol: currentResults.symbol || ''
+            });
+            
+            window.open(`/results?${params.toString()}`, '_blank');
+            showNotification('🔄 Opening comparison view...', 'info');
+        }
+        
+        // Helper function for notifications
+        function showNotification(message, type = 'info') {
+            const alertClass = type === 'success' ? 'alert-success' : 
+                              type === 'warning' ? 'alert-warning' : 
+                              type === 'error' ? 'alert-danger' : 'alert-info';
+            
+            const notification = document.createElement('div');
+            notification.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+            notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            notification.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Auto dismiss after 5 seconds
+            setTimeout(() => {
+                if (notification && notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 5000);
         }
         
         // 📊 Legacy Display Optimization Results (for backward compatibility)
@@ -2611,69 +2951,7 @@ function safeGet(obj, path, defaultValue = 0) {
                 alert('❌ Demo thất bại: ' + error.message);
             }
         }
-        
-        // 🚀 Test Real Optimization Function
-        async function testRealOptimization() {
-            if (!confirm('🚀 TEST OPTIMIZATION THỰC\n\n' +
-                      'Sẽ chạy optimization với dữ liệu thực có sẵn:\n' +
-                      '• Trade data: sample_trades_TEST.csv\n' +
-                      '• Candle data: BTCUSDT 30m từ database\n\n' +
-                      'Kết quả sẽ hiển thị so sánh TRƯỚC/SAU optimization thực.\n\n' +
-                      'Tiếp tục?')) {
-                return;
-            }
-            
-            showLoading();
-            hideResults();
-            
-            try {
-                console.log('🚀 Testing Real Optimization with Actual Data...');
-                
-                const response = await fetch('/test_real_optimization', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({})
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    console.log('✅ Real optimization test completed!');
-                    console.log(`📊 Processed ${data.real_data_info.total_trades} real trades`);
-                    console.logsafeToFixed(`📈 Baseline PnL: ${(data.real_data_info.baseline_pnl_total || 0, 2)}%`);
-                    
-                    // Display results with enhanced visualization
-                    displayOptimizationResults(data);
-                    
-                    // Show real data info alert
-                    setTimeout(() => {
-                        alert(`✅ REAL OPTIMIZATION TEST COMPLETED!\n\n` +
-                              `📊 Data Source:\n` +
-                              `• Trade file: ${data.real_data_info.trade_file}\n` +
-                              `• Total trades: ${data.real_data_info.total_trades}\n` +
-                              `• Candle data: ${data.real_data_info.candle_source}\n` +
-                              `• Candle count: ${data.real_data_info.candle_count}\n\n` +
-                              `📈 Results:\n` +
-                              `• Baseline total PnL: ${safeToFixed(data.real_data_info.baseline_pnl_total || 0, 2)}%\n` +
-                              `• Optimized total PnL: ${safeToFixed(data.best_result.pnl_total || 0, 2)}%\n` +
-                              `• Improvement: ${safeToFixed((data.best_result.pnl_total || 0) - (data.real_data_info.baseline_pnl_total || 0), 2)}%\n\n` +
-                              `Scroll down để xem chi tiết comparison!`);
-                    }, 1000);
-                    
-                } else {
-                    throw new Error(data.error || 'Unknown error');
-                }
-                
-            } catch (error) {
-                console.error('❌ Real optimization test error:', error);
-                alert(`❌ Real Optimization Test Error:\n${error.message}`);
-            } finally {
-                hideLoading();
-            }
-        }
-        
+
         // �🎯 Set Focus and Initialize
         window.addEventListener('load', function() {
             // Focus on strategy selection to encourage user to start there
@@ -2688,87 +2966,109 @@ function safeGet(obj, path, defaultValue = 0) {
                 resetToDefaultRanges();
             }
         });
-        
-        // TEST OPTIMIZATION FUNCTION
-        async function testOptimization() {
-            console.log('🔧 Starting test optimization...');
-            
-            const testParams = {
-                symbol: 'BINANCE_BTCUSDT',
-                timeframe: '30',
-                strategy_name: 'LONGSHORT',
-                sl_min: 0.5, sl_max: 2.0, sl_step: 0.5,
-                be_min: 0.5, be_max: 1.5, be_step: 0.5,
-                ts_trig_min: 0.5, ts_trig_max: 3.0, ts_trig_step: 0.5,
-                ts_step_min: 0.5, ts_step_max: 1.0, ts_step_step: 0.5,
-                multiTrial: true
-            };
-            
-            try {
-                console.log('🔧 Sending test request with params:', testParams);
-                
-                const response = await fetch('/optimize_ranges', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(testParams)
-                });
-                
-                console.log('🔧 Response status:', response.status);
-                console.log('🔧 Response headers:', response.headers);
-                
-                const result = await response.json();
-                
-                // 🔍 COMPREHENSIVE DEBUG LOGGING
-                console.log('🎯 TEST Optimization result:', result);
-                console.log('🔍 TEST Result type:', typeof result);
-                console.log('🔍 TEST Result keys:', Object.keys(result || {}));
-                
-                // Check main data structure
-                if (result && result.data) {
-                    console.log('🔍 TEST Result.data type:', typeof result.data);
-                    console.log('🔍 TEST Result.data is array:', Array.isArray(result.data));
-                    if (Array.isArray(result.data) && result.data.length > 0) {
-                        console.log('🔍 TEST First result item:', result.data[0]);
-                        console.log('🔍 TEST First result keys:', Object.keys(result.data[0] || {}));
-                    }
-                }
-                
-                // Look for properties that might be undefined and cause toFixed errors
-                function findUndefinedProperties(obj, path = '') {
-                    if (obj === null) {
-                        console.error(`❌ TEST NULL VALUE at ${path}`);
-                        return;
-                    }
-                    if (obj === undefined) {
-                        console.error(`❌ TEST UNDEFINED VALUE at ${path}`);
-                        return;
-                    }
-                    if (typeof obj === 'object' && !Array.isArray(obj)) {
-                        Object.keys(obj).forEach(key => {
-                            const newPath = path ? `${path}.${key}` : key;
-                            if (key.includes('pnl') || key.includes('winrate') || key.includes('pf') || key.includes('improvement')) {
-                                console.log(`🔍 Numeric property ${newPath}:`, typeof obj[key], obj[key]);
-                            }
-                            findUndefinedProperties(obj[key], newPath);
-                        });
-                    } else if (Array.isArray(obj)) {
-                        obj.forEach((item, index) => {
-                            findUndefinedProperties(item, `${path}[${index}]`);
-                        });
-                    }
-                }
-                
-                findUndefinedProperties(result, 'TEST_result');
-                
-                alert('Test completed! Check console for detailed logs.');
-                
-            } catch (error) {
-                console.error('🔧 TEST Error:', error);
-                alert('Test failed: ' + error.message);
-            }
-        }
+
     </script>
+    
+    <style>
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin: 15px 0;
+        }
+        
+        .metric-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        
+        .delta-card {
+            border-color: #ffc107;
+            background: #fff8e1;
+        }
+        
+        .pnl-value {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .delta-value.positive {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .delta-value.negative {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .effective {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .ineffective {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .diagnostic-message {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+        }
+        
+        .trade-analysis-table {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .trade-analysis-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .trade-analysis-table th,
+        .trade-analysis-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .trade-analysis-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+        }
+        
+        .pnl-cell.profit {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .pnl-cell.loss {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .delta-cell.positive {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .delta-cell.negative {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
 </body>
 </html>

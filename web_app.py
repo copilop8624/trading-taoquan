@@ -17,7 +17,7 @@ except Exception:
     # If reconfigure is not available, set PYTHONIOENCODING environment fallback
     os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
 
-from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory, make_response
 import pandas as pd
 import numpy as np
 import json
@@ -28,6 +28,32 @@ import random
 import tempfile
 import os
 import sqlite3
+
+class SafeJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles bytes objects and other non-serializable types"""
+    def default(self, obj):
+        if isinstance(obj, bytes):
+            try:
+                # Try to decode as UTF-8
+                return obj.decode('utf-8')
+            except UnicodeDecodeError:
+                # If decode fails, convert to base64
+                return base64.b64encode(obj).decode('utf-8')
+        elif hasattr(obj, 'isoformat'):  # Handle datetime objects
+            return obj.isoformat()
+        elif isinstance(obj, (set, frozenset)):
+            return list(obj)
+        elif isinstance(obj, (np.integer, np.int64, np.int32)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float64, np.float32)):
+            return float(obj)
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            # Let the base class handle other types
+            return super().default(obj)
 
 # 🔧 CENTRALIZED OPTUNA CONFIGURATION
 DEFAULT_OPTUNA_TRIALS = 50  # Default number of Optuna trials, matches frontend default
@@ -76,6 +102,7 @@ from strategy_manager import StrategyManager, get_strategy_manager
 try:
     from csv_to_db import migrate_csv_to_db, show_database_status
     from binance_fetcher import BinanceFetcher
+    from candlestick_db import init_db as init_candle_db
     DATA_MANAGEMENT_AVAILABLE = True
 except ImportError as e:
     print(f"⚠️ Data management modules not available: {e}")
@@ -160,12 +187,36 @@ def safe_int(value):
 
 app = Flask(__name__)
 
+# Configure custom JSON encoder to handle bytes objects
+app.json_encoder = SafeJSONEncoder
+
+# Database Configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///optimization_results.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_timeout': 20,
+    'pool_recycle': -1,
+    'pool_pre_ping': True
+}
+
+# Initialize Database
+from models import init_db, db, OptimizationResult, TradeLog, PnLCurve
+from models import save_optimization_result, get_optimization_results, get_optimization_details, export_optimization_results
+
+init_db(app)
+
 # Data Management for Binance Updates
 class WebDataManager:
     """Data manager for web app Binance updates"""
     def __init__(self):
         if DATA_MANAGEMENT_AVAILABLE:
             self.fetcher = BinanceFetcher()
+            # Initialize candlestick database
+            try:
+                init_candle_db()
+                print("✅ Candlestick database initialized for data management")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not initialize candlestick database: {e}")
         else:
             self.fetcher = None
         self.update_status = {
@@ -206,6 +257,32 @@ def safe_float(value, default=0.0):
     except (ValueError, TypeError):
         return default
 
+def normalize_symbol_format(symbol, ensure_prefix=True):
+    """
+    Normalize symbol format for consistent handling across the application
+    
+    Args:
+        symbol (str): Input symbol (e.g., 'BTCUSDT', 'BINANCE_BTCUSDT')
+        ensure_prefix (bool): If True, ensures BINANCE_ prefix is present
+                             If False, removes BINANCE_ prefix
+    
+    Returns:
+        str: Normalized symbol format
+    """
+    if not symbol:
+        return ""
+    
+    symbol = symbol.strip().upper()
+    
+    if ensure_prefix:
+        # Ensure symbol has BINANCE_ prefix for internal processing
+        if not symbol.startswith('BINANCE_'):
+            return f"BINANCE_{symbol}"
+        return symbol
+    else:
+        # Remove BINANCE_ prefix for display
+        return symbol.replace('BINANCE_', '')
+
 def discover_available_symbols():
     """Tự động phát hiện symbols và timeframes từ thư mục candles/"""
     import glob
@@ -233,7 +310,8 @@ def discover_available_symbols():
         # Parse BINANCE format: BINANCE_SYMBOL.P, timeframe.csv or BINANCE_SYMBOL, timeframe.csv
         match = re.match(r'BINANCE_([A-Z]+)\.?P?,?\s*(\d+)\.csv', filename)
         if match:
-            symbol = f"BINANCE_{match.group(1)}"
+            # Use normalized format for consistency
+            symbol = normalize_symbol_format(match.group(1), ensure_prefix=True)
             timeframe = match.group(2)
             
             if symbol not in symbols_data:
@@ -553,15 +631,6 @@ def health():
         info['advanced_import_error'] = str(_advanced_import_error)
     return jsonify(info), 200
 
-@app.route('/test_filter_debug.html', methods=['GET'])
-def test_filter_debug():
-    """Serve test filter debug page"""
-    try:
-        test_file_path = os.path.join(os.path.dirname(__file__), 'test_filter_debug.html')
-        return send_file(test_file_path)
-    except Exception as e:
-        return f"Error loading test file: {e}", 404
-
 @app.route('/test_range_suggestions', methods=['GET'])
 def test_range_suggestions():
     """Serve test range suggestions page"""
@@ -654,24 +723,48 @@ def api_binance_add():
     
     try:
         data = request.get_json()
-        symbol = data.get('symbol', '').upper() if data else ''
+        raw_symbol = data.get('symbol', '').upper().strip() if data else ''
         timeframe = data.get('timeframe', '30m') if data else '30m'
         days = int(data.get('days', 365)) if data and data.get('days') else 365
+        
+        # Ensure symbol is properly formatted using normalize function
+        if not raw_symbol:
+            return jsonify({'success': False, 'error': 'Symbol is required'})
+        
+        # Convert to internal format (BINANCE_SYMBOL) using normalize function
+        symbol = normalize_symbol_format(raw_symbol, ensure_prefix=True)
         
         def run_add():
             web_data_manager.update_status['running'] = True
             web_data_manager.update_status['current_symbol'] = f"Adding {symbol} {timeframe}"
-            web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Adding new symbol {symbol} {timeframe}")
+            web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Adding new symbol {symbol} {timeframe} with {days} days of history...")
             
             try:
                 if web_data_manager.fetcher:
-                    # Add logic here for fetching new symbol data
-                    web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Successfully added {symbol} {timeframe}")
+                    # Convert symbol format for Binance API using normalize function
+                    binance_symbol = normalize_symbol_format(symbol, ensure_prefix=False)
+                    
+                    # Convert timeframe format (remove 'm' if present)
+                    binance_timeframe = timeframe.replace('m', '') + 'm' if not timeframe.endswith('m') else timeframe
+                    
+                    web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching data from Binance API...")
+                    
+                    # Call the add_new_symbol method
+                    success = web_data_manager.fetcher.add_new_symbol(binance_symbol, binance_timeframe, days)
+                    
+                    if success:
+                        web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Successfully added {symbol} {timeframe}")
+                        web_data_manager.update_status['progress'] = 100
+                    else:
+                        web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Failed to add {symbol} {timeframe}")
+                else:
+                    web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Binance fetcher not available")
             except Exception as e:
-                web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Add error: {e}")
+                web_data_manager.update_status['log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Add error: {e}")
             finally:
                 web_data_manager.update_status['running'] = False
                 web_data_manager.update_status['current_symbol'] = ''
+                web_data_manager.update_status['progress'] = 0
         
         thread = threading.Thread(target=run_add)
         thread.start()
@@ -680,6 +773,333 @@ def api_binance_add():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+# ============================================================================
+# 🔍 CORE OPTIMIZATION ENDPOINTS  
+# ============================================================================
+
+@app.route('/api/verify_optimization', methods=['POST'])
+def api_verify_optimization():
+    """🔍 Verify optimization results with manual simulation for accuracy"""
+    try:
+        data = request.get_json()
+        
+        # Check if using selected data or uploaded content
+        use_selected_data = data.get('use_selected_data', False)
+        
+        if use_selected_data:
+            # File selection mode - reuse same logic as debug API
+            strategy = data.get('strategy', '')
+            candle_file = data.get('candle_file', '')
+            
+            if not strategy or not candle_file:
+                return jsonify({
+                    'success': False,
+                    'error': 'Strategy and candle data must be selected'
+                })
+            
+            # Load data from files (reuse same logic as debug API)
+            print(f"🔍 Verification: Loading strategy '{strategy}' and candle '{candle_file}'")
+            
+            # Load strategy file
+            try:
+                if ADVANCED_MODE:
+                    df_trade = load_trade_csv_file(strategy)
+                else:
+                    # Fallback - same logic as debug API
+                    import pandas as pd
+                    import glob
+                    import os
+                    
+                    strategy_parts = strategy.split('_')
+                    if len(strategy_parts) >= 4:
+                        symbol = strategy_parts[0]
+                        timeframe = strategy_parts[1]
+                        strategy_name = '_'.join(strategy_parts[2:-1])
+                        version = strategy_parts[-1]
+                        
+                        possible_patterns = [
+                            f"tradelist/BINANCE_{symbol}.P, {timeframe}-TRADELIST.csv",
+                            f"tradelist/BINANCE_{symbol}.P, {timeframe}-tradelist.csv", 
+                            f"tradelist/{symbol}_{timeframe}m_{strategy_name}_{version}.csv",
+                            f"tradelist/{symbol}_{timeframe}_{strategy_name}_{version}.csv",
+                            f"tradelist/{strategy}.csv"
+                        ]
+                        
+                        strategy_file = None
+                        for pattern in possible_patterns:
+                            files = glob.glob(pattern)
+                            if files:
+                                if len(files) == 1:
+                                    strategy_file = files[0]
+                                else:
+                                    largest_file = max(files, key=lambda f: os.path.getsize(f))
+                                    strategy_file = largest_file
+                                print(f"🔍 Verification found file: {strategy_file}")
+                                break
+                        
+                        if not strategy_file:
+                            strategy_file = f"tradelist/{strategy}.csv"
+                    else:
+                        strategy_file = f"tradelist/{strategy}.csv"
+                    
+                    df_trade = pd.read_csv(strategy_file)
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to load strategy file: {str(e)}'
+                })
+            
+            # Load candle file
+            try:
+                if ADVANCED_MODE:
+                    df_candle = load_candle_csv_file(candle_file)
+                else:
+                    import pandas as pd
+                    if candle_file.startswith('💾'):
+                        return jsonify({
+                            'success': False,
+                            'error': f'Database candle files not supported in verification mode yet.'
+                        })
+                    else:
+                        if not candle_file.startswith('candles/'):
+                            candle_file_path = f"candles/{candle_file}"
+                        else:
+                            candle_file_path = candle_file
+                        
+                        df_candle = pd.read_csv(candle_file_path)
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to load candle file: {str(e)}'
+                })
+                
+        else:
+            # Manual upload mode - original logic
+            trade_content = data.get('trade_content', '')
+            candle_content = data.get('candle_content', '')
+            
+            if not trade_content or not candle_content:
+                return jsonify({
+                    'success': False,
+                    'error': 'Trade and candle content must be provided'
+                })
+            
+            # Load and process data
+            df_trade = load_trade_csv_from_content(trade_content)
+            df_candle = load_candle_csv_from_content(candle_content)
+        
+        # Common processing for both modes
+        # Original parameters (from raw tradelist)
+        original_params = {
+            'sl': 2.0,  # Default SL 2%
+            'be': 0.0,  # No BE in original
+            'ts_trig': 0.0,  # No TS in original
+            'ts_step': 0.0
+        }
+        
+        # Optimized parameters from user input
+        optimized_params = {
+            'sl': float(data.get('sl', 2.0)),
+            'be': float(data.get('be', 2.0)),
+            'ts_trig': float(data.get('ts_trig', 0.0)),
+            'ts_step': float(data.get('ts_step', 0.0))
+        }
+        
+        print(f"🔍 VERIFICATION: Original params: {original_params}")
+        print(f"🔍 VERIFICATION: Optimized params: {optimized_params}")
+        trade_pairs = get_trade_pairs(df_trade)
+        
+        if not trade_pairs:
+            return jsonify({
+                'success': False,
+                'error': 'No valid trade pairs found'
+            })
+        
+        print(f"🔍 VERIFICATION: Found {len(trade_pairs)} trade pairs")
+        
+        # Simulate with original parameters (baseline)
+        original_results = []
+        for pair in trade_pairs:
+            result = simulate_trade(pair, df_candle, **original_params)
+            if result and result[0]:
+                original_results.append(result[0])
+        
+        # Simulate with optimized parameters  
+        optimized_results = []
+        for pair in trade_pairs:
+            result = simulate_trade(pair, df_candle, **optimized_params)
+            if result and result[0]:
+                optimized_results.append(result[0])
+        
+        # Calculate performance metrics
+        original_performance = calculate_performance_metrics(original_results)
+        optimized_performance = calculate_performance_metrics(optimized_results)
+        
+        # Detailed comparison
+        comparison = compare_optimization_results(
+            original_results, optimized_results, 
+            original_params, optimized_params,
+            original_performance, optimized_performance
+        )
+        
+        return jsonify({
+            'success': True,
+            'verification': {
+                'original_params': original_params,
+                'optimized_params': optimized_params,
+                'original_performance': original_performance,
+                'optimized_performance': optimized_performance,
+                'comparison': comparison,
+                'trade_count': len(trade_pairs),
+                'valid_original_results': len(original_results),
+                'valid_optimized_results': len(optimized_results)
+            }
+        })
+        
+    except Exception as e:
+        print(f"❌ Verification error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+def calculate_performance_metrics(results):
+    """Calculate comprehensive performance metrics from simulation results"""
+    if not results:
+        return {
+            'total_pnl': 0.0,
+            'win_rate': 0.0,
+            'avg_win': 0.0,
+            'avg_loss': 0.0,
+            'max_dd': 0.0,
+            'sharpe_ratio': 0.0,
+            'total_trades': 0,
+            'win_trades': 0,
+            'loss_trades': 0
+        }
+    
+    pnls = [safe_float(r.get('pnlPct', 0)) for r in results]
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+    
+    total_pnl = sum(pnls)
+    win_rate = len(wins) / len(pnls) * 100 if pnls else 0
+    avg_win = sum(wins) / len(wins) if wins else 0
+    avg_loss = sum(losses) / len(losses) if losses else 0
+    
+    # Calculate max drawdown
+    cumulative_pnl = []
+    running_sum = 0
+    for pnl in pnls:
+        running_sum += pnl
+        cumulative_pnl.append(running_sum)
+    
+    max_dd = 0
+    peak = 0
+    for pnl in cumulative_pnl:
+        if pnl > peak:
+            peak = pnl
+        dd = peak - pnl
+        if dd > max_dd:
+            max_dd = dd
+    
+    # Simple Sharpe ratio approximation
+    if len(pnls) > 1:
+        import numpy as np
+        std_dev = np.std(pnls)
+        sharpe_ratio = (sum(pnls) / len(pnls)) / std_dev if std_dev > 0 else 0
+    else:
+        sharpe_ratio = 0
+    
+    return {
+        'total_pnl': safe_float(total_pnl, 2),
+        'win_rate': safe_float(win_rate, 2),
+        'avg_win': safe_float(avg_win, 2),
+        'avg_loss': safe_float(avg_loss, 2),
+        'max_dd': safe_float(max_dd, 2),
+        'sharpe_ratio': safe_float(sharpe_ratio, 3),
+        'total_trades': len(results),
+        'win_trades': len(wins),
+        'loss_trades': len(losses)
+    }
+
+def compare_optimization_results(original_results, optimized_results, 
+                               original_params, optimized_params,
+                               original_perf, optimized_perf):
+    """Compare optimization results in detail to find discrepancies"""
+    
+    comparison = {
+        'performance_delta': {
+            'pnl_delta': optimized_perf['total_pnl'] - original_perf['total_pnl'],
+            'winrate_delta': optimized_perf['win_rate'] - original_perf['win_rate'],
+            'sharpe_delta': optimized_perf['sharpe_ratio'] - original_perf['sharpe_ratio']
+        },
+        'is_improvement': optimized_perf['total_pnl'] > original_perf['total_pnl'],
+        'trade_by_trade_analysis': []
+    }
+    
+    # Trade-by-trade comparison
+    min_len = min(len(original_results), len(optimized_results))
+    significant_differences = 0
+    
+    for i in range(min_len):
+        orig = original_results[i]
+        opt = optimized_results[i]
+        
+        orig_pnl = safe_float(orig.get('pnlPct', 0))
+        opt_pnl = safe_float(opt.get('pnlPct', 0))
+        pnl_diff = opt_pnl - orig_pnl
+        
+        # Flag significant differences (>1% change)
+        if abs(pnl_diff) > 1.0:
+            significant_differences += 1
+            comparison['trade_by_trade_analysis'].append({
+                'trade_num': orig.get('num', i+1),
+                'original_pnl': orig_pnl,
+                'optimized_pnl': opt_pnl,
+                'pnl_difference': pnl_diff,
+                'original_exit_type': orig.get('exitType', 'Unknown'),
+                'optimized_exit_type': opt.get('exitType', 'Unknown'),
+                'entry_price': safe_float(orig.get('entryPrice', 0)),
+                'original_exit_price': safe_float(orig.get('exitPrice', 0)),
+                'optimized_exit_price': safe_float(opt.get('exitPrice', 0))
+            })
+    
+    comparison['significant_differences'] = significant_differences
+    comparison['analysis_summary'] = {
+        'total_compared_trades': min_len,
+        'trades_with_significant_changes': significant_differences,
+        'optimization_effectiveness': 'EFFECTIVE' if comparison['is_improvement'] else 'INEFFECTIVE'
+    }
+    
+    # Diagnostic messages
+    if not comparison['is_improvement']:
+        comparison['diagnostic_message'] = f"""
+        ⚠️ OPTIMIZATION ISSUE DETECTED:
+        - Original PnL: {original_perf['total_pnl']:.2f}%
+        - Optimized PnL: {optimized_perf['total_pnl']:.2f}%  
+        - Delta: {comparison['performance_delta']['pnl_delta']:.2f}%
+        
+        📊 Possible causes:
+        1. Over-optimization (curve fitting)
+        2. Simulation engine inconsistency  
+        3. Parameter range too narrow
+        4. Data quality issues
+        
+        🔍 Recommendation: Check trade-by-trade differences above
+        """
+    else:
+        comparison['diagnostic_message'] = f"""
+        ✅ OPTIMIZATION VERIFIED:
+        - Improvement: +{comparison['performance_delta']['pnl_delta']:.2f}% PnL
+        - Win rate change: {comparison['performance_delta']['winrate_delta']:.2f}%
+        - Sharpe improvement: {comparison['performance_delta']['sharpe_delta']:.3f}
+        """
+    
+    return comparison
 
 # ===================================================
 
@@ -3155,6 +3575,7 @@ def optimize():
         if not use_selected_data:
             trade_content = trade_file.read().decode("utf-8")
             candle_content = candle_file.read().decode("utf-8")
+            candle_source = "uploaded_files"  # Add candle_source for uploaded files mode
             print(f"Files loaded: Trade={len(trade_content)} chars, Candle={len(candle_content)} chars")
         else:
             print("📊 Selected data mode - files already loaded above")
@@ -4503,6 +4924,59 @@ def optimize_ranges():
             }
         }
         
+        # ========================================
+        # 💾 SAVE OPTIMIZATION RESULTS TO DATABASE
+        # ========================================
+        try:
+            print("💾 Saving optimization results to database...")
+            
+            # Ensure candle_source is always defined
+            if 'candle_source' not in locals():
+                candle_source = "unknown_source"
+                print("⚠️ Warning: candle_source not defined, using fallback")
+            
+            # Prepare optimization result data
+            result_data = {
+                'symbol': symbol or 'UNKNOWN',  # Fix: Use parsed symbol instead of undefined selected_symbol
+                'timeframe': timeframe or 'UNKNOWN',  # Fix: Use parsed timeframe instead of undefined selected_timeframe
+                'strategy': request.form.get('strategy_name', strategy_name or 'UNKNOWN'),
+                'engine': optimization_engine,
+                'criteria': optimization_criteria,  # Fix: Use parsed optimization_criteria instead of undefined optimization_type
+                'parameters': {
+                    'sl': best_sl,
+                    'be': best_be,
+                    'ts_activation': best_ts,
+                    'ts_step': best_ts_step
+                },
+                'total_pnl': optimized_pnl,
+                'winrate': optimized_winrate,
+                'total_trades': len(optimized_trades),
+                'win_count': sum(1 for trade in optimized_trades if trade.get('pnl_pct', 0) > 0),
+                'loss_count': sum(1 for trade in optimized_trades if trade.get('pnl_pct', 0) <= 0),
+                'advanced_metrics': {
+                    'baseline_pnl': baseline_pnl_total,
+                    'baseline_winrate': baseline_winrate,
+                    'improvement_pnl': optimized_pnl - baseline_pnl_total if baseline_pnl_total else 0,
+                    'improvement_winrate': optimized_winrate - baseline_winrate if baseline_winrate else 0
+                },
+                'execution_time': 0,  # TODO: Add timer if needed
+                'iterations': len(results_data) if results_data else 1,
+                'candle_source': candle_source or 'UNKNOWN',  # Fix: Use candle_source variable instead of undefined selected_candle
+                'trade_pairs_count': len(trade_pairs) if trade_pairs else 0
+            }
+            
+            # Save to database
+            saved_result = save_optimization_result(result_data, optimized_trades)
+            print(f"✅ Optimization result saved with ID: {saved_result.id}")
+            
+            # Add database ID to response
+            response_data['database_id'] = saved_result.id
+            
+        except Exception as e:
+            print(f"⚠️ Failed to save optimization result to database: {e}")
+            # Continue execution - don't fail the entire optimization if DB save fails
+            response_data['database_warning'] = f"Results not saved to database: {str(e)}"
+        
         print("=== RANGE OPTIMIZATION SUCCESS ===")
         return jsonify(response_data)
         
@@ -4917,6 +5391,11 @@ def test_detection(filename):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/test_api')
+def test_api():
+    """Simple test endpoint"""
+    return jsonify({'success': True, 'message': 'API working!', 'timestamp': datetime.now().isoformat()})
+
 @app.route('/list_strategies')
 def list_strategies():
     """📋 API endpoint để list strategies"""
@@ -4961,7 +5440,13 @@ def list_candle_files():
             cursor = conn.cursor()
             cursor.execute("SELECT DISTINCT symbol, timeframe FROM candlestick_data ORDER BY symbol, timeframe")
             symbols = cursor.fetchall()
-            db_symbols = [f"{symbol}_{timeframe}.db" for symbol, timeframe in symbols]
+            # Format symbols consistently - ensure BINANCE_ prefix is included for internal processing
+            db_symbols = []
+            for symbol, timeframe in symbols:
+                # Ensure symbol has BINANCE_ prefix for internal consistency
+                if not symbol.startswith('BINANCE_'):
+                    symbol = f"BINANCE_{symbol}"
+                db_symbols.append(f"{symbol}_{timeframe}.db")
             conn.close()
             print(f"📊 Found {len(db_symbols)} candle data sources in database")
         except Exception as e:
@@ -5155,15 +5640,7 @@ def get_strategy_data():
             'error': str(e)
         })
 
-@app.route('/debug_frontend.html')
-def debug_frontend():
-    """🔍 Frontend Debug Page"""
-    return send_from_directory('.', 'debug_frontend.html')
-
-@app.route('/simple_debug.html')
-def simple_debug():
-    """🐛 Simple Debug Page"""
-    return send_from_directory('.', 'simple_debug.html')
+# Removed debug endpoints - no longer needed after bug fixes
 
 @app.route('/test_enhanced_visualization', methods=['POST'])
 def test_enhanced_visualization():
@@ -5382,6 +5859,216 @@ def test_real_optimization():
         print(f"❌ REAL OPTIMIZATION TEST ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+# ========================================
+# 💾 DATABASE RESULTS MANAGEMENT ROUTES
+# ========================================
+
+@app.route('/results')
+def results_page():
+    """Main results management page"""
+    return render_template('results.html')
+
+@app.route('/api/results', methods=['GET'])
+def api_get_results():
+    """API endpoint to get optimization results with filtering"""
+    try:
+        # Get query parameters for filtering
+        filters = {}
+        
+        symbol = request.args.get('symbol')
+        if symbol:
+            filters['symbol'] = symbol
+        
+        engine = request.args.get('engine')
+        if engine:
+            filters['engine'] = engine
+        
+        min_pnl = request.args.get('min_pnl', type=float)
+        if min_pnl is not None:
+            filters['min_pnl'] = min_pnl
+        
+        max_pnl = request.args.get('max_pnl', type=float)
+        if max_pnl is not None:
+            filters['max_pnl'] = max_pnl
+        
+        # Pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        offset = (page - 1) * per_page
+        
+        # Get results
+        results = get_optimization_results(filters, limit=per_page, offset=offset)
+        
+        # Get total count for pagination
+        total_query = OptimizationResult.query
+        if 'symbol' in filters:
+            total_query = total_query.filter(OptimizationResult.symbol == filters['symbol'])
+        if 'engine' in filters:
+            total_query = total_query.filter(OptimizationResult.engine == filters['engine'])
+        if 'min_pnl' in filters:
+            total_query = total_query.filter(OptimizationResult.total_pnl >= filters['min_pnl'])
+        if 'max_pnl' in filters:
+            total_query = total_query.filter(OptimizationResult.total_pnl <= filters['max_pnl'])
+        
+        total_count = total_query.count()
+        
+        return jsonify({
+            'success': True,
+            'results': results,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total': total_count,
+                'pages': math.ceil(total_count / per_page) if total_count > 0 else 1
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/results/<int:result_id>', methods=['GET'])
+def api_get_result_details(result_id):
+    """Get detailed information for a specific optimization result"""
+    try:
+        details = get_optimization_details(result_id)
+        
+        # Additional safety: Convert any remaining problematic objects
+        def safe_convert_recursive(obj):
+            if isinstance(obj, bytes):
+                try:
+                    return obj.decode('utf-8')
+                except UnicodeDecodeError:
+                    return base64.b64encode(obj).decode('utf-8')
+            elif isinstance(obj, dict):
+                return {key: safe_convert_recursive(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [safe_convert_recursive(item) for item in obj]
+            elif hasattr(obj, 'isoformat'):  # Handle datetime
+                return obj.isoformat()
+            elif isinstance(obj, (np.integer, np.int64, np.int32)):
+                return int(obj)
+            elif isinstance(obj, (np.floating, np.float64, np.float32)):
+                return float(obj)
+            elif isinstance(obj, np.bool_):
+                return bool(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            else:
+                return obj
+        
+        safe_details = safe_convert_recursive(details)
+        
+        return jsonify({
+            'success': True,
+            'data': safe_details
+        })
+    except Exception as e:
+        print(f"❌ Error getting optimization details: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/results/<int:result_id>', methods=['DELETE'])
+def api_delete_result(result_id):
+    """Delete an optimization result"""
+    try:
+        result = OptimizationResult.query.get_or_404(result_id)
+        db.session.delete(result)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Optimization result {result_id} deleted successfully'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/results/export', methods=['GET'])
+def api_export_results():
+    """Export optimization results"""
+    try:
+        # Get export format
+        format_type = request.args.get('format', 'json').lower()
+        
+        # Get filters
+        filters = {}
+        symbol = request.args.get('symbol')
+        if symbol:
+            filters['symbol'] = symbol
+        
+        engine = request.args.get('engine')
+        if engine:
+            filters['engine'] = engine
+        
+        # Export data
+        exported_data = export_optimization_results(format_type, filters)
+        
+        # Create response
+        if format_type == 'json':
+            response = make_response(exported_data)
+            response.headers['Content-Type'] = 'application/json'
+            response.headers['Content-Disposition'] = 'attachment; filename=optimization_results.json'
+        elif format_type == 'csv':
+            response = make_response(exported_data)
+            response.headers['Content-Type'] = 'text/csv'
+            response.headers['Content-Disposition'] = 'attachment; filename=optimization_results.csv'
+        else:
+            return jsonify({'success': False, 'error': 'Unsupported format'})
+        
+        return response
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/results/statistics', methods=['GET'])
+def api_get_statistics():
+    """Get summary statistics for optimization results"""
+    try:
+        # Basic counts
+        total_results = OptimizationResult.query.count()
+        unique_symbols = db.session.query(OptimizationResult.symbol).distinct().count()
+        
+        # Engine distribution
+        engine_stats = db.session.query(
+            OptimizationResult.engine, 
+            db.func.count(OptimizationResult.id)
+        ).group_by(OptimizationResult.engine).all()
+        
+        # Performance statistics
+        performance_stats = db.session.query(
+            db.func.avg(OptimizationResult.total_pnl).label('avg_pnl'),
+            db.func.max(OptimizationResult.total_pnl).label('max_pnl'),
+            db.func.min(OptimizationResult.total_pnl).label('min_pnl'),
+            db.func.avg(OptimizationResult.winrate).label('avg_winrate')
+        ).first()
+        
+        # Recent results (last 7 days)
+        from datetime import datetime, timedelta
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        recent_count = OptimizationResult.query.filter(
+            OptimizationResult.timestamp >= week_ago
+        ).count()
+        
+        return jsonify({
+            'success': True,
+            'statistics': {
+                'total_results': total_results,
+                'unique_symbols': unique_symbols,
+                'recent_results': recent_count,
+                'engine_distribution': [{'engine': engine, 'count': count} for engine, count in engine_stats],
+                'performance': {
+                    'avg_pnl': float(performance_stats.avg_pnl) if performance_stats.avg_pnl else 0,
+                    'max_pnl': float(performance_stats.max_pnl) if performance_stats.max_pnl else 0,
+                    'min_pnl': float(performance_stats.min_pnl) if performance_stats.min_pnl else 0,
+                    'avg_winrate': float(performance_stats.avg_winrate) if performance_stats.avg_winrate else 0
+                }
+            }
+        })
+        
+    except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':

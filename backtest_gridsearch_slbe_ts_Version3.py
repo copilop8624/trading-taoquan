@@ -221,12 +221,12 @@ def simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step):
                 if current_active_sl is not None:
                     if side == 'LONG' and price <= current_active_sl:
                         finalExitIdx = entryIdx + i
-                        # LONG SL Hit: Exit at market price (worse execution)
-                        finalExitPrice = price
+                        # LONG SL Hit: Exit at SL price (correct execution) 
+                        finalExitPrice = current_active_sl
                         finalExitDt = nowDt
                         exitType = 'TS SL' if trailingActive else 'SL'
                         if DEBUG:
-                            log.append(f"--> Hit {'TS' if trailingActive else ''}SL tại {step}={price:.4f} (SL={current_active_sl:.4f}), exit at market={price:.4f}")
+                            log.append(f"--> Hit {'TS' if trailingActive else ''}SL tại {step}={price:.4f} (SL={current_active_sl:.4f}), exit at SL={current_active_sl:.4f}")
                         return {
                             'num': pair['num'],
                             'side': side,
@@ -246,12 +246,12 @@ def simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step):
                         }, log
                     elif side == 'SHORT' and price >= current_active_sl:
                         finalExitIdx = entryIdx + i
-                        # SHORT SL Hit: Exit at market price (worse execution)
-                        finalExitPrice = price
+                        # SHORT SL Hit: Exit at SL price (correct execution)
+                        finalExitPrice = current_active_sl
                         finalExitDt = nowDt
                         exitType = 'TS SL' if trailingActive else 'SL'
                         if DEBUG:
-                            log.append(f"--> Hit {'TS' if trailingActive else ''}SL tại {step}={price:.4f} (SL={current_active_sl:.4f}), exit at market={price:.4f}")
+                            log.append(f"--> Hit {'TS' if trailingActive else ''}SL tại {step}={price:.4f} (SL={current_active_sl:.4f}), exit at SL={current_active_sl:.4f}")
                         return {
                             'num': pair['num'],
                             'side': side,
@@ -298,59 +298,6 @@ def simulate_trade(pair, df_candle, sl, be, ts_trig, ts_step):
         if DEBUG:
             log.append(f"Kết thúc nến {i}: trailingSL={trailingSL if trailingSL is not None else 'None'} BE={BE_reached} TS={TS_reached}")
 
-    # Nếu không bị cắt, đóng tại close cuối cùng
-    if DEBUG:
-        log.append(f"--> Không bị SL/TS, đóng tại close cuối cùng {prices.iloc[-1]['close']:.4f}")
-    finalExitPrice = float(prices.iloc[-1]['close'])
-    finalExitDt = prices.iloc[-1]['time']
-    finalExitIdx = exitIdx
-    exitType = "EXIT"
-    return {
-        'num': pair['num'],
-        'side': side,
-        'entryIdx': entryIdx,
-        'exitIdx': finalExitIdx,
-        'entryDt': prices.iloc[0]['time'],
-        'exitDt': finalExitDt,
-        'entryPrice': entryPrice,
-        'exitPrice': finalExitPrice,
-        'exitType': exitType,
-        'pnlPctOrigin': (pair['exitPrice']-pair['entryPrice'])/pair['entryPrice']*100 if side=='LONG' else (pair['entryPrice']-pair['exitPrice'])/pair['entryPrice']*100,
-        'pnlPct': (finalExitPrice-entryPrice)/entryPrice*100 if side=='LONG' else (entryPrice-finalExitPrice)/entryPrice*100,
-        'sl': sl,
-        'be': be,
-        'tsTrig': ts_trig,
-        'tsStep': ts_step
-    }, log
-
-    # Kích hoạt BE nếu đủ điều kiện và được phép dùng BE
-    if use_BE and not BE_reached:
-        if (side=='LONG' and price >= beTrigPrice) or (side=='SHORT' and price <= beTrigPrice):
-            BE_reached = True
-            if use_TS:
-                trailingActive = True
-            trailingSL = entryPrice  # BE: dời SL về entry
-            if DEBUG:
-                log.append(f"--> BE kích hoạt tại {step}={price:.4f}, trailingSL dời về entry={entryPrice:.4f}")
-    # Kích hoạt trailing nếu đủ điều kiện và được phép dùng trailing
-    if use_TS and not TS_reached:
-        if (side=='LONG' and price >= tsTrigPrice) or (side=='SHORT' and price <= tsTrigPrice):
-            TS_reached = True
-            trailingActive = True
-            if DEBUG:
-                log.append(f"--> Trailing kích hoạt tại {step}={price:.4f}")
-    # Update trailing SL nếu active và đã kích hoạt trailing và được phép dùng trailing
-    if use_TS and trailingActive and TS_reached:
-        if trailingSL is not None:
-            if side == 'LONG':
-                trailingSL = max(trailingSL, price * (1 - ts_step/100))
-            else:
-                trailingSL = min(trailingSL, price * (1 + ts_step/100))
-            if DEBUG:
-                log.append(f"--> trailingSL update tại {step}={price:.4f}, trailingSL={trailingSL:.4f}")
-    # Kết thúc nến, log trạng thái
-    if DEBUG:
-        log.append(f"Kết thúc nến {i}: trailingSL={trailingSL:.4f} BE={BE_reached} TS={TS_reached}")
     # Nếu không bị cắt, đóng tại close cuối cùng
     if DEBUG:
         log.append(f"--> Không bị SL/TS, đóng tại close cuối cùng {prices.iloc[-1]['close']:.4f}")
@@ -432,9 +379,11 @@ def run_one_setting(args):
             logs.extend(log)
         if res is not None:
             details.append(res)
-            if res['pnlPct'] > 0: win_count += 1
-            if res['pnlPct'] > 0: gain_sum += res['pnlPct']
-            else: loss_sum -= res['pnlPct']
+            if res['pnlPct'] > 0: 
+                win_count += 1
+                gain_sum += res['pnlPct']
+            else: 
+                loss_sum += abs(res['pnlPct'])  # FIX: loss luôn dương để tính PF
         else:
             skip += 1
     winrate = win_count / len(details) * 100 if len(details) > 0 else 0

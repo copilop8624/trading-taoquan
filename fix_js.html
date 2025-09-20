@@ -1,0 +1,75 @@
+<!-- EMERGENCY FIX FOR JAVASCRIPT DATA LOADING -->
+<script>
+// Simple working data loading functions
+function simpleLoadData() {
+    console.log('🚨 Simple data loading starting...');
+    
+    // Load strategies
+    fetch('/list_strategies')
+        .then(response => {
+            console.log('Strategies response status:', response.status);
+            return response.json();
+        })
+        .then(result => {
+            console.log('Strategies data:', result);
+            const strategySelect = document.getElementById('strategySelect');
+            if (strategySelect && result.success && result.strategies) {
+                strategySelect.innerHTML = '<option value="">-- Chọn Strategy --</option>';
+                result.strategies.forEach(strategy => {
+                    const option = document.createElement('option');
+                    const versionDisplay = strategy.version.startsWith('v') ? strategy.version : `v${strategy.version}`;
+                    option.value = `${strategy.symbol}_${strategy.timeframe}_${strategy.strategy_name}_${versionDisplay}`;
+                    option.textContent = `${strategy.symbol} ${strategy.timeframe} - ${strategy.strategy_name} ${versionDisplay}`;
+                    option.dataset.symbol = strategy.symbol;
+                    option.dataset.timeframe = strategy.timeframe;
+                    option.dataset.strategyName = strategy.strategy_name;
+                    option.dataset.version = strategy.version;
+                    strategySelect.appendChild(option);
+                });
+                console.log('✅ Strategies loaded:', result.strategies.length);
+            }
+        })
+        .catch(error => {
+            console.error('❌ Strategies error:', error);
+            const strategySelect = document.getElementById('strategySelect');
+            if (strategySelect) {
+                strategySelect.innerHTML = '<option value="">❌ Lỗi load strategies</option>';
+            }
+        });
+    
+    // Load candles
+    fetch('/list_candle_files')
+        .then(response => {
+            console.log('Candles response status:', response.status);
+            return response.json();
+        })
+        .then(result => {
+            console.log('Candles data:', result);
+            const candleSelect = document.getElementById('candleSelect');
+            if (candleSelect && result.success && result.files) {
+                candleSelect.innerHTML = '<option value="">-- Chọn Symbol & Timeframe --</option>';
+                result.files.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file;
+                    let displayName = file.replace('BINANCE_', '').replace('.csv', '').replace('.db', '');
+                    if (file.includes('.db')) {
+                        displayName = '💾 ' + displayName;
+                    }
+                    option.textContent = displayName;
+                    candleSelect.appendChild(option);
+                });
+                console.log('✅ Candles loaded:', result.files.length);
+            }
+        })
+        .catch(error => {
+            console.error('❌ Candles error:', error);
+            const candleSelect = document.getElementById('candleSelect');
+            if (candleSelect) {
+                candleSelect.innerHTML = '<option value="">❌ Lỗi load candles</option>';
+            }
+        });
+}
+
+// Test the functions
+console.log('🔧 Emergency JS functions loaded. Call simpleLoadData() to test.');
+</script>
