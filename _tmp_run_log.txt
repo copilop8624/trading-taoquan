@@ -1,3 +1,0 @@
-﻿2025-09-16T14:20:18.781091Z INFO Running SmartRangeFinder on sample_tradelist.csv
-2025-09-16T14:20:18.781091Z INFO Analysis complete
-
