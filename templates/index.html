@@ -1144,10 +1144,10 @@ function safeGet(obj, path, defaultValue = 0) {
                         <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; color: ${winRateColor};">${safeToFixed(result.winrate, 2)}%</td>
                         <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; color: ${pfColor};">${safeToFixed(result.pf, 2)}</td>
                         <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; color: ${ddColor};">${safeToFixed(result.max_drawdown, 2)}%</td>
-                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.sl || 'N/A'}</td>
-                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.be || 'N/A'}</td>
-                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.ts_active || 'N/A'}</td>
-                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.ts_step || 'N/A'}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.sl ? safeToFixed(result.parameters.sl, 2) + '%' : 'N/A'}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.be ? safeToFixed(result.parameters.be, 2) + '%' : 'N/A'}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.ts_activation ? safeToFixed(result.parameters.ts_activation, 2) + '%' : 'N/A'}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.ts_step ? safeToFixed(result.parameters.ts_step, 2) + '%' : 'N/A'}</td>
                     </tr>
                 `;
             });
@@ -2302,9 +2302,9 @@ function safeGet(obj, path, defaultValue = 0) {
                                 <!-- Parameters - Larger and Bold -->
                                 <div style="margin-top: 10px; padding: 8px; background: rgba(40,167,69,0.2); border-radius: 4px; text-align: center;">
                                     <div style="font-size: 0.9em; font-weight: bold; color: #155724;">
-                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">SL: ${safeToFixed((comparisonData.best_result?.parameters?.sl || 0) * 100, 2)}%</span>
-                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">BE: ${safeToFixed((comparisonData.best_result?.parameters?.be || 0) * 100, 2)}%</span>
-                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">TS: ${safeToFixed((comparisonData.best_result?.parameters?.ts_trig || 0) * 100, 2)}%/${safeToFixed((comparisonData.best_result?.parameters?.ts_step || 0) * 100, 2)}%</span>
+                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">SL: ${safeToFixed((comparisonData.best_result?.parameters?.sl || 0), 2)}%</span>
+                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">BE: ${safeToFixed((comparisonData.best_result?.parameters?.be || 0), 2)}%</span>
+                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">TS: ${safeToFixed((comparisonData.best_result?.parameters?.ts_activation || 0), 2)}%/${safeToFixed((comparisonData.best_result?.parameters?.ts_step || 0), 2)}%</span>
                                     </div>
                                 </div>
                             </div>
@@ -2334,7 +2334,7 @@ function safeGet(obj, path, defaultValue = 0) {
                             <div style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;">
                                 <span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">SL: ${safeToFixed(topResult.sl * 100, 2)}%</span>
                                 <span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">BE: ${safeToFixed(topResult.be * 100, 2)}%</span>
-                                <span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">TS: ${safeToFixed(topResult.ts_trig * 100, 2)}%/${safeToFixed(topResult.ts_step * 100, 2)}%</span>
+                                <span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">TS: ${safeToFixed(topResult.ts_activation * 100, 2)}%/${safeToFixed(topResult.ts_step * 100, 2)}%</span>
                                 ${topResult.tp ? `<span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">TP: ${safeToFixed(topResult.tp * 100, 2)}%</span>` : ''}
                             </div>
                         </div>
@@ -2387,10 +2387,10 @@ function safeGet(obj, path, defaultValue = 0) {
                 resultsHTML += `
                     <tr style="background: ${rowColor};">
                         <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${index + 1}</td>
-                        <td style="padding: 6px; border: 1px solid #ddd;">${safeToFixed(result.sl * 100, 2)}</td>
-                        <td style="padding: 6px; border: 1px solid #ddd;">${safeToFixed(result.be * 100, 2)}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${safeToFixed(result.sl, 2)}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${safeToFixed(result.be, 2)}</td>
                         <td style="padding: 6px; border: 1px solid #ddd;">${safeToFixed(result.ts * 100, 2)}</td>
-                        <td style="padding: 6px; border: 1px solid #ddd;">${result.tp ? safeToFixed(result.tp * 100, 2) : 'N/A'}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${result.tp ? safeToFixed(result.tp, 2) : 'N/A'}</td>
                         <td style="padding: 6px; border: 1px solid #ddd; color: ${result.total_profit > 0 ? 'green' : 'red'};">
                             ${result.total_profit ? safeToFixed(result.total_profit, 2) : '0.00'}
                         </td>

@@ -83,6 +83,11 @@ class OptimizationResult(db.Model):
             advanced_metrics = json.loads(self.advanced_metrics) if self.advanced_metrics else {}
         except (json.JSONDecodeError, TypeError):
             advanced_metrics = {}
+        
+        # Add field mapping for template compatibility
+        # Map ts_activation to ts_trig for frontend compatibility
+        if 'ts_activation' in parameters and 'ts_trig' not in parameters:
+            parameters['ts_trig'] = parameters['ts_activation']
             
         data = {
             'id': self.id,
@@ -104,6 +109,13 @@ class OptimizationResult(db.Model):
             'candle_source': safe_json_convert(self.candle_source),
             'trade_pairs_count': self.trade_pairs_count
         }
+        
+        # Also add TS parameters to top level for easy access
+        if 'ts_activation' in parameters:
+            data['ts_activation'] = parameters['ts_activation']
+            data['ts_trig'] = parameters['ts_activation']  # For backwards compatibility
+        if 'ts_step' in parameters:
+            data['ts_step'] = parameters['ts_step']
         
         return safe_json_convert(data)
     

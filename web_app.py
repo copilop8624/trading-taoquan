@@ -4561,6 +4561,7 @@ def optimize_ranges():
                     'sl': final_sl / 100,  # Convert to ratio for frontend
                     'be': final_be / 100,
                     'ts': final_ts_trig / 100,
+                    'ts_activation': final_ts_trig / 100,  # ✅ ADD: Template compatibility
                     'ts_step': final_ts_step / 100,  # ADD MISSING TS_STEP!
                     'total_profit': opt_value,
                     'win_rate': winrate_real / 100,  # Real winrate calculation
@@ -4624,6 +4625,7 @@ def optimize_ranges():
                         'sl': result['sl'] / 100,  # Convert to ratio
                         'be': result['be'] / 100,
                         'ts': result['ts_trig'] / 100,
+                        'ts_activation': result['ts_trig'] / 100,  # ✅ ADD: Template compatibility
                         'ts_step': result.get('ts_step', 0.1) / 100,  # ADD TS_STEP for Grid Search
                         'total_profit': result.get('pnl_total', 0),
                         'win_rate': result.get('winrate', 0) / 100,
@@ -4862,9 +4864,14 @@ def optimize_ranges():
                 'parameters': {
                     'sl': safe_float(best_sl),
                     'be': safe_float(best_be),
-                    'ts_active': safe_float(best_ts),
+                    'ts_activation': safe_float(best_ts),    # ✅ FIXED: Use ts_activation for template compatibility
                     'ts_step': safe_float(best_ts_step)
-                }
+                },
+                # Add top-level parameter fields for template compatibility
+                'sl': safe_float(best_sl),
+                'be': safe_float(best_be),
+                'ts_trig': safe_float(best_ts),      # ✅ Template expects ts_trig
+                'ts_step': safe_float(best_ts_step)
             },
             'baseline_result': {  # BASELINE from original tradelist using Quick Summary calculation
                 'total_trades': baseline_stats.get('total_trades', len(trade_pairs) if trade_pairs else 0),
@@ -4978,6 +4985,27 @@ def optimize_ranges():
             response_data['database_warning'] = f"Results not saved to database: {str(e)}"
         
         print("=== RANGE OPTIMIZATION SUCCESS ===")
+        
+        # 🔍 DEBUG: Print exact parameters being sent to frontend
+        print(f"🔍 DEBUG - Best Parameters Being Sent to Frontend:")
+        print(f"   best_sl = {best_sl} (type: {type(best_sl)})")
+        print(f"   best_be = {best_be} (type: {type(best_be)})")
+        print(f"   best_ts = {best_ts} (type: {type(best_ts)})")
+        print(f"   best_ts_step = {best_ts_step} (type: {type(best_ts_step)})")
+        print(f"🔍 DEBUG - Response Data Parameters:")
+        print(f"   response_data['best_result']['parameters'] = {response_data['best_result']['parameters']}")
+        print(f"🔍 DEBUG - Response Data Top-Level:")
+        print(f"   response_data['best_result']['sl'] = {response_data['best_result']['sl']}")
+        print(f"   response_data['best_result']['be'] = {response_data['best_result']['be']}")
+        print(f"   response_data['best_result']['ts_trig'] = {response_data['best_result']['ts_trig']}")
+        print(f"   response_data['best_result']['ts_step'] = {response_data['best_result']['ts_step']}")
+        print(f"🔍 DEBUG - Results Data (data.data):")
+        if results_data:
+            print(f"   results_data[0]['sl'] = {results_data[0].get('sl', 'N/A')}")
+            print(f"   results_data[0]['be'] = {results_data[0].get('be', 'N/A')}")
+            print(f"   results_data[0]['ts_activation'] = {results_data[0].get('ts_activation', 'N/A')}")
+            print(f"   results_data[0]['ts_step'] = {results_data[0].get('ts_step', 'N/A')}")
+        
         return jsonify(response_data)
         
     except Exception as e:
