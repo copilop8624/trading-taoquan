@@ -1,0 +1,12 @@
+# task_scheduler_suggest.txt
+# For each PAIR (default: BIOUSDT:30m), schedule this PowerShell command to run every 4 hours:
+
+# Example (run as SYSTEM or your user, adjust path):
+# In Task Scheduler > Create Task > Actions > New:
+# Program/script: powershell.exe
+# Add arguments:
+# -NoProfile -ExecutionPolicy Bypass -File "C:\Users\aio\OneDrive\Desktop\DATA TRADINGVIEW\backtest\BTC\migrate_and_verify.py"
+# Start in: C:\Users\aio\OneDrive\Desktop\DATA TRADINGVIEW\backtest\BTC
+
+# Trigger: Daily, Repeat every 4 hours, for 1 day
+# (Or set to repeat indefinitely)

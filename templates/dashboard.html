@@ -20,14 +20,11 @@
       <!-- Permanent upload form visible at top for quick demos -->
       <div class="card mb-4">
         <div class="card-body">
-          <h5 class="card-title mb-3">Quick Upload</h5>
+          <h5 class="card-title mb-3">Candle CSV Upload (candles/ only)</h5>
           <form id="permanent-upload-form" class="mb-2">
             <div class="row g-2 align-items-center">
               <div class="col-md-2">
                 <input type="text" name="symbol" class="form-control form-control-sm" placeholder="Symbol (e.g. BINANCE_BTCUSDT)" required />
-              </div>
-              <div class="col-md-2">
-                <input type="text" name="strategy" class="form-control form-control-sm" placeholder="Strategy (optional)" />
               </div>
               <div class="col-auto">
                 <select name="date_parse_mode" class="form-select form-select-sm">
@@ -41,15 +38,17 @@
               </div>
               <div class="col-md-3">
                 <input type="file" name="file" class="form-control form-control-sm" accept=".csv" required />
+                <div class="form-text">Only files from <b>candles/</b> folder are managed here.</div>
               </div>
               <div class="col-auto">
-                <button type="submit" class="btn btn-sm btn-success">Upload</button>
+                <button type="submit" class="btn btn-sm btn-success">Upload Candle CSV</button>
                 <button type="button" id="permanent-reset-btn" class="btn btn-sm btn-outline-danger ms-2">Reset Options</button>
               </div>
             </div>
           </form>
           <div id="permanent-warnings" class="upload-warnings mt-2"></div>
           <div id="permanent-result" class="mt-3"></div>
+          <div class="alert alert-info mt-3 mb-0">This section is <b>strictly for candle data</b>. Tradelist files are not managed here.</div>
         </div>
       </div>
 
@@ -146,42 +145,8 @@
 
           const accordionItem = document.createElement('div');
           accordionItem.className = 'accordion-item';
-          // Add upload form and feedback area per symbol below the table
-          const uploadFormHtml = `
-            <div class="p-3 border-top">
-              <form class="upload-tradelist-form" data-symbol="${symbol}">
-                <div class="row g-2 align-items-center">
-                  <div class="col-auto">
-                    <input type="file" name="file" class="form-control form-control-sm" accept=".csv" required />
-                  </div>
-                  <div class="col-auto">
-                    <select name="date_parse_mode" class="form-select form-select-sm">
-                      <option value="default">Default</option>
-                      <option value="mixed">Mixed (flexible)</option>
-                    </select>
-                  </div>
-                  <div class="col-auto form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="drop_incomplete_${idx}" name="drop_incomplete" />
-                    <label class="form-check-label small ms-2" for="drop_incomplete_${idx}">Drop incomplete (chart)</label>
-                  </div>
-                  <div class="col-auto">
-                    <input type="hidden" name="symbol" value="${symbol}" />
-                    <input type="text" name="strategy" class="form-control form-control-sm" placeholder="strategy (optional)" />
-                  </div>
-                  <div class="col-auto">
-                    <button type="submit" class="btn btn-sm btn-success">Upload tradelist</button>
-                  </div>
-                  <div class="col">
-                    <div class="upload-feedback text-muted small"></div>
-                  </div>
-                </div>
-              </form>
-              <div class="d-flex justify-content-end mt-2">
-                <button class="btn btn-sm btn-outline-danger reset-options-btn" data-symbol="${symbol}">Reset Options</button>
-              </div>
-              <div class="symbol-warnings-badge small text-end mt-1" data-symbol="${symbol}"></div>
-            </div>
-          `;
+          // REMOVE upload form for tradelists in grouped table (CSV management is candles only)
+          const uploadFormHtml = '';
 
           accordionItem.innerHTML = `
             <h2 class="accordion-header" id="${headerId}">

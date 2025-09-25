@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>📊 Data Management Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f5f5f5; }
+        
+        /* Navigation Menu */
+        .nav-menu {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .nav-item {
+            color: white;
+            text-decoration: none;
+            padding: 12px 20px;
+            margin: 0 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+        .nav-item:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+            color: white;
+        }
+        .nav-item.active {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 0 20px; }
+        .header { text-align: center; color: #333; margin-bottom: 30px; }
+        .card { background: white; padding: 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card h3 { margin-top: 0; color: #007bff; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .full-width { grid-column: 1 / -1; }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; font-weight: bold; }
+        tr:hover { background: #f8f9fa; }
+        
+        /* Status badges */
+        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .status-recent { background: #d4edda; color: #155724; }
+        .status-outdated { background: #fff3cd; color: #856404; }
+        .status-old { background: #f8d7da; color: #721c24; }
+        
+        /* Buttons */
+        .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn:hover { opacity: 0.8; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* Forms */
+        .form-group { margin: 15px 0; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        
+        /* Progress */
+        .progress-bar { width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; margin: 10px 0; }
+        .progress-fill { height: 100%; background: #007bff; border-radius: 10px; transition: width 0.3s; }
+        
+        /* Log */
+        .log-container { background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 4px; font-family: monospace; height: 200px; overflow-y: scroll; }
+        .log-line { margin: 2px 0; }
+        
+        /* Status indicators */
+        .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        .status-running { background: #ffc107; animation: pulse 2s infinite; }
+        .status-idle { background: #28a745; }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Menu -->
+    <div class="nav-menu">
+        <div class="container">
+            <div class="d-flex justify-content-center align-items-center flex-wrap" style="display: flex; justify-content: center; align-items: center; flex-wrap: wrap;">
+                <a href="/" class="nav-item">
+                    <i class="fas fa-home" style="margin-right: 8px;"></i>Backtest
+                </a>
+                <a href="/strategy_management" class="nav-item">
+                    <i class="fas fa-cogs" style="margin-right: 8px;"></i>Strategy Management
+                </a>
+                <a href="/data_management" class="nav-item active">
+                    <i class="fas fa-database" style="margin-right: 8px;"></i>Data Management
+                </a>
+                <a href="/results" class="nav-item">
+                    <i class="fas fa-chart-bar" style="margin-right: 8px;"></i>Results Database
+                </a>
+                <a href="/candles_admin" class="nav-item" style="background: #ff9800; color: white;">
+                    <i class="fas fa-fire" style="margin-right: 8px;"></i>Candle Admin
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>📊 Data Management Dashboard</h1>
+            <p>Manage CSV imports and Binance data updates</p>
+        </div>
+        
+        <div class="grid">
+            <!-- Database Status Table (moved from index.html) -->
+            <div class="card full-width">
+                <h3>📊 Data Management Dashboard</h3>
+                <table class="table table-bordered" id="db-status-table">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Timeframe</th>
+                            <th>Candles</th>
+                            <th>Last Update</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="db-status-tbody">
+                        <!-- Data will be loaded by JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Modal xem chi tiết -->
+            <div class="modal fade" id="candleDetailModal" tabindex="-1" aria-labelledby="candleDetailModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="candleDetailModalLabel">Candle Detail</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body" id="candleDetailBody">
+                            <!-- Nội dung chi tiết sẽ render ở đây -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+<!-- Database Status JS moved to end of body -->
+</div> <!-- end .grid -->
+
+<script>
+// Render Database Status Table
+function loadDbStatus() {
+    fetch('/api/list_candles_status')
+        .then(res => res.json())
+        .then(result => {
+            if (!result.success) return;
+            const tbody = document.getElementById('db-status-tbody');
+            tbody.innerHTML = '';
+            result.data.forEach(row => {
+                tbody.innerHTML += `
+                <tr>
+                    <td>${row.symbol}</td>
+                    <td>${row.timeframe}</td>
+                    <td>${row.candles}</td>
+                    <td>${row.last_update}</td>
+                    <td>${row.status}</td>
+                    <td>
+                        <button class="btn btn-sm btn-info" onclick="viewCandleDetail('${row.symbol}','${row.timeframe}')"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteCandleData('${row.symbol}','${row.timeframe}')"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>`;
+            });
+        });
+}
+
+// Xem chi tiết
+function viewCandleDetail(symbol, timeframe) {
+    fetch(`/api/candles_detail?symbol=${symbol}&timeframe=${timeframe}`)
+        .then(res => res.json())
+        .then(result => {
+            let html = '';
+            if (result.success) {
+                html += `<b>Symbol:</b> ${result.symbol}<br>`;
+                html += `<b>Timeframe:</b> ${result.timeframe}<br>`;
+                html += `<b>Candles:</b> ${result.candles}<br>`;
+                html += `<b>Date Range:</b> ${result.min_time} → ${result.max_time}<br>`;
+                html += `<b>Preview:</b><br><pre style='max-height:200px;overflow:auto;'>${result.preview}</pre>`;
+            } else {
+                html = `<span style='color:red;'>${result.error}</span>`;
+            }
+            document.getElementById('candleDetailBody').innerHTML = html;
+            var modal = new bootstrap.Modal(document.getElementById('candleDetailModal'));
+            modal.show();
+        });
+}
+
+// Xóa data
+function deleteCandleData(symbol, timeframe) {
+    if (!confirm(`Xóa toàn bộ nến của ${symbol} ${timeframe}?`)) return;
+    fetch('/api/delete_candles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol, timeframe })
+    })
+    .then(res => res.json())
+    .then(result => {
+        if (result.success) {
+            alert('Đã xóa thành công!');
+            loadDbStatus();
+        } else {
+            alert('Lỗi: ' + (result.error || 'Không rõ nguyên nhân'));
+        }
+    });
+}
+
+// Tự động load khi vào trang
+document.addEventListener('DOMContentLoaded', loadDbStatus);
+</script>
+
+            <script>
+            // Render Database Status Table
+            function loadDbStatus() {
+                fetch('/api/list_candles_status')
+                    .then(res => res.json())
+                    .then(result => {
+                        if (!result.success) return;
+                        const tbody = document.getElementById('db-status-tbody');
+                        tbody.innerHTML = '';
+                        result.data.forEach(row => {
+                            tbody.innerHTML += `
+                            <tr>
+                                <td>${row.symbol}</td>
+                                <td>${row.timeframe}</td>
+                                <td>${row.candles}</td>
+                                <td>${row.last_update}</td>
+                                <td>${row.status}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-info" onclick="viewCandleDetail('${row.symbol}','${row.timeframe}')"><i class="fas fa-eye"></i></button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteCandleData('${row.symbol}','${row.timeframe}')"><i class="fas fa-trash"></i></button>
+                                </td>
+                            </tr>`;
+                        });
+                    });
+            }
+
+            // Xem chi tiết
+            function viewCandleDetail(symbol, timeframe) {
+                fetch(`/api/candles_detail?symbol=${symbol}&timeframe=${timeframe}`)
+                    .then(res => res.json())
+                    .then(result => {
+                        let html = '';
+                        if (result.success) {
+                            html += `<b>Symbol:</b> ${result.symbol}<br>`;
+                            html += `<b>Timeframe:</b> ${result.timeframe}<br>`;
+                            html += `<b>Candles:</b> ${result.candles}<br>`;
+                            html += `<b>Date Range:</b> ${result.min_time} → ${result.max_time}<br>`;
+                            html += `<b>Preview:</b><br><pre style='max-height:200px;overflow:auto;'>${result.preview}</pre>`;
+                        } else {
+                            html = `<span style='color:red;'>${result.error}</span>`;
+                        }
+                        document.getElementById('candleDetailBody').innerHTML = html;
+                        var modal = new bootstrap.Modal(document.getElementById('candleDetailModal'));
+                        modal.show();
+                    });
+            }
+
+            // Xóa data
+            function deleteCandleData(symbol, timeframe) {
+                if (!confirm(`Xóa toàn bộ nến của ${symbol} ${timeframe}?`)) return;
+                fetch('/api/delete_candles', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol, timeframe })
+                })
+                .then(res => res.json())
+                .then(result => {
+                    if (result.success) {
+                        alert('Đã xóa thành công!');
+                        loadDbStatus();
+                    } else {
+                        alert('Lỗi: ' + (result.error || 'Không rõ nguyên nhân'));
+                    }
+                });
+            }
+
+            // Tự động load khi vào trang
+            document.addEventListener('DOMContentLoaded', loadDbStatus);
+            </script>
+            
+            <!-- CSV Management -->
+            <div class="card">
+                <h3>📁 CSV Files Management</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Size</th>
+                            <th>Modified</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for file in csv_files %}
+                        <tr>
+                            <td>{{ file.filename }}</td>
+                            <td>{{ file.size_mb }} MB</td>
+                            <td>{{ file.modified }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                
+                {% if not csv_files %}
+                <p style="text-align: center; color: #666;">No CSV files found in candles/ directory.</p>
+                {% endif %}
+                
+                <div style="text-align: center; margin-top: 20px;">
+                    <button class="btn btn-warning" onclick="migrateCsvFiles()">📊 Import CSV to Database</button>
+                </div>
+                
+                <div style="margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 4px;">
+                    <strong>💡 How to add new CSV data:</strong>
+                    <ol style="margin: 10px 0;">
+                        <li>Copy your CSV files to the <code>candles/</code> directory</li>
+                        <li>Name format: <code>BINANCE_SYMBOL.P, timeframe.csv</code></li>
+                        <li>Click "Import CSV to Database" to process them</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Add New Symbol -->
+        <div class="card full-width">
+            <h3>➕ Add New Symbol from Binance</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 15px; align-items: end;">
+                <div class="form-group">
+                    <label>Symbol (without BINANCE_ prefix):</label>
+                    <input type="text" id="newSymbol" placeholder="ETHUSDT" value="">
+                </div>
+                <div class="form-group">
+                    <label>Timeframe:</label>
+                    <select id="newTimeframe">
+                        <option value="5m">5 minutes</option>
+                        <option value="30m" selected>30 minutes</option>
+                        <option value="60m">1 hour</option>
+                        <option value="240m">4 hours</option>
+                        <option value="1440m">1 day</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Days of history:</label>
+                    <input type="number" id="newDays" value="365" min="1" max="1000">
+                </div>
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-success" onclick="addNewSymbol()">➕ Add Symbol</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Update Status -->
+        <div class="card full-width">
+            <h3>
+                <span class="status-indicator" id="statusIndicator"></span>
+                🔄 Update Status
+            </h3>
+            
+            <div id="currentOperation" style="font-size: 16px; margin: 10px 0;">
+                <strong>Status:</strong> <span id="statusText">Idle</span>
+            </div>
+            
+            <div class="log-container" id="logContainer">
+                <div class="log-line">Ready for operations...</div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 15px;">
+                <button class="btn btn-primary" onclick="clearLog()">🗑️ Clear Log</button>
+                <button class="btn btn-warning" onclick="toggleAutoRefresh()">
+                    <span id="autoRefreshText">🔄 Auto Refresh: ON</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let autoRefresh = true;
+        let refreshInterval;
+        
+        // Load Dashboard Data
+        async function loadDashboardData() {
+            try {
+                // Load strategies
+                const strategiesResponse = await fetch('/list_strategies');
+                const strategiesData = await strategiesResponse.json();
+                
+                if (strategiesData.success) {
+                    updateStrategiesTable(strategiesData.strategies);
+                    document.getElementById('strategiesCount').textContent = strategiesData.total;
+                }
+                
+                // Load candle files
+                const candlesResponse = await fetch('/list_candle_files');
+                const candlesData = await candlesResponse.json();
+                
+                if (candlesData.success) {
+                    updateCandleFilesTable(candlesData);
+                    document.getElementById('candleFilesCount').textContent = candlesData.files.length;
+                }
+                
+                console.log('✅ Dashboard data loaded successfully');
+            } catch (error) {
+                console.error('❌ Error loading dashboard data:', error);
+            }
+        }
+        
+        // Update Strategies Table
+        function updateStrategiesTable(strategies) {
+            const tbody = document.querySelector('#strategiesTable tbody');
+            if (!tbody) return;
+            
+            tbody.innerHTML = strategies.map(strategy => `
+                <tr>
+                    <td>${strategy.symbol}</td>
+                    <td>${strategy.timeframe}</td>
+                    <td>${strategy.strategy_name}</td>
+                    <td>${strategy.version}</td>
+                    <td>${strategy.trade_count || 0}</td>
+                    <td><span class="status-badge status-recent">${strategy.upload_date ? new Date(strategy.upload_date).toLocaleDateString() : 'Unknown'}</span></td>
+                    <td>
+                        <button class="btn-small" onclick="viewStrategyDetails('${strategy.file_path}')">
+                            <i class="fas fa-eye"></i> View
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        // Update Candle Files Table  
+        function updateCandleFilesTable(candleData) {
+            const tbody = document.querySelector('#candleFilesTable tbody');
+            if (!tbody) return;
+            
+            const files = candleData.files || [];
+            tbody.innerHTML = files.map(file => {
+                const isCSV = file.endsWith('.csv');
+                const isDB = file.endsWith('.db');
+                const fileType = isCSV ? 'CSV' : (isDB ? 'SQLite DB' : 'Unknown');
+                const statusClass = isDB ? 'status-recent' : 'status-badge';
+                
+                return `
+                    <tr>
+                        <td>${file}</td>
+                        <td><span class="status-badge ${statusClass}">${fileType}</span></td>
+                        <td>${getFileSizeDisplay(file)}</td>
+                        <td>${getLastModified(file)}</td>
+                        <td>
+                            <button class="btn-small" onclick="previewCandle('${file}')">
+                                <i class="fas fa-chart-line"></i> Preview
+                            </button>
+                            ${isCSV ? `<button class="btn-small" onclick="migrateToSQLite('${file}')">
+                                <i class="fas fa-database"></i> Migrate
+                            </button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        // Helper functions
+        function getFileSizeDisplay(filename) {
+            // Placeholder - in real app would get actual file size
+            return filename.includes('.db') ? '~50MB' : '~10MB';
+        }
+        
+        function getLastModified(filename) {
+            // Placeholder - in real app would get actual modification date
+            return new Date().toLocaleDateString();
+        }
+        
+        function viewStrategyDetails(filePath) {
+            alert(`📊 Strategy details for: ${filePath}\n\n🚧 Feature in development.\nWill show trade analysis, performance metrics, etc.`);
+        }
+        
+        function previewCandle(filename) {
+            alert(`📈 Candle preview for: ${filename}\n\n🚧 Feature in development.\nWill show OHLCV chart, data quality metrics, etc.`);
+        }
+        
+        function migrateToSQLite(csvFile) {
+            if (confirm(`🔄 Migrate ${csvFile} to SQLite database?\n\nThis will improve query performance.`)) {
+                alert('🚧 Migration feature in development.\nWill convert CSV to optimized SQLite format.');
+            }
+        }
+
+        // Auto refresh status
+        function updateStatus() {
+            // Check if web app status endpoint exists, otherwise show basic status
+            fetch('/api/status')
+                .then(response => {
+                    if (!response.ok) {
+                        // API doesn't exist, show basic status
+                        const indicator = document.getElementById('statusIndicator');
+                        const statusText = document.getElementById('statusText');
+                        if (indicator && statusText) {
+                            indicator.className = 'status-indicator status-running';
+                            statusText.textContent = 'Web App Running';
+                        }
+                        return null;
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data) return; // API doesn't exist
+                    
+                    const indicator = document.getElementById('statusIndicator');
+                    const statusText = document.getElementById('statusText');
+                    const logContainer = document.getElementById('logContainer');
+                    
+                    if (data.running) {
+                        indicator.className = 'status-indicator status-running';
+                        statusText.textContent = data.current_symbol || 'Processing...';
+                    } else {
+                        indicator.className = 'status-indicator status-idle';
+                        statusText.textContent = 'Idle';
+                    }
+                    
+                    // Update log
+                    if (data.log && data.log.length > 0) {
+                        logContainer.innerHTML = data.log.map(line => 
+                            `<div class="log-line">${line}</div>`
+                        ).join('');
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                    }
+                    
+                    // Disable buttons when running
+                    const buttons = document.querySelectorAll('button');
+                    buttons.forEach(btn => {
+                        if (btn.onclick && btn.onclick.toString().includes('update') || 
+                            btn.onclick && btn.onclick.toString().includes('migrate') ||
+                            btn.onclick && btn.onclick.toString().includes('add')) {
+                            btn.disabled = data.running;
+                        }
+                    });
+                })
+                .catch(error => {
+                    // API endpoint doesn't exist, show basic running status
+                    const indicator = document.getElementById('statusIndicator');
+                    const statusText = document.getElementById('statusText');
+                    if (indicator && statusText) {
+                        indicator.className = 'status-indicator status-running';
+                        statusText.textContent = 'Web App Active';
+                    }
+                });
+        }
+        
+        function refreshData() {
+            location.reload();
+        }
+        
+        function migrateCsvFiles() {
+            fetch('/api/csv/migrate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('CSV migration started! Check status below.');
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            });
+        }
+        
+        function updateSymbol(symbol, timeframe) {
+            fetch('/api/binance/update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({symbol: symbol, timeframe: timeframe})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Update started for ${symbol} ${timeframe}`);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            });
+        }
+        
+        function updateAllSymbols() {
+            fetch('/api/binance/update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({symbol: 'all'})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Update started for all symbols!');
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            });
+        }
+        
+        function addNewSymbol() {
+            const symbol = document.getElementById('newSymbol').value.trim().toUpperCase();
+            const timeframe = document.getElementById('newTimeframe').value;
+            const days = document.getElementById('newDays').value;
+            
+            if (!symbol) {
+                alert('Please enter a symbol (e.g., ETHUSDT)');
+                return;
+            }
+            
+            fetch('/api/binance/add', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({symbol: symbol, timeframe: timeframe, days: days})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Adding ${symbol} ${timeframe} with ${days} days of history...`);
+                    document.getElementById('newSymbol').value = '';
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            });
+        }
+        
+        function clearLog() {
+            document.getElementById('logContainer').innerHTML = '<div class="log-line">Log cleared...</div>';
+        }
+        
+        function refreshData() {
+            loadDashboardData();
+        }
+        
+        function toggleAutoRefresh() {
+            autoRefresh = !autoRefresh;
+            const text = document.getElementById('autoRefreshText');
+            text.textContent = `🔄 Auto Refresh: ${autoRefresh ? 'ON' : 'OFF'}`;
+            
+            if (autoRefresh) {
+                refreshInterval = setInterval(updateStatus, 2000);
+            } else {
+                clearInterval(refreshInterval);
+            }
+        }
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboardData();
+        });
+        
+        // Start auto refresh
+        updateStatus();
+        refreshInterval = setInterval(updateStatus, 5000); // Check every 5 seconds
+    </script>
+</body>
+</html>

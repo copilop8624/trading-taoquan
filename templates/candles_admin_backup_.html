@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Candlestick Data Admin</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+<div class="container mt-4">
+    <h2>🕯️ Candlestick Data Admin</h2>
+    <div class="mb-3 row">
+        <div class="col-auto">
+            <input type="text" id="filter-symbol" class="form-control" placeholder="Symbol (e.g. BINANCE_BTCUSDT)">
+        </div>
+        <div class="col-auto">
+            <input type="text" id="filter-timeframe" class="form-control" placeholder="Timeframe (e.g. 30m)">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" id="btn-filter">Filter</button>
+        </div>
+    </div>
+    <table class="table table-bordered table-sm" id="candles-table">
+        <thead class="table-light">
+        <tr>
+            <th>RowID</th>
+            <th>Symbol</th>
+            <th>Timeframe</th>
+            <th>Open Time</th>
+            <th>Open</th>
+            <th>High</th>
+            <th>Low</th>
+            <th>Close</th>
+            <th>Volume</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <nav>
+        <ul class="pagination" id="pagination"></ul>
+    </nav>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editModalLabel">Edit Candle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="edit-form">
+          <input type="hidden" id="edit-rowid">
+          <div class="mb-2">
+            <label>Open</label>
+            <input type="number" step="any" class="form-control" id="edit-open">
+          </div>
+          <div class="mb-2">
+            <label>High</label>
+            <input type="number" step="any" class="form-control" id="edit-high">
+          </div>
+          <div class="mb-2">
+            <label>Low</label>
+            <input type="number" step="any" class="form-control" id="edit-low">
+          </div>
+          <div class="mb-2">
+            <label>Close</label>
+            <input type="number" step="any" class="form-control" id="edit-close">
+          </div>
+          <div class="mb-2">
+            <label>Volume</label>
+            <input type="number" step="any" class="form-control" id="edit-volume">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="save-edit">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let currentPage = 1;
+let pageSize = 50;
+
+function loadCandles(page=1) {
+    const symbol = $('#filter-symbol').val();
+    const timeframe = $('#filter-timeframe').val();
+    const offset = (page-1)*pageSize;
+    $.get('/api/candles', {symbol, timeframe, limit: pageSize, offset}, function(res) {
+        if(res.success) {
+            const tbody = $('#candles-table tbody');
+            tbody.empty();
+            res.data.forEach(row => {
+                tbody.append(`<tr>
+                    <td>${row.rowid}</td>
+                    <td>${row.symbol}</td>
+                    <td>${row.timeframe}</td>
+                    <td>${row.open_time}</td>
+                    <td>${row.open}</td>
+                    <td>${row.high}</td>
+                    <td>${row.low}</td>
+                    <td>${row.close}</td>
+                    <td>${row.volume}</td>
+                    <td>
+                        <button class="btn btn-sm btn-warning btn-edit" data-rowid="${row.rowid}">Edit</button>
+                        <button class="btn btn-sm btn-danger btn-delete" data-rowid="${row.rowid}">Delete</button>
+                    </td>
+                </tr>`);
+            });
+            // Simple pagination (no total count, just next/prev)
+            $('#pagination').html(`
+                <li class="page-item${page===1?' disabled':''}"><a class="page-link" href="#" id="prev-page">Previous</a></li>
+                <li class="page-item"><span class="page-link">Page ${page}</span></li>
+                <li class="page-item${res.data.length<pageSize?' disabled':''}"><a class="page-link" href="#" id="next-page">Next</a></li>
+            `);
+            currentPage = page;
+        }
+    });
+}
+
+$(document).on('click', '#btn-filter', function() {
+    loadCandles(1);
+});
+
+$(document).on('click', '#prev-page', function(e) {
+    e.preventDefault();
+    if(currentPage>1) loadCandles(currentPage-1);
+});
+$(document).on('click', '#next-page', function(e) {
+    e.preventDefault();
+    loadCandles(currentPage+1);
+});
+
+$(document).on('click', '.btn-delete', function() {
+    const rowid = $(this).data('rowid');
+    if(confirm('Delete this candle?')) {
+        $.ajax({url: `/api/candles/${rowid}`, type: 'DELETE', success: function(res) {
+            if(res.success) loadCandles(currentPage);
+        }});
+    }
+});
+
+$(document).on('click', '.btn-edit', function() {
+    const row = $(this).closest('tr');
+    $('#edit-rowid').val($(this).data('rowid'));
+    $('#edit-open').val(row.find('td:eq(4)').text());
+    $('#edit-high').val(row.find('td:eq(5)').text());
+    $('#edit-low').val(row.find('td:eq(6)').text());
+    $('#edit-close').val(row.find('td:eq(7)').text());
+    $('#edit-volume').val(row.find('td:eq(8)').text());
+    var modal = new bootstrap.Modal(document.getElementById('editModal'));
+    modal.show();
+});
+
+$('#save-edit').on('click', function() {
+    const rowid = $('#edit-rowid').val();
+    const data = {
+        open: $('#edit-open').val(),
+        high: $('#edit-high').val(),
+        low: $('#edit-low').val(),
+        close: $('#edit-close').val(),
+        volume: $('#edit-volume').val()
+    };
+    $.ajax({
+        url: `/api/candles/${rowid}`,
+        type: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(res) {
+            if(res.success) {
+                loadCandles(currentPage);
+                var modal = bootstrap.Modal.getInstance(document.getElementById('editModal'));
+                modal.hide();
+            }
+        }
+    });
+});
+
+// Initial load
+$(function(){
+    loadCandles();
+});
+</script>
+</body>
+</html>

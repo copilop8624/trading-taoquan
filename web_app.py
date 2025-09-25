@@ -1,4 +1,95 @@
-﻿import os
+﻿# === API: Data Management Dashboard ===
+
+import sqlite3
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory, make_response
+
+# Flask app initialization
+app = Flask(__name__)
+
+@app.route('/api/list_candles_status')
+def api_list_candles_status():
+    try:
+        conn = sqlite3.connect('candlestick_data.db')
+        cur = conn.cursor()
+        cur.execute("SELECT symbol, timeframe, COUNT(*), MAX(open_time) FROM candlestick_data GROUP BY symbol, timeframe")
+        rows = cur.fetchall()
+        data = []
+        for r in rows:
+            symbol, timeframe, candles, last_update = r
+            status = '✅ Recent'  # Có thể thêm logic phân loại status
+            data.append({
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'candles': candles,
+                'last_update': str(last_update)[:10] if last_update else '',
+                'status': status
+            })
+        conn.close()
+        return jsonify({'success': True, 'data': data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/candles_detail')
+def api_candles_detail():
+    symbol = request.args.get('symbol')
+    timeframe = request.args.get('timeframe')
+    try:
+        conn = sqlite3.connect('candlestick_data.db')
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*), MIN(open_time), MAX(open_time) FROM candlestick_data WHERE symbol=? AND timeframe=?", (symbol, timeframe))
+        row = cur.fetchone()
+        candles, min_time, max_time = row
+        cur.execute("SELECT open_time, open, high, low, close, volume FROM candlestick_data WHERE symbol=? AND timeframe=? ORDER BY open_time ASC LIMIT 10", (symbol, timeframe))
+        preview_rows = cur.fetchall()
+        preview = '\n'.join([str(r) for r in preview_rows])
+        conn.close()
+        return jsonify({'success': True, 'symbol': symbol, 'timeframe': timeframe, 'candles': candles, 'min_time': min_time, 'max_time': max_time, 'preview': preview})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/delete_candles', methods=['POST'])
+def api_delete_candles():
+    data = request.get_json()
+    symbol = data.get('symbol')
+    timeframe = data.get('timeframe')
+    try:
+        conn = sqlite3.connect('candlestick_data.db')
+        cur = conn.cursor()
+        cur.execute("DELETE FROM candlestick_data WHERE symbol=? AND timeframe=?", (symbol, timeframe))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+
+
+# ================== MINI CANDLE ADMIN (phpMyAdmin style) ===================
+@app.route('/candles_admin')
+def candles_admin():
+    """Mini admin dashboard for candlestick_data (view, edit, delete)"""
+    return render_template('candles_admin.html')
+
+# ...existing code...
+
+# API: Trả về danh sách symbol/timeframe thực tế có trong candlestick_data
+@app.route('/api/list_candles', methods=['GET'])
+def api_list_candles():
+    try:
+        conn = sqlite3.connect('candlestick_data.db')
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT symbol, timeframe FROM candlestick_data ORDER BY symbol, timeframe")
+        rows = cur.fetchall()
+        conn.close()
+        return jsonify({
+            'success': True,
+            'candles': [{'symbol': r[0], 'timeframe': r[1]} for r in rows],
+            'count': len(rows)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+import os
 import sys
 
 # Ensure repository root is on sys.path so local package imports like
@@ -226,23 +317,124 @@ class WebDataManager:
             'log': []
         }
 
-# Global data manager instance
+
+# ================== SYMBOL/TIMEFRAME NORMALIZATION ===================
+import re
+def normalize_symbol_and_timeframe(raw, default_timeframe='30m'):
+    """
+    Chuẩn hóa mọi kiểu symbol/timeframe đầu vào về tuple (symbol, timeframe)
+    Hỗ trợ: có/không prefix sàn, có/không timeframe, mọi kiểu phân tách
+    """
+    s = str(raw).strip().upper()
+    s = re.sub(r'^(BINANCE_|BYBIT_|OKX_)', '', s)
+    symbol, timeframe = s, None
+    # Ưu tiên tách theo dấu _, sau đó dấu cách
+    if '_' in s:
+        parts = s.split('_')
+        if len(parts) == 2:
+            symbol, timeframe = parts
+    elif ' ' in s:
+        parts = s.split()
+        if len(parts) == 2:
+            symbol, timeframe = parts
+    # Nếu chưa có timeframe, kiểm tra hậu tố kiểu 30M, 60M, 1H...
+    if timeframe is None:
+        m = re.match(r'^([A-Z0-9]+)(\d{1,4}[A-Z]?)$', symbol)
+        if m:
+            symbol, timeframe = m.group(1), m.group(2)
+    if timeframe is None:
+        timeframe = default_timeframe
+    return symbol, timeframe
+
 web_data_manager = WebDataManager() if DATA_MANAGEMENT_AVAILABLE else None
 
 def load_candle_data_from_db(symbol_name):
-    """Load candle data from database table"""
+    """
+    Load candle data for a symbol and timeframe from the unified candlestick_data table in candlestick_data.db
+    symbol_name: str, e.g. 'BIOUSDT' or 'BTCUSDT_30m' or 'BIOUSDT_30m'
+    Returns: DataFrame
+    """
+    import sqlite3
+    # Thông minh hơn: nhận dict, tuple, hoặc string, luôn tách symbol/timeframe rõ ràng
+    symbol = None
+    timeframe = None
+    # Nếu đầu vào là dict hoặc tuple
+    if isinstance(symbol_name, dict):
+        symbol = symbol_name.get('symbol') or symbol_name.get('s')
+        timeframe = symbol_name.get('timeframe') or symbol_name.get('tf')
+    elif isinstance(symbol_name, (tuple, list)) and len(symbol_name) == 2:
+        symbol, timeframe = symbol_name
+    else:
+        # Nếu là string thì normalize
+        symbol, timeframe = normalize_symbol_and_timeframe(symbol_name)
+    # Nếu vẫn thiếu thì dùng default
+    if not symbol:
+        symbol = ''
+    if not timeframe:
+        timeframe = '30m'
+    # Đảm bảo symbol/timeframe là string chuẩn
+    symbol = str(symbol).strip().upper()
+    timeframe = str(timeframe).strip().lower()
+    print(f"[DEBUG] load_candle_data_from_db input: symbol={symbol}, timeframe={timeframe}")
     try:
-        import sqlite3
-        conn = sqlite3.connect('candles.db')
-        table_name = f"BINANCE_{symbol_name}"
-        
-        query = f"SELECT * FROM `{table_name}` ORDER BY datetime"
-        df = pd.read_sql_query(query, conn)
+        conn = sqlite3.connect('candlestick_data.db')
+        query = "SELECT * FROM candlestick_data WHERE symbol = ? AND timeframe = ? ORDER BY open_time"
+        df = pd.read_sql_query(query, conn, params=(symbol, timeframe))
+        # Nếu không có dữ liệu, thử các biến thể phổ biến của timeframe (bỏ/thêm hậu tố m, viết hoa/thường)
+        if df.empty:
+            tried = [(symbol, timeframe)]
+            tf_variants = set()
+            tf = timeframe
+            if tf.endswith('m'):
+                tf_variants.add(tf[:-1])
+            else:
+                tf_variants.add(tf + 'm')
+            tf_variants.add(tf.upper())
+            tf_variants.add(tf.lower())
+            for tf2 in tf_variants:
+                if (symbol, tf2) not in tried:
+                    df2 = pd.read_sql_query(query, conn, params=(symbol, tf2))
+                    if not df2.empty:
+                        df = df2
+                        timeframe = tf2
+                        break
+            # Thử lại với symbol viết hoa/thường
+            if df.empty:
+                sym_variants = set([symbol.upper(), symbol.lower()])
+                for sym2 in sym_variants:
+                    if (sym2, timeframe) not in tried:
+                        df2 = pd.read_sql_query(query, conn, params=(sym2, timeframe))
+                        if not df2.empty:
+                            df = df2
+                            symbol = sym2
+                            break
         conn.close()
-        
+        if df.empty:
+            # Log debug các symbol/timeframe thực tế có trong DB
+            try:
+                conn2 = sqlite3.connect('candlestick_data.db')
+                cur = conn2.cursor()
+                cur.execute("SELECT DISTINCT symbol, timeframe FROM candlestick_data")
+                available = cur.fetchall()
+                conn2.close()
+                print(f"[DEBUG] Available symbol/timeframe in DB: {available}")
+            except Exception as dbg:
+                print(f"[DEBUG] Could not fetch available symbol/timeframe: {dbg}")
+            raise Exception(f"No candle data found in database for {symbol} {timeframe}")
+        # Chuẩn hóa tên cột nếu cần
+        df = df.rename(columns={
+            'open_time': 'time',
+            'open_price': 'open',
+            'high_price': 'high',
+            'low_price': 'low',
+            'close_price': 'close'
+        })
+        df['time'] = pd.to_datetime(df['time'], unit='s')
+        print(f"[DEBUG] load_candle_data_from_db loaded {len(df)} rows for {symbol} {timeframe}")
         return df
     except Exception as e:
-        raise Exception(f"Error loading from database: {str(e)}")
+        print(f"[DEBUG] load_candle_data_from_db error: {e}")
+        raise Exception(f"Error loading from candlestick_data.db: {str(e)}")
 
 def safe_float(value, default=0.0):
     """Safely convert value to float, handling None, NaN, and invalid values"""
@@ -307,8 +499,8 @@ def discover_available_symbols():
         if 'tradelist' in filename.lower():
             continue
             
-        # Parse BINANCE format: BINANCE_SYMBOL.P, timeframe.csv or BINANCE_SYMBOL, timeframe.csv
-        match = re.match(r'BINANCE_([A-Z]+)\.?P?,?\s*(\d+)\.csv', filename)
+        # Parse BINANCE format: BINANCE_SYMBOL.P_30.csv, BINANCE_SYMBOL_30.csv, BINANCE_SYMBOL,30.csv, etc.
+        match = re.match(r'BINANCE_([A-Za-z0-9]+)(?:\.P)?[,_ ]*_*(\d+[a-zA-Z]*)\.csv', filename)
         if match:
             # Use normalized format for consistency
             symbol = normalize_symbol_format(match.group(1), ensure_prefix=True)
@@ -570,18 +762,31 @@ def api_batch_optimize():
         symbols = data.get('symbols', [])
         timeframes = data.get('timeframes', {})
         parameters = data.get('parameters', {})
-        
-        # Basic validation
-        if not symbols:
-            return jsonify({'success': False, 'error': 'No symbols selected'}), 400
-            
-        # Return sample response for now
+
+        # Normalize all symbols and timeframes
+        normalized_pairs = []
+        for sym in symbols:
+            # Nếu timeframes là dict hoặc list, lấy từng cặp
+            if isinstance(timeframes, dict):
+                tfs = timeframes.get(sym, [])
+            elif isinstance(timeframes, list):
+                tfs = timeframes
+            else:
+                tfs = [timeframes] if timeframes else []
+            for tf in tfs:
+                norm_sym, norm_tf = normalize_symbol_and_timeframe(f"{sym}_{tf}")
+                normalized_pairs.append((norm_sym, norm_tf))
+
+        if not normalized_pairs:
+            return jsonify({'success': False, 'error': 'No valid symbol/timeframe pairs selected'}), 400
+
+        # Return sample response for now (but with normalized pairs)
         return jsonify({
             'success': True,
             'message': 'Batch optimization started',
             'job_id': 'batch_001',
-            'symbols': symbols,
-            'estimated_time': len(symbols) * 30  # seconds
+            'symbols': [f"{s}_{t}" for s, t in normalized_pairs],
+            'estimated_time': len(normalized_pairs) * 30  # seconds
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -604,23 +809,45 @@ def api_batch_status(job_id):
 def api_batch_results(job_id):
     """ðŸ“ˆ Get batch optimization results"""
     # Sample results data
+    # In real implementation, ensure all result symbol/timeframe are normalized before returning
+    # In real implementation, fetch actual optimization results and calculate advanced metrics
+    # Here, we patch the sample to always include max_drawdown
+    def fake_details(pnl):
+        # Fake trade details for demonstration
+        return [{'pnlPct': pnl/2}, {'pnlPct': pnl/2}]
+
+    def get_performance(pnl, winrate, sharpe):
+        details = fake_details(pnl)
+        from numpy import cumsum, maximum
+        # Calculate max_drawdown using same logic as calculate_advanced_metrics
+        pnl_list = [t['pnlPct'] for t in details]
+        cumulative_pnl = cumsum(pnl_list)
+        max_drawdown = float(maximum.accumulate(cumulative_pnl).max() - cumulative_pnl.min()) if len(cumulative_pnl) else 0.0
+        return {
+            'pnl': pnl,
+            'winrate': winrate,
+            'sharpe': sharpe,
+            'max_drawdown': round(max_drawdown, 2)
+        }
+
+    results = [
+        {
+            'symbol': normalize_symbol_and_timeframe('BINANCE_BTCUSDT_30')[0],
+            'timeframe': normalize_symbol_and_timeframe('BINANCE_BTCUSDT_30')[1],
+            'best_params': {'sl': 2.5, 'be': 1.2, 'ts_trig': 0.8, 'ts_step': 5.0},
+            'performance': get_performance(15.67, 68.5, 1.24)
+        },
+        {
+            'symbol': normalize_symbol_and_timeframe('BINANCE_BOMEUSDT_240')[0],
+            'timeframe': normalize_symbol_and_timeframe('BINANCE_BOMEUSDT_240')[1],
+            'best_params': {'sl': 3.0, 'be': 1.5, 'ts_trig': 1.0, 'ts_step': 5.0},
+            'performance': get_performance(12.34, 72.1, 1.18)
+        }
+    ]
     return jsonify({
         'job_id': job_id,
         'status': 'completed',
-        'results': [
-            {
-                'symbol': 'BINANCE_BTCUSDT',
-                'timeframe': '30',
-                'best_params': {'sl': 2.5, 'be': 1.2, 'ts_trig': 0.8, 'ts_step': 5.0},
-                'performance': {'pnl': 15.67, 'winrate': 68.5, 'sharpe': 1.24}
-            },
-            {
-                'symbol': 'BINANCE_BOMEUSDT', 
-                'timeframe': '240',
-                'best_params': {'sl': 3.0, 'be': 1.5, 'ts_trig': 1.0, 'ts_step': 5.0},
-                'performance': {'pnl': 12.34, 'winrate': 72.1, 'sharpe': 1.18}
-            }
-        ]
+        'results': results
     })
 
 
@@ -789,103 +1016,72 @@ def api_verify_optimization():
         
         if use_selected_data:
             # File selection mode - reuse same logic as debug API
-            strategy = data.get('strategy', '')
-            candle_file = data.get('candle_file', '')
-            
-            if not strategy or not candle_file:
-                return jsonify({
-                    'success': False,
-                    'error': 'Strategy and candle data must be selected'
-                })
-            
-            # Load data from files (reuse same logic as debug API)
-            print(f"🔍 Verification: Loading strategy '{strategy}' and candle '{candle_file}'")
-            
-            # Load strategy file
             try:
-                if ADVANCED_MODE:
-                    df_trade = load_trade_csv_file(strategy)
+                data = request.get_json()
+
+                # Check if using selected data or uploaded content
+                use_selected_data = data.get('use_selected_data', False)
+
+                # --- Normalize symbol/timeframe if present in request ---
+                symbol = data.get('symbol', '')
+                timeframe = data.get('timeframe', '')
+                if symbol:
+                    norm_symbol, norm_timeframe = normalize_symbol_and_timeframe(f"{symbol}_{timeframe}")
                 else:
-                    # Fallback - same logic as debug API
-                    import pandas as pd
-                    import glob
-                    import os
-                    
-                    strategy_parts = strategy.split('_')
-                    if len(strategy_parts) >= 4:
-                        symbol = strategy_parts[0]
-                        timeframe = strategy_parts[1]
-                        strategy_name = '_'.join(strategy_parts[2:-1])
-                        version = strategy_parts[-1]
-                        
-                        possible_patterns = [
-                            f"tradelist/BINANCE_{symbol}.P, {timeframe}-TRADELIST.csv",
-                            f"tradelist/BINANCE_{symbol}.P, {timeframe}-tradelist.csv", 
-                            f"tradelist/{symbol}_{timeframe}m_{strategy_name}_{version}.csv",
-                            f"tradelist/{symbol}_{timeframe}_{strategy_name}_{version}.csv",
-                            f"tradelist/{strategy}.csv"
-                        ]
-                        
-                        strategy_file = None
-                        for pattern in possible_patterns:
-                            files = glob.glob(pattern)
-                            if files:
-                                if len(files) == 1:
-                                    strategy_file = files[0]
-                                else:
-                                    largest_file = max(files, key=lambda f: os.path.getsize(f))
-                                    strategy_file = largest_file
-                                print(f"🔍 Verification found file: {strategy_file}")
-                                break
-                        
-                        if not strategy_file:
-                            strategy_file = f"tradelist/{strategy}.csv"
-                    else:
-                        strategy_file = f"tradelist/{strategy}.csv"
-                    
-                    df_trade = pd.read_csv(strategy_file)
-            except Exception as e:
-                return jsonify({
-                    'success': False,
-                    'error': f'Failed to load strategy file: {str(e)}'
-                })
-            
-            # Load candle file
-            try:
-                if ADVANCED_MODE:
-                    df_candle = load_candle_csv_file(candle_file)
+                    norm_symbol, norm_timeframe = '', ''
+
+                # ...existing code...
+                if use_selected_data:
+                    # File selection mode - reuse same logic as debug API
+                    strategy = data.get('strategy', '')
+                    candle_file = data.get('candle_file', '')
+                    if not strategy or not candle_file:
+                        # ...existing code...
+                        pass
+                    # Load data from files (reuse same logic as debug API)
+                    print(f"🔍 Verification: Loading strategy '{strategy}' and candle '{candle_file}'")
+                    # ...existing code...
                 else:
-                    import pandas as pd
-                    if candle_file.startswith('💾'):
-                        return jsonify({
-                            'success': False,
-                            'error': f'Database candle files not supported in verification mode yet.'
-                        })
-                    else:
-                        if not candle_file.startswith('candles/'):
-                            candle_file_path = f"candles/{candle_file}"
-                        else:
-                            candle_file_path = candle_file
-                        
-                        df_candle = pd.read_csv(candle_file_path)
+                    # ...existing code...
+                    pass
+
+                # Common processing for both modes
+                # Original parameters (from raw tradelist)
+                original_params = {
+                    'sl': 2.0,  # ...existing code...
+                    'be': 0.0,  # ...existing code...
+                    'ts_trig': 0.0,  # ...existing code...
+                    'ts_step': 0.0
+                }
+
+                # Optimized parameters from user input
+                optimized_params = {
+                    'sl': float(data.get('sl', 2.0)),
+                    'be': float(data.get('be', 2.0)),
+                    'ts_trig': float(data.get('ts_trig', 0.0)),
+                    'ts_step': float(data.get('ts_step', 0.0))
+                }
+
+                print(f"🔍 VERIFICATION: Original params: {original_params}")
+                print(f"🔍 VERIFICATION: Optimized params: {optimized_params}")
+                # ...existing code...
+
+                # Ensure all symbol/timeframe used in simulation are normalized
+                # ...existing code...
+
+                # ...existing code...
+                return jsonify({
+                    'success': True,
+                    # ...existing code...
+                })
+
             except Exception as e:
+                print(f"❌ Verification error: {e}")
+                # ...existing code...
                 return jsonify({
                     'success': False,
-                    'error': f'Failed to load candle file: {str(e)}'
+                    'error': str(e)
                 })
-                
-        else:
-            # Manual upload mode - original logic
-            trade_content = data.get('trade_content', '')
-            candle_content = data.get('candle_content', '')
-            
-            if not trade_content or not candle_content:
-                return jsonify({
-                    'success': False,
-                    'error': 'Trade and candle content must be provided'
-                })
-            
-            # Load and process data
             df_trade = load_trade_csv_from_content(trade_content)
             df_candle = load_candle_csv_from_content(candle_content)
         
@@ -1041,18 +1237,20 @@ def compare_optimization_results(original_results, optimized_results,
         'trade_by_trade_analysis': []
     }
     
-    # Trade-by-trade comparison
+    # Trade-by-trade comparison (limit to 20 most recent trades)
     min_len = min(len(original_results), len(optimized_results))
     significant_differences = 0
-    
-    for i in range(min_len):
+
+    # Determine the slice for the 20 most recent trades
+    start_idx = max(0, min_len - 20)
+    for i in range(start_idx, min_len):
         orig = original_results[i]
         opt = optimized_results[i]
-        
+
         orig_pnl = safe_float(orig.get('pnlPct', 0))
         opt_pnl = safe_float(opt.get('pnlPct', 0))
         pnl_diff = opt_pnl - orig_pnl
-        
+
         # Flag significant differences (>1% change)
         if abs(pnl_diff) > 1.0:
             significant_differences += 1
@@ -1067,7 +1265,7 @@ def compare_optimization_results(original_results, optimized_results,
                 'original_exit_price': safe_float(orig.get('exitPrice', 0)),
                 'optimized_exit_price': safe_float(opt.get('exitPrice', 0))
             })
-    
+
     comparison['significant_differences'] = significant_differences
     comparison['analysis_summary'] = {
         'total_compared_trades': min_len,
@@ -2818,18 +3016,17 @@ def quick_summary_strategy():
                 
             db_symbol = '_'.join(parts[:-1])
             db_timeframe = parts[-1]
-            
+            # Loại bỏ prefix BINANCE_ nếu có
+            if db_symbol.upper().startswith('BINANCE_'):
+                db_symbol = db_symbol[8:]
             print(f"🔄 Loading from database: symbol={db_symbol}, timeframe={db_timeframe}")
-            
             # Load from candlestick_data.db
             conn = sqlite3.connect('candlestick_data.db')
             query = "SELECT * FROM candlestick_data WHERE symbol = ? AND timeframe = ? ORDER BY open_time"
             df_candle = pd.read_sql_query(query, conn, params=[db_symbol, db_timeframe])
             conn.close()
-            
             if df_candle.empty:
                 raise ValueError(f"No candle data found in database for {db_symbol} {db_timeframe}")
-            
             # Convert database format to standard format
             df_candle = df_candle.rename(columns={
                 'open_time': 'time',
@@ -2838,8 +3035,7 @@ def quick_summary_strategy():
                 'low_price': 'low',
                 'close_price': 'close'
             })
-            df_candle['time'] = pd.to_datetime(df_candle['time'], unit='s')  # Database uses seconds, not milliseconds
-            
+            df_candle['time'] = pd.to_datetime(df_candle['time'], unit='s')
             print(f"✅ Loaded from database: {len(df_candle)} candles")
                 
         except Exception as e:
@@ -3272,6 +3468,8 @@ def suggest_parameters():
                     'suggested_parameters': suggested_params,
                     # Include TP level suggestions from SmartRangeFinder if available
                     'tp_levels': recommendations.get('tp_levels', finder.range_analysis.get('tp_levels', {})) if isinstance(recommendations, dict) else finder.range_analysis.get('tp_levels', {}),
+                    # Include TP reach rates (percent of trades reaching each TP)
+                    'tp_reach_rates': recommendations.get('tp_reach_rates', finder.range_analysis.get('tp_reach_rates', {})) if isinstance(recommendations, dict) else finder.range_analysis.get('tp_reach_rates', {}),
                     # Feature enable flags at the analysis level: True if the suggested ranges/steps indicate >0
                     'features_enabled': {
                         'sl_enabled': float(param_ranges['sl']['max']) > 0 and float(suggested_params['sl_step']) > 0,
@@ -3386,20 +3584,18 @@ def optimize():
                     raise ValueError(f"Invalid database format: {candle_source}")
                     
                 db_symbol, db_timeframe = db_name.rsplit('_', 1)
+                if db_symbol.upper().startswith('BINANCE_'):
+                    db_symbol = db_symbol[8:]
                 if not db_symbol or not db_timeframe:
                     raise ValueError(f"Invalid database format: {candle_source}")
-                
                 print(f"🔄 [OPTIMIZE] Loading from database: symbol={db_symbol}, timeframe={db_timeframe}")
-                
                 # Load from candlestick_data.db
                 conn = sqlite3.connect('candlestick_data.db')
                 query = "SELECT * FROM candlestick_data WHERE symbol = ? AND timeframe = ? ORDER BY open_time"
                 df_candle = pd.read_sql_query(query, conn, params=(db_symbol, db_timeframe))
                 conn.close()
-                
                 if df_candle.empty:
                     raise ValueError(f"No candle data found in database for {db_symbol} {db_timeframe}")
-                
                 # Convert database format to standard format
                 df_candle = df_candle.rename(columns={
                     'open_time': 'time',
@@ -3408,7 +3604,7 @@ def optimize():
                     'low_price': 'low',
                     'close_price': 'close'
                 })
-                df_candle['time'] = pd.to_datetime(df_candle['time'], unit='s')  # Database uses seconds
+                df_candle['time'] = pd.to_datetime(df_candle['time'], unit='s')
                 print(f"✅ Loaded candle data: {len(df_candle)} rows")
                 
             except Exception as e:
@@ -3966,22 +4162,22 @@ def optimize():
                 'trade_count': int(len(baseline_details))
             },
             'best_result': {
-                'sl': float(best_result['sl']),
-                'be': float(best_result['be']),
-                'ts_trig': float(best_result['ts_trig']),
-                'ts_step': float(best_result['ts_step']),
-                'pnl_total': float(best_result['pnl_total']),
-                'winrate': float(best_result['winrate']),
-                'pf': safe_float(best_result['pf']),
-                'max_drawdown': best_result.get('max_drawdown', 0.0),
-                'avg_win': best_result.get('avg_win', 0.0),
-                'avg_loss': best_result.get('avg_loss', 0.0),
-                'max_consecutive_wins': best_result.get('max_consecutive_wins', 0),
-                'max_consecutive_losses': best_result.get('max_consecutive_losses', 0),
-                'sharpe_ratio': best_result.get('sharpe_ratio', 0.0),
-                'recovery_factor': best_result.get('recovery_factor', 0.0),
-                'trade_win': int(len([d for d in best_result['details'] if d['pnlPct'] > 0])),
-                'trade_loss': int(len([d for d in best_result['details'] if d['pnlPct'] <= 0]))
+                'sl': float(best_result.get('sl', 0)),
+                'be': float(best_result.get('be', 0)),
+                'ts_trig': float(best_result.get('ts_trig', best_result.get('ts_activation', 0))),
+                'ts_step': float(best_result.get('ts_step', 0)),
+                'pnl_total': float(best_result.get('pnl_total', best_result.get('total_pnl', best_result.get('total_profit', 0)))),
+                'winrate': float(best_result.get('winrate', best_result.get('win_rate', 0))),
+                'pf': safe_float(best_result.get('pf', 1.0)),
+                'max_drawdown': float(best_result.get('max_drawdown', 0.0)),
+                'avg_win': float(best_result.get('avg_win', 0.0)),
+                'avg_loss': float(best_result.get('avg_loss', 0.0)),
+                'max_consecutive_wins': int(best_result.get('max_consecutive_wins', 0)),
+                'max_consecutive_losses': int(best_result.get('max_consecutive_losses', 0)),
+                'sharpe_ratio': float(best_result.get('sharpe_ratio', 0.0)),
+                'recovery_factor': float(best_result.get('recovery_factor', 0.0)),
+                'trade_win': int(best_result.get('trade_win', len([d for d in best_result.get('details', []) if d.get('pnlPct', 0) > 0]))),
+                'trade_loss': int(best_result.get('trade_loss', len([d for d in best_result.get('details', []) if d.get('pnlPct', 0) <= 0])))
             } if best_result else None,
             'all_results': convert_to_serializable(results[:20]),
             'cumulative_comparison': {
@@ -4291,40 +4487,45 @@ def optimize_ranges():
             else:
                 return jsonify({'success': False, 'error': f'Legacy trade file not found: {legacy_trade_file}'})
         
-        # Load candle data from database
+        # 1) Log & parse candle_data
+        candle_file = candle_data  # ví dụ: "BINANCE_BIOUSDT_30m.db"
+        print(f"🕯️ [OPT] Candle data (raw): {candle_file}")
+        import re
+        m = re.search(r'BINANCE_([A-Za-z0-9]+)_(\w+)\.', candle_file or "")
+        if not m:
+            return jsonify({'success': False, 'error': f"[OPT] Cannot parse symbol/timeframe from candle_data='{candle_file}'"})
+        db_symbol = m.group(1).upper()
+        db_timeframe = m.group(2).lower()
+        # Map timeframe về dạng chuẩn
+        _tf_map = {"30": "30m", "60": "1h", "240": "4h", "1440": "1d"}
+        db_timeframe = _tf_map.get(db_timeframe, db_timeframe)
+        print(f"🕯️ [OPT] Parsed candle -> symbol={db_symbol}, timeframe={db_timeframe}")
+        # 2) Load nến bằng tolerant loader
         try:
-            if not candle_data.endswith('.db'):
-                raise ValueError("Only database candle sources are supported")
-                
-            db_name = candle_data.replace('.db', '')
-            parts = db_name.split('_')
-            if len(parts) < 2:
-                raise ValueError(f"Invalid database format: {candle_data}")
-                
-            db_symbol = '_'.join(parts[:-1])
-            db_timeframe = parts[-1]
-            
-            # Load from candlestick_data.db
-            conn = sqlite3.connect('candlestick_data.db')
-            query = "SELECT * FROM candlestick_data WHERE symbol = ? AND timeframe = ? ORDER BY open_time"
-            df_candle = pd.read_sql_query(query, conn, params=[db_symbol, db_timeframe])
-            conn.close()
-            
-            if df_candle.empty:
-                raise ValueError(f"No candle data found in database for {db_symbol} {db_timeframe}")
-            
-            # Convert database format to standard format
-            df_candle = df_candle.rename(columns={
-                'open_time': 'time',
-                'open_price': 'open', 
-                'high_price': 'high',
-                'low_price': 'low',
-                'close_price': 'close'
-            })
-            df_candle['time'] = pd.to_datetime(df_candle['time'], unit='s')
-                
+            df_candle = load_candle_data_from_db({"symbol": db_symbol, "timeframe": db_timeframe})
         except Exception as e:
+            print(f"❌ [OPT] Tolerant loader error: {e}")
             return jsonify({'success': False, 'error': f'Error loading candle data: {str(e)}'})
+        # 3) Kiểm tra rỗng và log các cặp có sẵn
+        if df_candle is None or len(df_candle) == 0:
+            print(f"⚠️ [OPT] No rows for {db_symbol}/{db_timeframe}. Listing available pairs...")
+            try:
+                import sqlite3, pandas as pd
+                conn = sqlite3.connect('candlestick_data.db')
+                q = """
+                SELECT symbol, timeframe, COUNT(*) AS rows,
+                       MIN(open_time) AS min_t, MAX(open_time) AS max_t
+                FROM candlestick_data
+                GROUP BY symbol, timeframe
+                ORDER BY symbol, timeframe
+                """
+                df_pairs = pd.read_sql_query(q, conn)
+                conn.close()
+                print(f"[DEBUG] Available pairs (first 30): {df_pairs.head(30).to_dict(orient='records')}")
+            except Exception as e:
+                print(f"[DEBUG] Unable to list pairs: {e}")
+            return jsonify({'success': False, 'error': f"No candle data in DB for {db_symbol}/{db_timeframe}. Please migrate this pair (CSV→DB) or run /api/binance/add."})
+        print(f"✅ [OPT] Loaded candle data: {len(df_candle)} rows for {db_symbol}/{db_timeframe}")
         
         # Load and process trade data
         df_trade = load_trade_csv_from_content(trade_content)
@@ -4561,7 +4762,6 @@ def optimize_ranges():
                     'sl': final_sl / 100,  # Convert to ratio for frontend
                     'be': final_be / 100,
                     'ts': final_ts_trig / 100,
-                    'ts_activation': final_ts_trig / 100,  # ✅ ADD: Template compatibility
                     'ts_step': final_ts_step / 100,  # ADD MISSING TS_STEP!
                     'total_profit': opt_value,
                     'win_rate': winrate_real / 100,  # Real winrate calculation
@@ -4625,7 +4825,6 @@ def optimize_ranges():
                         'sl': result['sl'] / 100,  # Convert to ratio
                         'be': result['be'] / 100,
                         'ts': result['ts_trig'] / 100,
-                        'ts_activation': result['ts_trig'] / 100,  # ✅ ADD: Template compatibility
                         'ts_step': result.get('ts_step', 0.1) / 100,  # ADD TS_STEP for Grid Search
                         'total_profit': result.get('pnl_total', 0),
                         'win_rate': result.get('winrate', 0) / 100,
@@ -4864,14 +5063,9 @@ def optimize_ranges():
                 'parameters': {
                     'sl': safe_float(best_sl),
                     'be': safe_float(best_be),
-                    'ts_activation': safe_float(best_ts),    # ✅ FIXED: Use ts_activation for template compatibility
+                    'ts_active': safe_float(best_ts),
                     'ts_step': safe_float(best_ts_step)
-                },
-                # Add top-level parameter fields for template compatibility
-                'sl': safe_float(best_sl),
-                'be': safe_float(best_be),
-                'ts_trig': safe_float(best_ts),      # ✅ Template expects ts_trig
-                'ts_step': safe_float(best_ts_step)
+                }
             },
             'baseline_result': {  # BASELINE from original tradelist using Quick Summary calculation
                 'total_trades': baseline_stats.get('total_trades', len(trade_pairs) if trade_pairs else 0),
@@ -4985,27 +5179,6 @@ def optimize_ranges():
             response_data['database_warning'] = f"Results not saved to database: {str(e)}"
         
         print("=== RANGE OPTIMIZATION SUCCESS ===")
-        
-        # 🔍 DEBUG: Print exact parameters being sent to frontend
-        print(f"🔍 DEBUG - Best Parameters Being Sent to Frontend:")
-        print(f"   best_sl = {best_sl} (type: {type(best_sl)})")
-        print(f"   best_be = {best_be} (type: {type(best_be)})")
-        print(f"   best_ts = {best_ts} (type: {type(best_ts)})")
-        print(f"   best_ts_step = {best_ts_step} (type: {type(best_ts_step)})")
-        print(f"🔍 DEBUG - Response Data Parameters:")
-        print(f"   response_data['best_result']['parameters'] = {response_data['best_result']['parameters']}")
-        print(f"🔍 DEBUG - Response Data Top-Level:")
-        print(f"   response_data['best_result']['sl'] = {response_data['best_result']['sl']}")
-        print(f"   response_data['best_result']['be'] = {response_data['best_result']['be']}")
-        print(f"   response_data['best_result']['ts_trig'] = {response_data['best_result']['ts_trig']}")
-        print(f"   response_data['best_result']['ts_step'] = {response_data['best_result']['ts_step']}")
-        print(f"🔍 DEBUG - Results Data (data.data):")
-        if results_data:
-            print(f"   results_data[0]['sl'] = {results_data[0].get('sl', 'N/A')}")
-            print(f"   results_data[0]['be'] = {results_data[0].get('be', 'N/A')}")
-            print(f"   results_data[0]['ts_activation'] = {results_data[0].get('ts_activation', 'N/A')}")
-            print(f"   results_data[0]['ts_step'] = {results_data[0].get('ts_step', 'N/A')}")
-        
         return jsonify(response_data)
         
     except Exception as e:

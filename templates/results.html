@@ -149,6 +149,9 @@
                 <a href="/results" class="nav-item active">
                     <i class="fas fa-chart-bar" style="margin-right: 8px;"></i>Results Database
                 </a>
+                <a href="/candles_admin" class="nav-item" style="background: #ff9800; color: white;">
+                    <i class="fas fa-fire" style="margin-right: 8px;"></i>Candle Admin
+                </a>
             </div>
         </div>
     </div>
@@ -281,6 +284,8 @@
                             <th>Engine</th>
                             <th>Total PnL (%)</th>
                             <th>Win Rate (%)</th>
+                            <th>Profit Factor</th>
+                            <th>Max DD (%)</th>
                             <th>Trades</th>
                             <th>Parameters</th>
                             <th>Actions</th>
@@ -288,7 +293,7 @@
                     </thead>
                     <tbody id="resultsTableBody">
                         <tr>
-                            <td colspan="10" class="text-center py-4">
+                            <td colspan="12" class="text-center py-4">
                                 <i class="fas fa-search fa-2x text-muted"></i>
                                 <p class="text-muted mt-2">Click "Search" to load optimization results</p>
                             </td>
@@ -420,7 +425,7 @@
             if (results.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="10" class="text-center py-4">
+                        <td colspan="12" class="text-center py-4">
                             <i class="fas fa-exclamation-circle fa-2x text-warning"></i>
                             <p class="text-muted mt-2">No results found with current filters</p>
                         </td>
@@ -440,6 +445,12 @@
                         <strong>${result.total_pnl.toFixed(2)}%</strong>
                     </td>
                     <td>${result.winrate.toFixed(1)}%</td>
+                    <td class="${(result.pf || 0) >= 1.0 ? 'positive' : 'negative'}">
+                        <strong>${(result.pf || 0).toFixed(2)}</strong>
+                    </td>
+                    <td class="${(result.max_drawdown || 0) <= 20 ? 'positive' : 'negative'}">
+                        <strong>${(result.max_drawdown || 0).toFixed(2)}%</strong>
+                    </td>
                     <td>${result.total_trades}</td>
                     <td>
                         <small>
@@ -559,6 +570,8 @@
                         <table class="table table-sm table-borderless">
                             <tr><th>Total PnL:</th><td class="${optimization.total_pnl >= 0 ? 'positive' : 'negative'}"><strong>${optimization.total_pnl.toFixed(2)}%</strong></td></tr>
                             <tr><th>Win Rate:</th><td>${optimization.winrate.toFixed(1)}%</td></tr>
+                            <tr><th>Profit Factor:</th><td class="${(optimization.pf || 0) >= 1.0 ? 'positive' : 'negative'}"><strong>${(optimization.pf || 0).toFixed(2)}</strong></td></tr>
+                            <tr><th>Max Drawdown:</th><td class="${(optimization.max_drawdown || 0) <= 20 ? 'positive' : 'negative'}"><strong>${(optimization.max_drawdown || 0).toFixed(2)}%</strong></td></tr>
                             <tr><th>Total Trades:</th><td>${optimization.total_trades}</td></tr>
                             <tr><th>Winning Trades:</th><td class="positive">${optimization.win_count}</td></tr>
                             <tr><th>Losing Trades:</th><td class="negative">${optimization.loss_count}</td></tr>
@@ -588,6 +601,30 @@
                         </div>
                     </div>
                 ` : ''}
+                
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Advanced Metrics</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-sm table-borderless">
+                                    <tr><th>Avg Win:</th><td class="positive">${(optimization.advanced_metrics?.avg_win || 0).toFixed(2)}%</td></tr>
+                                    <tr><th>Avg Loss:</th><td class="negative">${(optimization.advanced_metrics?.avg_loss || 0).toFixed(2)}%</td></tr>
+                                    <tr><th>Sharpe Ratio:</th><td>${(optimization.advanced_metrics?.sharpe_ratio || 0).toFixed(3)}</td></tr>
+                                    <tr><th>Recovery Factor:</th><td>${(optimization.advanced_metrics?.recovery_factor || 0).toFixed(2)}</td></tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-sm table-borderless">
+                                    <tr><th>Max Consecutive Wins:</th><td class="positive">${optimization.advanced_metrics?.max_consecutive_wins || 0}</td></tr>
+                                    <tr><th>Max Consecutive Losses:</th><td class="negative">${optimization.advanced_metrics?.max_consecutive_losses || 0}</td></tr>
+                                    <tr><th>Baseline PnL:</th><td>${(optimization.advanced_metrics?.baseline_pnl || 0).toFixed(2)}%</td></tr>
+                                    <tr><th>Improvement:</th><td class="${(optimization.advanced_metrics?.improvement_pnl || 0) >= 0 ? 'positive' : 'negative'}">${(optimization.advanced_metrics?.improvement_pnl || 0).toFixed(2)}%</td></tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="row mt-3">
                     <div class="col-12">

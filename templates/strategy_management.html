@@ -135,6 +135,9 @@
             <a href="/data_management" class="nav-item">
                 <i class="fas fa-cloud-download-alt"></i> Data Management
             </a>
+            <a href="/candles_admin" class="nav-item" style="background: #ff9800; color: white;">
+                <i class="fas fa-fire" style="margin-right: 8px;"></i>Candle Admin
+            </a>
         </div>
     </div>
 
@@ -342,10 +345,19 @@
                 </div>
             </div>
         </div>
-    </div>
 
     <!-- JavaScript -->
     <script>
+        function safeToFixed(value, digits = 2) {
+            try {
+                if (value === null || value === undefined || isNaN(value)) return '0.00';
+                return Number(value).toFixed(digits);
+            } catch (e) {
+                console.error('safeToFixed error on value:', value, 'digits:', digits, 'error:', e);
+                return '0.00';
+            }
+        }
+
         let selectedFile = null;
         let currentStrategyData = null;
 

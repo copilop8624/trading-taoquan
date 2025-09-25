@@ -117,6 +117,11 @@ class OptimizationResult(db.Model):
         if 'ts_step' in parameters:
             data['ts_step'] = parameters['ts_step']
         
+        # 🔧 ADD PROFIT FACTOR AND MAX DRAWDOWN to top level for Results Database table
+        # Extract from advanced_metrics if available
+        data['pf'] = advanced_metrics.get('pf', 0.0)
+        data['max_drawdown'] = advanced_metrics.get('max_drawdown', 0.0)
+        
         return safe_json_convert(data)
     
     @classmethod

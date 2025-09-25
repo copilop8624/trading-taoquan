@@ -1,21 +1,13 @@
+
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+from backend.utils.common import safe_int
 
 # DEBUG flag: set True để bật log chi tiết, False để giảm log tối đa
 DEBUG = False
 
-def safe_int(value):
-    """Safely convert to int, handling infinity and NaN"""
-    try:
-        val = float(value)
-        if np.isinf(val):
-            return 999999 if val > 0 else -999999
-        elif np.isnan(val):
-            return 0
-        return int(val)
-    except (TypeError, ValueError):
-        return 0
+
 
 def find_candle_idx(dt, df_candle):
     """Tìm index của nến có thời gian chính xác khớp với dt"""

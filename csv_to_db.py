@@ -12,45 +12,28 @@ import re
 from datetime import datetime
 from candlestick_db import init_db, insert_candles, get_candles
 import sqlite3
+# Import normalize_symbol_format từ backend/utils/common.py để chuẩn hóa symbol đồng bộ toàn hệ thống
+from backend.utils.common import normalize_symbol_format
+from backend.utils.common import parse_csv_filename, convert_csv_to_timestamp
 
 def parse_csv_filename(filename):
     """Parse filename to extract symbol and timeframe"""
-    # BINANCE_SYMBOL.P, timeframe.csv or BINANCE_SYMBOL, timeframe.csv
-    match = re.match(r'BINANCE_([A-Z]+)\.?P?,?\s*(\d+)\.csv', filename)
+    # BINANCE_SYMBOL.P_30.csv, BINANCE_SYMBOL_30.csv, BINANCE_SYMBOL,30.csv, etc.
+    match = re.match(r'BINANCE_([A-Za-z0-9]+)(?:\.P)?[,_ ]*_*(\d+[a-zA-Z]*)\.csv', filename)
     if match:
-        symbol = f"BINANCE_{match.group(1)}"
-        timeframe = f"{match.group(2)}m"  # Add 'm' suffix for minutes
+        # CHUẨN HÓA: chỉ lấy phần symbol, bỏ tiền tố BINANCE_
+        symbol = match.group(1)
+        tf_raw = match.group(2)
+        # Thêm hậu tố 'm' nếu chỉ là số (ví dụ: 30 -> 30m)
+        if tf_raw.isdigit():
+            timeframe = f"{tf_raw}m"
+        else:
+            timeframe = tf_raw
         return symbol, timeframe
     return None, None
-
-def convert_csv_to_timestamp(date_str):
-    """Convert various date formats to timestamp"""
-    # Common formats in trading CSV files
-    formats = [
-        '%Y-%m-%d %H:%M:%S',
-        '%Y.%m.%d %H:%M:%S', 
-        '%m/%d/%Y %H:%M',
-        '%d/%m/%Y %H:%M',
-        '%Y-%m-%d %H:%M',
-        '%d.%m.%Y %H:%M',
-        '%Y-%m-%d',
-        '%d/%m/%Y',
-        '%m/%d/%Y'
-    ]
-    
-    for fmt in formats:
-        try:
-            dt = datetime.strptime(date_str, fmt)
-            return int(dt.timestamp())
-        except ValueError:
-            continue
-    
-    # If all formats fail, try pandas
-    try:
-        dt = pd.to_datetime(date_str)
-        return int(dt.timestamp())
-    except:
-        raise ValueError(f"Cannot parse date: {date_str}")
+ # moved to backend/utils/common.py
+ 
+ # moved to backend/utils/common.py
 
 def read_candle_csv(file_path):
     """Read CSV file and return standardized DataFrame"""
@@ -135,45 +118,47 @@ def read_candle_csv(file_path):
         print(f"  ❌ Error reading file: {e}")
         return None
 
-def migrate_csv_to_db():
-    """Main migration function"""
+def migrate_csv_to_db(candles_only=False):
+    """Main migration function. If candles_only=True, only process candles/ folder."""
     print("🚀 Starting CSV to Database Migration...")
-    
     # Initialize database
     init_db()
-    
-    # Get all CSV files from candles directory
-    candles_dir = 'candles'
-    if not os.path.exists(candles_dir):
-        print(f"❌ Directory {candles_dir} not found!")
-        return
-    
-    csv_files = glob.glob(os.path.join(candles_dir, '*.csv'))
-    print(f"📁 Found {len(csv_files)} CSV files in {candles_dir}/")
-    
+    if candles_only:
+        candles_dir = 'candles'
+        if not os.path.exists(candles_dir):
+            print(f"❌ Directory {candles_dir} not found!")
+            return
+        csv_files = glob.glob(os.path.join(candles_dir, '*.csv'))
+        print(f"📁 Found {len(csv_files)} CSV files in {candles_dir}/ (candles_only mode)")
+    else:
+        # Original logic: scan all relevant folders (extend as needed)
+        candles_dir = 'candles'
+        csv_files = []
+        if os.path.exists(candles_dir):
+            csv_files += glob.glob(os.path.join(candles_dir, '*.csv'))
+        # Add more folders if needed for full migration
+        # e.g. csv_files += glob.glob(os.path.join('tradelists', '*.csv'))
+        print(f"📁 Found {len(csv_files)} CSV files in {candles_dir}/ (full mode)")
     success_count = 0
     error_count = 0
-    
     for file_path in csv_files:
         filename = os.path.basename(file_path)
         print(f"\n📊 Processing: {filename}")
-        
         # Parse symbol and timeframe
         symbol, timeframe = parse_csv_filename(filename)
         if not symbol or not timeframe:
             print(f"  ⚠️ Cannot parse filename: {filename}")
             error_count += 1
             continue
-        
+        # CHUẨN HÓA symbol: dùng hàm normalize_symbol_format cho đồng bộ toàn hệ thống
+        symbol = normalize_symbol_format(symbol, ensure_prefix=False)
         print(f"  📈 Symbol: {symbol}, Timeframe: {timeframe}")
-        
         # Read CSV
         df = read_candle_csv(file_path)
         if df is None or df.empty:
             print(f"  ❌ Failed to read or empty file")
             error_count += 1
             continue
-        
         # Convert to tuples for database insertion
         try:
             candles_data = []
@@ -186,12 +171,10 @@ def migrate_csv_to_db():
                     float(row['close']),
                     float(row['volume'])
                 ))
-            
             # Insert into database
             insert_candles(symbol, timeframe, candles_data)
             print(f"  ✅ Successfully inserted {len(candles_data)} candles")
             success_count += 1
-            
         except Exception as e:
             print(f"  ❌ Error inserting to database: {e}")
             error_count += 1

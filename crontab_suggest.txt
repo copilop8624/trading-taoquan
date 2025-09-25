@@ -1,0 +1,3 @@
+# crontab_suggest.txt
+# Run every 4 hours for PAIRS (default: BIOUSDT:30m)
+0 */4 * * * cd "$(dirname /path/to/migrate_and_verify.py)" && /usr/bin/python3 migrate_and_verify.py >> migrate_cron.log 2>&1

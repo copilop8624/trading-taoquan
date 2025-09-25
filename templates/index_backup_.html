@@ -1,0 +1,3074 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🎯 Backtest Strategy Optimization System</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Bootstrap JS (for modal functionality) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+// Global safe toFixed function
+function safeToFixed(value, digits = 2) {
+    // Handle null, undefined, NaN
+    if (value === null || value === undefined || isNaN(value)) {
+        return '0.' + '0'.repeat(digits);
+    }
+    
+    // Handle Infinity and -Infinity
+    if (!isFinite(value)) {
+        if (value === Infinity) return '∞';
+        if (value === -Infinity) return '-∞';
+        return '0.' + '0'.repeat(digits);
+    }
+    
+    try {
+        return Number(value).toFixed(digits);
+    } catch (e) {
+        console.error('safeToFixed error on value:', value, 'digits:', digits, 'error:', e);
+        return '0.' + '0'.repeat(digits);
+    }
+}
+
+// Safe Math functions for arrays that might be empty
+function safeMax(arr, defaultValue = 0) {
+    if (!arr || arr.length === 0) return defaultValue;
+    const result = Math.max(...arr);
+    return isFinite(result) ? result : defaultValue;
+}
+
+function safeMin(arr, defaultValue = 0) {
+    if (!arr || arr.length === 0) return defaultValue;
+    const result = Math.min(...arr);
+    return isFinite(result) ? result : defaultValue;
+}
+
+// Override default toFixed globally
+Number.prototype.originalToFixed = Number.prototype.toFixed;
+Number.prototype.toFixed = function(digits) {
+    try {
+        return this.originalToFixed(digits);
+    } catch (e) {
+        console.error('toFixed error on value:', this, 'digits:', digits);
+        return '0.' + '0'.repeat(digits || 2);
+    }
+};
+
+// Safe property access
+function safeGet(obj, path, defaultValue = 0) {
+    const keys = path.split('.');
+    let current = obj;
+    for (const key of keys) {
+        if (current === null || current === undefined || !(key in current)) {
+            return defaultValue;
+        }
+        current = current[key];
+    }
+    return current === null || current === undefined ? defaultValue : current;
+}
+(function() {
+    'use strict';
+    
+    // Create error display div
+    function createErrorDisplay() {
+        const errorDiv = document.createElement('div');
+        errorDiv.id = 'js-error-display';
+        errorDiv.style.cssText = 'position: fixed; top: 10px; right: 10px; width: 400px; max-height: 300px; overflow-y: auto; background: #ff0000; color: white; padding: 10px; border-radius: 5px; z-index: 10000; font-family: monospace; font-size: 12px; display: none;';
+        document.body.appendChild(errorDiv);
+        return errorDiv;
+    }
+    
+    let errorDisplay = null;
+    
+    function showError(message, source, line, col) {
+        if (!errorDisplay) {
+            errorDisplay = createErrorDisplay();
+        }
+        
+        errorDisplay.style.display = 'block';
+        const timestamp = new Date().toLocaleTimeString();
+        errorDisplay.innerHTML += '<div style="border-bottom: 1px solid #fff; margin-bottom: 5px; padding-bottom: 5px;"><strong>[' + timestamp + ']</strong><br><strong>Error:</strong> ' + message + '<br>' + (source ? '<strong>Source:</strong> ' + source + '<br>' : '') + (line ? '<strong>Line:</strong> ' + line + (col ? ', Col: ' + col : '') + '<br>' : '') + '</div>';
+        errorDisplay.scrollTop = errorDisplay.scrollHeight;
+    }
+    
+    // Override console.error
+    const originalError = console.error;
+    console.error = function() {
+        const args = Array.prototype.slice.call(arguments);
+        showError(args.join(' '));
+        originalError.apply(console, args);
+    };
+    
+    // Global error handler
+    window.onerror = function(message, source, lineno, colno, error) {
+        showError(message, source, lineno, colno);
+        return false;
+    };
+    
+    // Promise rejection handler
+    window.addEventListener('unhandledrejection', function(event) {
+        showError('Unhandled Promise Rejection: ' + event.reason);
+    });
+    
+    console.log('🔍 JavaScript Error Detector Active');
+})();
+    </script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f5f5f5; }
+        
+        /* Navigation Menu */
+        .nav-menu {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .nav-item {
+            color: white;
+            text-decoration: none;
+            padding: 12px 20px;
+            margin: 0 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+        .nav-item:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+            color: white;
+        }
+        .nav-item.active {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 0 20px; }
+        .header { text-align: center; color: #333; margin-bottom: 30px; }
+        .card { background: white; padding: 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card h3 { margin-top: 0; color: #007bff; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .full-width { grid-column: 1 / -1; }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; font-weight: bold; }
+        tr:hover { background: #f8f9fa; }
+        
+        /* Status badges */
+        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .status-recent { background: #d4edda; color: #155724; }
+        .status-outdated { background: #fff3cd; color: #856404; }
+        .status-old { background: #f8d7da; color: #721c24; }
+        
+        /* Buttons */
+        .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn:hover { opacity: 0.8; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* Forms */
+        .form-group { margin: 15px 0; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        
+        /* Progress */
+        .progress-bar { width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; margin: 10px 0; }
+        .progress-fill { height: 100%; background: #007bff; border-radius: 10px; transition: width 0.3s; }
+        
+        /* Log */
+        .log-container { background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 4px; font-family: monospace; height: 200px; overflow-y: scroll; }
+        .log-line { margin: 2px 0; }
+        
+        /* Status indicators */
+        .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        .status-running { background: #ffc107; animation: pulse 2s infinite; }
+        .status-idle { background: #28a745; }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        /* Optimization Engine Radio Buttons */
+        .form-group input[type="radio"]:checked + strong {
+            text-shadow: 0 0 5px rgba(255,255,255,0.8);
+        }
+        .form-group label:hover {
+            background: rgba(255,255,255,0.2) !important;
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Menu -->
+    <div class="nav-menu">
+        <div class="container">
+            <div class="d-flex justify-content-center align-items-center flex-wrap" style="display: flex; justify-content: center; align-items: center; flex-wrap: wrap;">
+                <a href="/" class="nav-item active">
+                    <i class="fas fa-home" style="margin-right: 8px;"></i>Backtest
+                </a>
+                <a href="/results" class="nav-item">
+                    <i class="fas fa-chart-line" style="margin-right: 8px;"></i>Results Database
+                </a>
+                <a href="/strategy_management" class="nav-item">
+                    <i class="fas fa-cogs" style="margin-right: 8px;"></i>Strategy Management
+                </a>
+                <a href="/data_management" class="nav-item">
+                    <i class="fas fa-database" style="margin-right: 8px;"></i>Data Management
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Backtest Strategy Optimization</h1>
+            <p>Tối ưu hóa thông số chiến lược giao dịch với dữ liệu thực</p>
+        </div>
+        
+        <!-- Strategy Selection Grid -->
+        <div class="grid">
+            <!-- Strategy Selection -->
+            <div class="card">
+                <h3>🎯 Chọn Strategy & Data</h3>
+                
+                <div class="form-group">
+                    <label>Strategy Available:</label>
+                    <select id="strategySelect">
+                        <option value="">⏳ Đang tải strategies...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Candle Data Source:</label>
+                    <select id="candleSelect">
+                        <option value="">⏳ Đang tải candle data...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <button type="button" class="btn btn-info" onclick="refreshDataSources()">
+                        <i class="fas fa-sync-alt"></i> Refresh Data
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="previewData()">
+                        <i class="fas fa-eye"></i> Preview Data
+                    </button>
+                    <button type="button" class="btn btn-success" onclick="showQuickSummary()">
+                        <i class="fas fa-lightning-bolt"></i> Quick Summary
+                    </button>
+                </div>
+                
+                <!-- 🚨 EMERGENCY INLINE SCRIPT -->
+                <script>
+                console.log('🚨 EMERGENCY SCRIPT LOADING...');
+                
+                function EMERGENCY_LOAD_DATA() {
+                    console.log('🚨 EMERGENCY LOAD DATA CALLED!');
+                    
+                    // Load strategies immediately with old-school JavaScript
+                    fetch('/list_strategies')
+                        .then(function(response) {
+                            console.log('📊 Strategies response:', response.status);
+                            return response.json();
+                        })
+                        .then(function(result) {
+                            console.log('📊 Strategies data:', result);
+                            var strategySelect = document.getElementById('strategySelect');
+                            if (strategySelect && result.success && result.strategies && result.strategies.length > 0) {
+                                strategySelect.innerHTML = '<option value="">-- Chọn Strategy --</option>';
+                                for (var i = 0; i < result.strategies.length; i++) {
+                                    var strategy = result.strategies[i];
+                                    var option = document.createElement('option');
+                                    var versionDisplay = strategy.version.startsWith('v') ? strategy.version : ('v' + strategy.version);
+                                    option.value = strategy.symbol + '_' + strategy.timeframe + '_' + strategy.strategy_name + '_' + versionDisplay;
+                                    option.textContent = strategy.symbol + ' ' + strategy.timeframe + ' - ' + strategy.strategy_name + ' ' + versionDisplay;
+                                    option.setAttribute('data-symbol', strategy.symbol);
+                                    option.setAttribute('data-timeframe', strategy.timeframe);
+                                    option.setAttribute('data-strategy-name', strategy.strategy_name);
+                                    option.setAttribute('data-version', strategy.version);
+                                    strategySelect.appendChild(option);
+                                }
+                                console.log('✅ EMERGENCY: Loaded ' + result.strategies.length + ' strategies!');
+                            } else {
+                                strategySelect.innerHTML = '<option value="">❌ Không có strategy nào</option>';
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('❌ EMERGENCY Strategies error:', error);
+                            var strategySelect = document.getElementById('strategySelect');
+                            if (strategySelect) {
+                                strategySelect.innerHTML = '<option value="">❌ Lỗi load strategies</option>';
+                            }
+                        });
+                    
+                    // Load candles immediately
+                    fetch('/list_candle_files')
+                        .then(function(response) {
+                            console.log('🕯️ Candles response:', response.status);
+                            return response.json();
+                        })
+                        .then(function(result) {
+                            console.log('🕯️ Candles data:', result);
+                            var candleSelect = document.getElementById('candleSelect');
+                            if (candleSelect && result.success && result.files && result.files.length > 0) {
+                                candleSelect.innerHTML = '<option value="">-- Chọn Symbol & Timeframe --</option>';
+                                for (var i = 0; i < result.files.length; i++) {
+                                    var file = result.files[i];
+                                    var option = document.createElement('option');
+                                    option.value = file;
+                                    var displayName = file.replace('BINANCE_', '').replace('.csv', '').replace('.db', '');
+                                    if (file.indexOf('.db') !== -1) {
+                                        displayName = '💾 ' + displayName;
+                                    }
+                                    option.textContent = displayName;
+                                    candleSelect.appendChild(option);
+                                }
+                                console.log('✅ EMERGENCY: Loaded ' + result.files.length + ' candle files!');
+                            } else {
+                                candleSelect.innerHTML = '<option value="">❌ Không có candle data</option>';
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('❌ EMERGENCY Candles error:', error);
+                            var candleSelect = document.getElementById('candleSelect');
+                            if (candleSelect) {
+                                candleSelect.innerHTML = '<option value="">❌ Lỗi load candles</option>';
+                            }
+                        });
+                }
+                
+                // AUTO-EXECUTE AFTER 2 SECONDS - DISABLED SINCE DATA LOADING WORKS NOW
+                // setTimeout(function() {
+                //     console.log('🚨 AUTO-EXECUTING EMERGENCY LOAD...');
+                //     EMERGENCY_LOAD_DATA();
+                // }, 2000);
+                
+                console.log('🚨 EMERGENCY SCRIPT LOADED (auto-execute disabled)');
+                </script>
+            </div>
+
+            <!-- Strategy Analysis & Quick Summary -->
+            <div class="card">
+                <h3>� Strategy Analysis & Quick Summary</h3>
+                <div id="strategyAnalysis" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                    <p style="text-align: center; color: #666;"><i class="fas fa-info-circle"></i> Chọn strategy và candle data để xem phân tích chi tiết</p>
+                </div>
+                
+                <div class="form-group">
+                    <button type="button" class="btn btn-success" onclick="showQuickSummary()">
+                        <i class="fas fa-bolt"></i> Quick Summary
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="previewData()">
+                        <i class="fas fa-eye"></i> Preview Data
+                    </button>
+                    <button type="button" class="btn btn-warning" onclick="analyzeCurrentTradelist()">
+                        <i class="fas fa-chart-line"></i> Deep Analysis
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Nhập thông số test & Gợi ý -->
+        <div class="grid">
+            <!-- Nhập thông số test -->
+            <div class="card">
+                <h3>🔧 Nhập thông số test (Range cho Optimization)</h3>
+                
+                <form id="testParametersForm">
+                    <!-- Optimization Engine Selection - LINH HỒN QUAN TRỌNG -->
+                    <div class="form-group" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 15px 0; color: white;">🧠 Chọn Engine Optimization (QUAN TRỌNG)</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <label style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; cursor: pointer; transition: all 0.3s ease;">
+                                <input type="radio" name="optimization_engine" value="optuna" style="margin-right: 8px;">
+                                <strong>🔥 Optuna (AI-Powered)</strong><br>
+                                <small style="color: #e0e0e0;">Intelligent Bayesian Optimization - Nhanh & Hiệu quả</small>
+                            </label>
+                            <label style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; cursor: pointer; transition: all 0.3s ease;">
+                                <input type="radio" name="optimization_engine" value="grid_search" checked style="margin-right: 8px;">
+                                <strong>🔍 Grid Search (Brute Force)</strong><br>
+                                <small style="color: #e0e0e0;">Test tất cả combination - Chậm nhưng đầy đủ</small>
+                            </label>
+                        </div>
+                        <div style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.9em;">
+                            💡 <strong>Khuyến nghị:</strong> Dùng Optuna cho tối ưu nhanh, Grid Search cho kiểm tra đầy đủ
+                        </div>
+                    </div>
+
+                    <!-- Optimization Criteria Selection -->
+                    <div class="form-group" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 15px 0; color: white;">🎯 Chọn Tiêu Chí Tối Ưu Hóa</h4>
+                        <select name="optimization_criteria" style="width: 100%; padding: 10px; border: none; border-radius: 6px; font-size: 14px; background: white; color: #333;">
+                            <option value="pnl">💰 PnL Total - Tổng lợi nhuận</option>
+                            <option value="winrate">🎯 Win Rate - Tỷ lệ thắng</option>
+                            <option value="pf">📈 Profit Factor - Hệ số lợi nhuận</option>
+                            <option value="drawdown">📉 Minimize Drawdown - Giảm thiểu DD</option>
+                            <option value="sharpe">⚡ Sharpe Ratio - Chỉ số Sharpe</option>
+                            <option value="recovery">🔄 Recovery Factor - Hệ số phục hồi</option>
+                        </select>
+                        <div style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 4px; font-size: 0.85em;">
+                            📊 <strong>Mặc định:</strong> PnL Total (tối ưu tổng lợi nhuận). Chọn tiêu chí phù hợp với mục tiêu trading của bạn.
+                        </div>
+                    </div>
+
+                    <!-- Parameter Selection for Optimization -->
+                    <div class="form-group" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 15px 0; color: white;">⚙️ Chọn Parameters để Tối Ưu</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">
+                            <label style="background: rgba(255,255,255,0.1); padding: 8px; border-radius: 4px; cursor: pointer;">
+                                <input type="checkbox" name="optimize_params" value="sl" checked style="margin-right: 5px;">
+                                📍 Stop Loss
+                            </label>
+                            <label style="background: rgba(255,255,255,0.1); padding: 8px; border-radius: 4px; cursor: pointer;">
+                                <input type="checkbox" name="optimize_params" value="be" style="margin-right: 5px;">
+                                🛡️ Break Even
+                            </label>
+                            <label style="background: rgba(255,255,255,0.1); padding: 8px; border-radius: 4px; cursor: pointer;">
+                                <input type="checkbox" name="optimize_params" value="ts" style="margin-right: 5px;">
+                                📈 Trailing Stop
+                            </label>
+                            <label style="background: rgba(255,255,255,0.1); padding: 8px; border-radius: 4px; cursor: pointer;">
+                                <input type="checkbox" name="optimize_params" value="tp" style="margin-right: 5px;">
+                                🎯 Take Profit
+                            </label>
+                        </div>
+                        <div style="margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.85em;">
+                            💡 <strong>Tip:</strong> Chọn chỉ SL để tối ưu nhanh, hoặc SL+BE, SL+TS theo nhu cầu. Ít parameters = nhanh hơn!
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>📍 Stop Loss (SL) - Range:</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 0.9em;">Min (%):</label>
+                                <input type="number" id="sl_min" name="sl_min" value="0.5" step="0.1" min="0.1" max="20">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Max (%):</label>
+                                <input type="number" id="sl_max" name="sl_max" value="3.0" step="0.1" min="0.1" max="20">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Step (%):</label>
+                                <input type="number" id="sl_step" name="sl_step" value="0.1" step="0.05" min="0.05" max="1">
+                            </div>
+                        </div>
+                        <small>Optimization sẽ test từ Min đến Max với bước Step</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>⚖️ Break Even (BE) - Range:</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 0.9em;">Min (%):</label>
+                                <input type="number" id="be_min" name="be_min" value="2" step="0.1" min="2" max="10">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Max (%):</label>
+                                <input type="number" id="be_max" name="be_max" value="5" step="0.1" min="2" max="10">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Step (%):</label>
+                                <input type="number" id="be_step" name="be_step" value="0.05" step="0.01" min="0.01" max="0.5">
+                            </div>
+                        </div>
+                        <small>BE phải nhỏ hơn SL để hợp lệ</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>📈 Trailing Stop (TS) - 2 Parameters:</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 10px;">
+                            <!-- TS Active (Trigger) -->
+                            <div style="border: 2px solid #007bff; padding: 12px; border-radius: 8px; background: #f8f9ff;">
+                                <h5 style="margin: 0 0 10px 0; color: #007bff; font-weight: bold;">🎯 TS Active (Trigger %)</h5>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Min:</label>
+                                        <input type="number" id="ts_active_min" name="ts_active_min" value="2" step="0.1" min="2" max="10">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Max:</label>
+                                        <input type="number" id="ts_active_max" name="ts_active_max" value="5" step="0.1" min="2" max="10">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Step:</label>
+                                        <input type="number" id="ts_active_step" name="ts_active_step" value="0.1" step="0.01" min="0.01" max="0.5">
+                                    </div>
+                                </div>
+                                <small style="color: #007bff; font-weight: bold;">Lợi nhuận % để BẮT ĐẦU trailing</small>
+                            </div>
+                            
+                            <!-- TS Step (Trailing Distance) -->
+                            <div style="border: 2px solid #28a745; padding: 12px; border-radius: 8px; background: #f8fff8;">
+                                <h5 style="margin: 0 0 10px 0; color: #28a745; font-weight: bold;">⚡ TS Step (Trailing Distance %)</h5>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Min:</label>
+                                        <input type="number" id="ts_step_min" name="ts_step_min" value="3" step="0.5" min="3" max="20">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Max:</label>
+                                        <input type="number" id="ts_step_max" name="ts_step_max" value="8" step="0.5" min="3" max="20">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.85em; font-weight: bold;">Step:</label>
+                                        <input type="number" id="ts_step_step" name="ts_step_step" value="1" step="0.5" min="0.5" max="5">
+                                    </div>
+                                </div>
+                                <small style="color: #28a745; font-weight: bold;">Khoảng cách % trailing từ giá cao nhất</small>
+                            </div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px; border-radius: 6px; font-size: 0.9em;">
+                            📖 <strong>Logic thực tế:</strong> TS Active = khi nào bắt đầu trail (vd: +0.5%), TS Step = trail cách giá cao nhất bao nhiêu % (vd: 0.1%)
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>🎯 Take Profit (TP) - Optional Range:</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end;">
+                            <div>
+                                <label style="font-size: 0.9em;">Min (%):</label>
+                                <input type="number" id="tp_min" name="tp_min" value="" step="0.1" min="0.5" max="50" placeholder="Optional">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Max (%):</label>
+                                <input type="number" id="tp_max" name="tp_max" value="" step="0.1" min="0.5" max="50" placeholder="Optional">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.9em;">Step (%):</label>
+                                <input type="number" id="tp_step" name="tp_step" value="" step="0.1" min="0.1" max="5" placeholder="Optional">
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="clearTPRange()">Clear TP</button>
+                            </div>
+                        </div>
+                        <small>Để trống nếu chỉ dùng Trailing Stop</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="button" class="btn btn-primary" onclick="validateParameterRanges()">
+                            <i class="fas fa-check"></i> Validate Ranges
+                        </button>
+                        <button type="button" class="btn btn-info" onclick="calculateCombinations()">
+                            <i class="fas fa-calculator"></i> Calculate Total Tests
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="resetToDefaultRanges()">
+                            <i class="fas fa-undo"></i> Reset Defaults
+                        </button>
+                    </div>
+                    
+                    <div id="combinationsInfo" style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px; display: none;">
+                        <strong>📊 Estimated Tests:</strong> <span id="totalCombinations">0</span> combinations
+                        <br><small>Estimated time: <span id="estimatedTime">0</span> minutes</small>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Gợi ý thông số -->
+            <div class="card">
+                <h3>💡 Gợi ý thông số (Ranges)</h3>
+                
+                <div id="parameterSuggestions" style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                    <p><strong>🎯 Gợi ý Range cho Symbol hiện tại:</strong></p>
+                    <div id="suggestionContent">
+                        <p style="text-align: center; color: #666;">Chọn strategy để nhận gợi ý ranges phù hợp cho optimization</p>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <button type="button" class="btn btn-success" onclick="getSmartRangeSuggestions()">
+                        <i class="fas fa-brain"></i> Smart Range Suggestions
+                    </button>
+                    <button type="button" class="btn btn-info" onclick="applyConservativeRanges()">
+                        <i class="fas fa-shield-alt"></i> Conservative Ranges
+                    </button>
+                    <button type="button" class="btn btn-warning" onclick="applyAggressiveRanges()">
+                        <i class="fas fa-rocket"></i> Aggressive Ranges
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="applyNarrowRanges()">
+                        <i class="fas fa-compress"></i> Narrow Ranges
+                    </button>
+                </div>
+                
+                <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 4px;">
+                    <small><strong>💡 Range Strategy Tips:</strong></small>
+                    <ul style="margin: 5px 0; font-size: 0.9em;">
+                        <li><strong>Conservative:</strong> Wide ranges, safe parameters</li>
+                        <li><strong>Aggressive:</strong> Tight ranges, risk-taking parameters</li>
+                        <li><strong>Narrow:</strong> Small ranges around optimal values</li>
+                        <li><strong>Smart:</strong> AI-based ranges theo market conditions</li>
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Optimization Parameters -->
+        <div class="card full-width">
+            <h3>⚙️ Optimization Parameters & Run</h3>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 20px; align-items: end;">
+                <div class="form-group">
+                    <label>Step Multiplier:</label>
+                    <input type="number" name="step_multiplier" value="1.5" step="0.1" min="1.1" max="3.0">
+                    <small>Độ nhảy giữa các test</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Backtest Engine:</label>
+                    <select name="engine_type">
+                        <option value="realistic">Realistic Engine (khuyến nghị)</option>
+                        <option value="standard">Standard Engine</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Max Iterations:</label>
+                    <input type="number" name="max_iterations" value="100" min="10" max="500">
+                    <small>Số lần test tối đa</small>
+                </div>
+                
+                <div class="form-group">
+                    <button type="button" class="btn btn-primary btn-lg" onclick="startOptimization()" style="padding: 15px 30px; font-size: 18px;">
+                        <i class="fas fa-play"></i> Bắt đầu Optimization
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" style="display: none;">
+            <div class="card full-width">
+                <h3>🏆 Optimization Results</h3>
+                <div id="resultsContent">
+                    <!-- Results will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        console.log('🎯 Backtest System loaded');
+
+        // 🔄 Data Loading Functions
+        // � DATA LOADING FUNCTIONS - FIXED VERSION
+        function refreshDataSources() {
+            console.log('🔄 Refreshing data sources...');
+            
+            const strategySelect = document.getElementById('strategySelect');
+            const candleSelect = document.getElementById('candleSelect');
+            
+            if (!strategySelect || !candleSelect) {
+                console.error('❌ Dropdown elements not found!');
+                return;
+            }
+            
+            strategySelect.innerHTML = '<option value="">⏳ Đang tải strategies...</option>';
+            candleSelect.innerHTML = '<option value="">⏳ Đang tải candle data...</option>';
+            
+            // Load both datasets
+            loadStrategies();
+            loadCandles();
+        }
+        
+        function forceLoadData() {
+            console.log('🚨 Emergency data loading...');
+            
+            // Load strategies manually
+            fetch('/list_strategies')
+                .then(response => response.json())
+                .then(result => {
+                    console.log('📊 Strategies result:', result);
+                    const select = document.getElementById('strategySelect');
+                    if (select && result.success && result.strategies) {
+                        select.innerHTML = '<option value="">-- Chọn Strategy --</option>';
+                        result.strategies.forEach(strategy => {
+                            const option = document.createElement('option');
+                            const versionDisplay = strategy.version.startsWith('v') ? strategy.version : `v${strategy.version}`;
+                            option.value = `${strategy.symbol}_${strategy.timeframe}_${strategy.strategy_name}_${versionDisplay}`;
+                            option.textContent = `${strategy.symbol} ${strategy.timeframe} - ${strategy.strategy_name} ${versionDisplay}`;
+                            option.dataset.symbol = strategy.symbol;
+                            option.dataset.timeframe = strategy.timeframe;
+                            option.dataset.strategyName = strategy.strategy_name;
+                            option.dataset.version = strategy.version;
+                            select.appendChild(option);
+                        });
+                        console.log(`✅ Loaded ${result.strategies.length} strategies!`);
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ Strategies error:', error);
+                    const select = document.getElementById('strategySelect');
+                    if (select) select.innerHTML = '<option value="">❌ Lỗi load strategies</option>';
+                });
+            
+            // Load candles manually
+            fetch('/list_candle_files')
+                .then(response => response.json())
+                .then(result => {
+                    console.log('🕯️ Candles result:', result);
+                    const select = document.getElementById('candleSelect');
+                    if (select && result.success && result.files) {
+                        select.innerHTML = '<option value="">-- Chọn Symbol & Timeframe --</option>';
+                        result.files.forEach(file => {
+                            const option = document.createElement('option');
+                            option.value = file;
+                            let displayName = file.replace('BINANCE_', '').replace('.csv', '').replace('.db', '');
+                            if (file.includes('.db')) {
+                                displayName = '💾 ' + displayName;
+                            }
+                            option.textContent = displayName;
+                            select.appendChild(option);
+                        });
+                        console.log(`✅ Loaded ${result.files.length} candle sources!`);
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ Candles error:', error);
+                    const select = document.getElementById('candleSelect');
+                    if (select) select.innerHTML = '<option value="">❌ Lỗi load candles</option>';
+                });
+        }
+        
+        function loadStrategies() {
+            console.log('📊 Loading strategies...');
+            
+            console.log('🔄 Fetching from /list_strategies...');
+            fetch('/list_strategies')
+                .then(function(response) {
+                    console.log('📊 Response status:', response.status);
+                    return response.json();
+                })
+                .then(function(result) {
+                    console.log('📊 Strategies response:', result);
+                    
+                    const select = document.getElementById('strategySelect');
+                    if (!select) {
+                        console.error('❌ strategySelect element not found!');
+                        return;
+                    }
+                    
+                    select.innerHTML = '<option value="">-- Chọn Strategy --</option>';
+                    
+                    if (result.success && result.strategies && result.strategies.length > 0) {
+                        console.log('✅ Processing ' + result.strategies.length + ' strategies...');
+                        result.strategies.forEach(function(strategy, index) {
+                            console.log('🔄 Processing strategy ' + (index + 1) + ':', strategy);
+                            const option = document.createElement('option');
+                            // Handle version format - don't add 'v' if version already starts with 'v'
+                            const versionDisplay = strategy.version.startsWith('v') ? strategy.version : ('v' + strategy.version);
+                            option.value = strategy.symbol + '_' + strategy.timeframe + '_' + strategy.strategy_name + '_' + versionDisplay;
+                            option.textContent = strategy.symbol + ' ' + strategy.timeframe + ' - ' + strategy.strategy_name + ' ' + versionDisplay;
+                            option.dataset.symbol = strategy.symbol;
+                            option.dataset.timeframe = strategy.timeframe;
+                            option.dataset.strategyName = strategy.strategy_name;
+                            option.dataset.version = strategy.version;
+                            select.appendChild(option);
+                        });
+                        console.log('✅ Loaded ' + result.strategies.length + ' strategies');
+                    } else {
+                        console.warn('⚠️ No strategies found or request failed');
+                        select.innerHTML = '<option value="">❌ Không có strategy nào</option>';
+                    }
+                })
+                .catch(function(error) {
+                    console.error('❌ Error loading strategies:', error);
+                    document.getElementById('strategySelect').innerHTML = '<option value="">❌ Lỗi load strategies</option>';
+                });
+        }
+        
+        function loadCandles() {
+            console.log('🕯️ Loading candle data...');
+            
+            console.log('🔄 Fetching from /list_candle_files...');
+            fetch('/list_candle_files')
+                .then(function(response) {
+                    console.log('🕯️ Response status:', response.status);
+                    return response.json();
+                })
+                .then(function(result) {
+                    console.log('🕯️ Candles response:', result);
+                    
+                    const select = document.getElementById('candleSelect');
+                    if (!select) {
+                        console.error('❌ candleSelect element not found!');
+                        return;
+                    }
+                    
+                    select.innerHTML = '<option value="">-- Chọn Symbol & Timeframe --</option>';
+                    
+                    if (result.success && result.files && result.files.length > 0) {
+                        console.log('✅ Processing ' + result.files.length + ' candle sources...');
+                        result.files.forEach(function(file, index) {
+                            console.log('🔄 Processing candle file ' + (index + 1) + ':', file);
+                            const option = document.createElement('option');
+                            option.value = file;
+                            // Hiển thị symbol với format rõ ràng hơn
+                            let displayName = file.replace('.csv', '').replace('.db', '');
+                            // Thêm emoji cho database files  
+                            if (file.includes('.db')) {
+                                displayName = '💾 ' + displayName;
+                            }
+                            option.textContent = displayName;
+                            select.appendChild(option);
+                        });
+                        console.log('✅ Loaded ' + result.files.length + ' candle sources');
+                    } else {
+                        console.warn('⚠️ No candle data found or request failed');
+                        select.innerHTML = '<option value="">❌ Không có candle data</option>';
+                    }
+                })
+                .catch(function(error) {
+                    console.error('❌ Error loading candles:', error);
+                    const select = document.getElementById('candleSelect');
+                    if (select) {
+                        select.innerHTML = '<option value="">❌ Lỗi load candles</option>';
+                    }
+                });
+        }
+        
+        // 👁️ Preview Data Function
+        async function previewData() {
+            const strategySelect = document.getElementById('strategySelect');
+            const candleSelect = document.getElementById('candleSelect');
+            const analysisArea = document.getElementById('strategyAnalysis');
+            
+            if (!strategySelect.value || !candleSelect.value) {
+                alert('❌ Vui lòng chọn cả Strategy và Candle Data');
+                return;
+            }
+            
+            try {
+                analysisArea.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải preview...';
+                
+                const selectedOption = strategySelect.options[strategySelect.selectedIndex];
+                const symbol = selectedOption.dataset.symbol;
+                const timeframe = selectedOption.dataset.timeframe;
+                const strategyName = selectedOption.dataset.strategyName;
+                const version = selectedOption.dataset.version;
+                
+                // Get strategy data
+                const response = await fetch(`/get_strategy_data?symbol=${symbol}&timeframe=${timeframe}&strategy_name=${strategyName}&version=${version}`);
+                const strategyInfo = await response.json();
+                
+                let previewHTML = `
+                    <div style="text-align: left;">
+                        <h4><i class="fas fa-info-circle"></i> Data Preview</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 15px 0;">
+                            <div><strong>Strategy:</strong> ${strategyName} v${version}</div>
+                            <div><strong>Symbol:</strong> ${symbol}</div>
+                            <div><strong>Timeframe:</strong> ${timeframe}</div>
+                            <div><strong>Candle Source:</strong> ${candleSelect.value}</div>
+                        </div>
+                `;
+                
+                if (strategyInfo.success && strategyInfo.data) {
+                    previewHTML += `
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 15px 0; background: white; padding: 15px; border-radius: 8px;">
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.3em; font-weight: bold; color: #007bff;">${strategyInfo.total_rows}</div>
+                                <div style="color: #666; font-size: 0.85em;">Total Trades</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.3em; font-weight: bold; color: #28a745;">${strategyInfo.columns.length}</div>
+                                <div style="color: #666; font-size: 0.85em;">Columns</div>
+                            </div>
+                        </div>
+                        <p><strong>Columns:</strong> ${strategyInfo.columns.join(', ')}</p>
+                        <div style="margin-top: 15px;">
+                            <strong>Sample Trades:</strong>
+                            <ul style="max-height: 150px; overflow-y: auto;">
+                    `;
+                    strategyInfo.data.slice(0, 5).forEach((trade, i) => {
+                        const dateField = trade.datetime || trade.date || trade.Date || 'Unknown date';
+                        const typeField = trade.type || trade.Type || trade.side || 'Unknown type';
+                        const pnlField = trade.pnl || trade.PnL || trade.profit || trade.Profit || 'N/A';
+                        previewHTML += `<li>${dateField} - ${typeField} (PnL: ${pnlField})</li>`;
+                    });
+                    previewHTML += `</ul></div>`;
+                } else {
+                    previewHTML += `<p style="color: red;"><strong>Error:</strong> ${strategyInfo.error || 'Cannot load strategy data'}</p>`;
+                }
+                
+                previewHTML += `</div>`;
+                analysisArea.innerHTML = previewHTML;
+                
+            } catch (error) {
+                console.error('❌ Error previewing data:', error);
+                analysisArea.innerHTML = `<div style="color: red;"><i class="fas fa-exclamation-triangle"></i> Lỗi preview data: ${error.message}</div>`;
+            }
+        }
+        
+        // 🚀 Quick Summary Function
+        async function showQuickSummary() {
+            const strategySelect = document.getElementById('strategySelect');
+            const candleSelect = document.getElementById('candleSelect');
+            const analysisArea = document.getElementById('strategyAnalysis');
+            
+            if (!strategySelect.value || !candleSelect.value) {
+                alert('❌ Vui lòng chọn cả Strategy và Candle Data');
+                return;
+            }
+            
+            try {
+                analysisArea.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tính toán Quick Summary...';
+                
+                const formData = new FormData();
+                formData.append('strategy', strategySelect.value);
+                formData.append('candle_data', candleSelect.value);
+                
+                const response = await fetch('/quick_summary_strategy', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                console.log('Quick summary result:', result);
+                
+                if (result.success) {
+                    displayEnhancedQuickSummary(result.data);
+                } else {
+                    analysisArea.innerHTML = `<div style="color: red;"><i class="fas fa-exclamation-triangle"></i> Lỗi: ${result.error}</div>`;
+                }
+            } catch (error) {
+                console.error('❌ Error in quick summary:', error);
+                analysisArea.innerHTML = `<div style="color: red;"><i class="fas fa-exclamation-triangle"></i> Lỗi kết nối: ${error.message}</div>`;
+            }
+        }
+        
+        // 📊 Display Enhanced Quick Summary
+        function displayEnhancedQuickSummary(data) {
+            const analysisArea = document.getElementById('strategyAnalysis');
+            
+            const summaryHTML = `
+                <div style="text-align: left;">
+                    <h4><i class="fas fa-lightning-bolt"></i> Quick Summary - ${data.strategy_name || 'Strategy'}</h4>
+                    
+                    <!-- Main Performance Metrics -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 20px 0;">
+                        <div style="background: linear-gradient(135deg, #007bff, #0056b3); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
+                            <div style="font-size: 1.8em; font-weight: bold;">${data.total_trades || 0}</div>
+                            <div style="font-size: 0.85em; opacity: 0.9;">Total Trades</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #28a745, #1e7e34); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
+                            <div style="font-size: 1.8em; font-weight: bold;">${safeToFixed(data.win_rate, 2)}%</div>
+                            <div style="font-size: 0.85em; opacity: 0.9;">Win Rate</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #ffc107, #e0a800); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
+                            <div style="font-size: 1.8em; font-weight: bold;">${safeToFixed(data.profit_factor, 2)}</div>
+                            <div style="font-size: 0.85em; opacity: 0.9;">Profit Factor</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #dc3545, #c82333); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
+                            <div style="font-size: 1.8em; font-weight: bold;">${safeToFixed(data.total_pnl, 2)}%</div>
+                            <div style="font-size: 0.85em; opacity: 0.9;">Total PnL</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Additional Performance Metrics -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 15px 0;">
+                        <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #17a2b8;">
+                            <div style="font-size: 1.4em; font-weight: bold; color: #17a2b8;">${data.win_trades || 0}/${data.lose_trades || 0}</div>
+                            <div style="color: #666; font-size: 0.85em;">Win/Loss</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #6610f2;">
+                            <div style="font-size: 1.4em; font-weight: bold; color: #6610f2;">${safeToFixed(data.avg_win, 2)}%</div>
+                            <div style="color: #666; font-size: 0.85em;">Avg Win</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #fd7e14;">
+                            <div style="font-size: 1.4em; font-weight: bold; color: #fd7e14;">${safeToFixed(data.avg_loss, 2)}%</div>
+                            <div style="color: #666; font-size: 0.85em;">Avg Loss</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #20c997;">
+                            <div style="font-size: 1.4em; font-weight: bold; color: #20c997;">${safeToFixed(data.max_drawdown, 2)}%</div>
+                            <div style="color: #666; font-size: 0.85em;">Max Drawdown</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Risk Metrics -->
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <h5 style="margin-bottom: 10px; color: #495057;"><i class="fas fa-shield-alt"></i> Risk Analysis</h5>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
+                            <div>
+                                <strong>Sharpe Ratio:</strong> <span style="color: #007bff;">${safeToFixed(data.sharpe_ratio, 3)}</span><br>
+                                <strong>Recovery Factor:</strong> <span style="color: #28a745;">${safeToFixed(data.recovery_factor, 2)}</span>
+                            </div>
+                            <div>
+                                <strong>Trading Period:</strong><br>
+                                <span style="color: #666;">${data.start_date || 'N/A'} → ${data.end_date || 'N/A'}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            analysisArea.innerHTML = summaryHTML;
+        }
+        
+        // 🎯 Form Handler & Initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎯 DOM loaded, initializing...');
+            
+            // Simple initialization - call force load directly
+            setTimeout(() => {
+                forceLoadData();
+            }, 500);
+            
+            // Add event listener for strategy selection change
+            document.getElementById('strategySelect').addEventListener('change', function() {
+                if (this.value) {
+                    // Auto-analyze tradelist when strategy is selected
+                    setTimeout(() => {
+                        analyzeCurrentTradelist();
+                        // getSmartSuggestions(); // Function không tồn tại, đã comment out
+                    }, 500);
+                }
+            });
+            
+            // Form submit handler (keeping old form for compatibility)
+            const optimizeForm = document.getElementById('optimizeForm');
+            if (optimizeForm) {
+                optimizeForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    startOptimization();
+                });
+            }
+        });
+        
+        // 📈 Display Enhanced Optimization Results
+        function displayOptimizationResults(data) {
+            const resultsSection = document.getElementById('resultsSection');
+            
+            // Build comprehensive enhanced results HTML
+            let resultsHTML = `
+                <div class="card full-width">
+                    <h3>🏆 Enhanced Optimization Results</h3>
+                    
+                    <!-- Baseline vs Optimized Comparison -->
+                    ${data.baseline_result ? generateBaselineComparisonSection(data) : ''}
+                    
+                    <!-- Quick Stats Overview -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0;">
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 2em; font-weight: bold; color: #007bff;">${(data.best_result && data.best_result.total_trades) || 0}</div>
+                            <div style="color: #666; font-size: 0.9em;">Total Trades</div>
+                        </div>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 2em; font-weight: bold; color: #28a745;">${safeToFixed((data.best_result && data.best_result.winrate) || 0, 2)}%</div>
+                            <div style="color: #666; font-size: 0.9em;">Win Rate (Optimized)</div>
+                        </div>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 2em; font-weight: bold; color: #ffc107;">${safeToFixed((data.best_result && data.best_result.pf) || 0, 2)}</div>
+                            <div style="color: #666; font-size: 0.9em;">Profit Factor</div>
+                        </div>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                            <div style="font-size: 2em; font-weight: bold; color: ${data.improvement_summary && data.improvement_summary.pnl_improvement > 0 ? '#28a745' : '#dc3545'};">${safeToFixed((data.best_result && (data.best_result.pnl_total || data.best_result.total_pnl)) || 0, 2)}%</div>
+                            <div style="color: #666; font-size: 0.9em;">Optimized PnL</div>
+                            ${data.improvement_summary ? `<div style="color: ${data.improvement_summary.pnl_improvement > 0 ? '#28a745' : '#dc3545'}; font-size: 0.8em;">${data.improvement_summary.pnl_improvement > 0 ? '↗️' : '↘️'} ${safeToFixed(data.improvement_summary.pnl_improvement || 0, 2)}%</div>` : ''}
+                        </div>
+                    </div>
+            `;
+            
+            // Top 5-10 Results Display
+            if (data.top_results && data.top_results.length > 0) {
+                resultsHTML += generateTopResultsDisplay(data.top_results);
+            }
+            
+            // Best Parameters Table
+            resultsHTML += generateBestParametersTable(data.best_result.parameters);
+            
+            // Trade Comparison Section
+            if (data.trade_comparison && data.trade_comparison.length > 0) {
+                resultsHTML += generateTradeComparisonTable(data.trade_comparison);
+            }
+            
+            resultsHTML += `</div>`;
+            
+            // Cumulative PnL Chart Section
+            if (data.cumulative_comparison && data.cumulative_comparison.labels && data.cumulative_comparison.labels.length > 0) {
+                resultsHTML += generateCumulativePnlChartSection(data.cumulative_comparison);
+            }
+            
+            resultsSection.innerHTML = resultsHTML;
+            
+            // Draw chart after DOM is updated
+            if (data.cumulative_comparison && data.cumulative_comparison.labels && data.cumulative_comparison.labels.length > 0) {
+                setTimeout(() => drawCumulativePnlChart(data.cumulative_comparison), 100);
+            }
+        }
+        
+        // 🏆 Generate Top Results Display
+        function generateTopResultsDisplay(topResults) {
+            const topCount = Math.min(10, topResults.length);
+            let html = `
+                <div style="margin-top: 30px; padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                    <h3 style="color: #333; margin-bottom: 15px;">🥇 Top ${topCount} Optimization Results</h3>
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; min-width: 800px;">
+                            <thead>
+                                <tr style="background: #f8f9fa;">
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">Rank</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">PnL %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">Win Rate</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">Profit Factor</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">Max DD</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">SL %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">BE %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">TS Active %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 10px; text-align: center;">TS Step %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            topResults.slice(0, topCount).forEach((result, index) => {
+                const rank = index + 1;
+                const pnlColor = (result.pnl_total || 0) >= 0 ? '#28a745' : '#dc3545';
+                const winRateColor = result.winrate >= 50 ? '#28a745' : '#dc3545';
+                const pfColor = result.pf >= 1.0 ? '#28a745' : '#dc3545';
+                const ddColor = result.max_drawdown <= 20 ? '#28a745' : '#dc3545';
+                
+                const rowColor = rank <= 3 ? (rank === 1 ? '#fff3cd' : rank === 2 ? '#e2e3e5' : '#f8d7da') : '#ffffff';
+                
+                html += `
+                    <tr style="background: ${rowColor};">
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; font-weight: bold;">${rank}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; color: ${pnlColor}; font-weight: bold;">${safeToFixed(result.pnl_total, 2)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; color: ${winRateColor};">${safeToFixed(result.winrate, 2)}%</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; color: ${pfColor};">${safeToFixed(result.pf, 2)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center; color: ${ddColor};">${safeToFixed(result.max_drawdown, 2)}%</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.sl ? safeToFixed(result.parameters.sl, 2) + '%' : 'N/A'}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.be ? safeToFixed(result.parameters.be, 2) + '%' : 'N/A'}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.ts_activation ? safeToFixed(result.parameters.ts_activation, 2) + '%' : 'N/A'}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">${result.parameters.ts_step ? safeToFixed(result.parameters.ts_step, 2) + '%' : 'N/A'}</td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+        
+        // 📊 Generate Best Parameters Table
+        function generateBestParametersTable(parameters) {
+            let html = `
+                <div style="margin-top: 20px;">
+                    <h4>📊 Best Parameters:</h4>
+                    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                        <thead>
+                            <tr>
+                                <th style="padding: 12px; text-align: left; background: #f8f9fa; border-bottom: 1px solid #e1e5e9;">Parameter</th>
+                                <th style="padding: 12px; text-align: left; background: #f8f9fa; border-bottom: 1px solid #e1e5e9;">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            Object.entries(parameters).forEach(([key, value]) => {
+                html += `<tr><td style="padding: 12px; border-bottom: 1px solid #e1e5e9;">${key}</td><td style="padding: 12px; border-bottom: 1px solid #e1e5e9;">${value}</td></tr>`;
+            });
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            return html;
+        }
+        
+        // 📈 Generate Trade Comparison Table
+        function generateTradeComparisonTable(tradeComparison) {
+            const recentTrades = tradeComparison.slice(-50); // Get last 50 trades
+            
+            let html = `
+                <div style="margin-top: 30px; padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                    <h3 style="color: #333; margin-bottom: 15px;">📊 Recent Trades Comparison (Last ${recentTrades.length} trades)</h3>
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; min-width: 1000px;">
+                            <thead>
+                                <tr style="background: #f8f9fa;">
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Trade #</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Entry Time</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Side</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Entry Price</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Original Exit</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Original Type</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Original PnL %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Optimized Exit</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Optimized Type</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Optimized PnL %</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 8px; text-align: center;">Improvement</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            recentTrades.forEach(trade => {
+                const baselinePnlColor = trade.baseline_pnl >= 0 ? '#28a745' : '#dc3545';
+                const optimizedPnlColor = trade.optimized_pnl >= 0 ? '#28a745' : '#dc3545';
+                const improvementColor = trade.improvement >= 0 ? '#28a745' : '#dc3545';
+                const rowColor = trade.improvement > 0 ? '#e8f5e8' : (trade.improvement < 0 ? '#ffe8e8' : '#ffffff');
+                
+                // Exit type color function
+                const getExitTypeColor = (exitType) => {
+                    if (exitType.includes('SL')) return '#dc3545';
+                    if (exitType.includes('BE')) return '#ffc107';
+                    if (exitType.includes('TS')) return '#17a2b8';
+                    return '#6c757d';
+                };
+                
+                // Dynamic price formatting
+                const formatPrice = (price) => {
+                    if (price < 0.01) return safeToFixed(price, 6);
+                    else if (price < 1) return safeToFixed(price, 4);
+                    else if (price < 100) return safeToFixed(price, 2);
+                    else return safeToFixed(price, 0);
+                };
+                
+                html += `
+                    <tr style="background: ${rowColor};">
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; font-weight: bold;">${trade.trade_num}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${trade.entry_time}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; font-weight: bold; color: ${trade.side === 'LONG' ? '#28a745' : '#dc3545'};">${trade.side}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${formatPrice(trade.entry_price)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${formatPrice(trade.baseline_exit_price)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${getExitTypeColor(trade.baseline_exit_type)}; font-weight: bold;">${trade.baseline_exit_type}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${baselinePnlColor}; font-weight: bold;">${safeToFixed(trade.baseline_pnl, 2)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center;">${formatPrice(trade.optimized_exit_price)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${getExitTypeColor(trade.optimized_exit_type)}; font-weight: bold;">${trade.optimized_exit_type}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${optimizedPnlColor}; font-weight: bold;">${safeToFixed(trade.optimized_pnl, 2)}</td>
+                        <td style="border: 1px solid #dee2e6; padding: 6px; text-align: center; color: ${improvementColor}; font-weight: bold;">${(trade.improvement || 0) > 0 ? '+' : ''}${safeToFixed(trade.improvement, 2)}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table></div>';
+            
+            // Add improvement statistics
+            const improvedTrades = tradeComparison.filter(t => t.improvement > 0).length;
+            const worsenedTrades = tradeComparison.filter(t => t.improvement < 0).length;
+            const unchangedTrades = tradeComparison.filter(t => t.improvement === 0).length;
+            const avgImprovement = tradeComparison.reduce((sum, t) => sum + t.improvement, 0) / tradeComparison.length;
+            
+            html += `
+                <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <strong>📈 Trade Improvement Statistics:</strong><br>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;">
+                        <div>✅ Improved: <span style="color: #28a745; font-weight: bold;">${improvedTrades} trades</span></div>
+                        <div>❌ Worsened: <span style="color: #dc3545; font-weight: bold;">${worsenedTrades} trades</span></div>
+                        <div>➖ Unchanged: <span style="color: #6c757d; font-weight: bold;">${unchangedTrades} trades</span></div>
+                        <div>📊 Average: <span style="color: ${(avgImprovement || 0) >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">${(avgImprovement || 0) > 0 ? '+' : ''}${safeToFixed(avgImprovement, 2)}%</span></div>
+                    </div>
+                </div>
+            </div>`;
+            
+            return html;
+        }
+        
+        // 📈 Generate Cumulative PnL Chart Section
+        function generateCumulativePnlChartSection(cumulativeData) {
+            return `
+                <div style="margin-top: 30px; padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+                    <h3 style="color: #333; margin-bottom: 15px;">📈 Cumulative PnL Comparison Chart</h3>
+                    <canvas id="cumulativePnlChart" width="800" height="400" style="max-width: 100%; height: 400px;"></canvas>
+                    <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.9em;">
+                        <strong>📊 Legend:</strong><br>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-top: 8px;">
+                            <div><span style="color: #dc3545; font-weight: bold;">●</span> ${cumulativeData.baseline_label || 'Original Results'}</div>
+                            <div><span style="color: #28a745; font-weight: bold;">●</span> ${cumulativeData.optimized_label || 'Optimized Results'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // � Generate Baseline vs Optimized Comparison Section
+        function generateBaselineComparisonSection(data) {
+            const baseline = data.baseline_result;
+            const optimized = data.best_result;
+            const improvement = data.improvement_summary;
+            
+            if (!baseline || !optimized || !improvement) return '';
+            
+            return `
+                <div style="margin-bottom: 30px; padding: 20px; background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 10px; border: 2px solid #28a745;">
+                    <h3 style="color: #333; margin-bottom: 20px; text-align: center;">🔄 BASELINE vs OPTIMIZED COMPARISON</h3>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center;">
+                        <!-- Baseline Results -->
+                        <div style="background: white; padding: 20px; border-radius: 8px; border: 2px solid #dc3545;">
+                            <h4 style="color: #dc3545; text-align: center; margin-bottom: 15px;">� Original Tradelist (Baseline)</h4>
+                            
+                            <!-- Complete Stats Grid -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: center; margin-bottom: 15px;">
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.4em; font-weight: bold; color: #dc3545;">${baseline.trade_count || 0}</div>
+                                    <div style="font-size: 0.8em; color: #666;">Total Trades</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.4em; font-weight: bold; color: #dc3545;">${safeToFixed(baseline.winrate, 1)}%</div>
+                                    <div style="font-size: 0.8em; color: #666;">Win Rate</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.4em; font-weight: bold; color: #dc3545;">${safeToFixed(baseline.pf, 2)}</div>
+                                    <div style="font-size: 0.8em; color: #666;">Profit Factor</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.4em; font-weight: bold; color: ${baseline.pnl_total >= 0 ? '#28a745' : '#dc3545'};">${safeToFixed(baseline.pnl_total, 2)}%</div>
+                                    <div style="font-size: 0.8em; color: #666;">Total PnL</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.1em; font-weight: bold; color: #666;">${baseline.trade_win || 0}/${baseline.trade_loss || 0}</div>
+                                    <div style="font-size: 0.8em; color: #666;">Win/Loss</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.1em; font-weight: bold; color: #28a745;">${safeToFixed(baseline.avg_win || 0, 2)}%</div>
+                                    <div style="font-size: 0.8em; color: #666;">Avg Win</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.1em; font-weight: bold; color: #dc3545;">${safeToFixed(baseline.avg_loss || 0, 2)}%</div>
+                                    <div style="font-size: 0.8em; color: #666;">Avg Loss</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.1em; font-weight: bold; color: #dc3545;">${safeToFixed(baseline.max_drawdown || 0, 2)}%</div>
+                                    <div style="font-size: 0.8em; color: #666;">Max Drawdown</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Parameters Display - Larger and Bold -->
+                            <div style="margin: 15px 0; padding: 12px; background: #fff3cd; border: 2px solid #ffc107; border-radius: 6px; text-align: center;">
+                                <div style="font-size: 1.2em; font-weight: bold; color: #856404; margin-bottom: 5px;">Parameters</div>
+                                <div style="font-size: 1.1em; font-weight: bold; color: #856404;">
+                                    <span style="background: #fff; padding: 4px 8px; margin: 0 2px; border-radius: 4px; border: 1px solid #ffc107;">SL: ${baseline.parameters?.sl || 'N/A'}%</span> | 
+                                    <span style="background: #fff; padding: 4px 8px; margin: 0 2px; border-radius: 4px; border: 1px solid #ffc107;">BE: ${baseline.parameters?.be || 'N/A'}%</span> | 
+                                    <span style="background: #fff; padding: 4px 8px; margin: 0 2px; border-radius: 4px; border: 1px solid #ffc107;">TS: ${baseline.parameters?.ts_active || 'N/A'}%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Improvement Arrow -->
+                        <div style="text-align: center; font-size: 2em;">
+                            <div style="color: #28a745; font-weight: bold;">➡️</div>
+                            <div style="font-size: 0.4em; color: #28a745; font-weight: bold; margin-top: 5px;">
+                                ${(improvement.pnl_improvement || 0) > 0 ? 'IMPROVED' : 'DECREASED'}
+                            </div>
+                            <div style="font-size: 0.3em; color: ${(improvement.pnl_improvement || 0) > 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
+                                ${(improvement.pnl_improvement || 0) > 0 ? '+' : ''}${safeToFixed(improvement.pnl_improvement, 2)}%
+                            </div>
+                        </div>
+                        
+                        <!-- Optimized Results -->
+                        <div style="background: white; padding: 20px; border-radius: 8px; border: 2px solid #28a745;">
+                            <h4 style="color: #28a745; text-align: center; margin-bottom: 15px;">🚀 Optimized Strategy</h4>
+                            
+                            <!-- Complete Stats Grid -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: center; margin-bottom: 15px;">
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.4em; font-weight: bold; color: #28a745;">${optimized.trade_win + optimized.trade_loss || 0}</div>
+                                    <div style="font-size: 0.8em; color: #666;">Total Trades</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.4em; font-weight: bold; color: #28a745;">${safeToFixed(optimized?.winrate || 0, 1)}%</div>
+                                    <div style="font-size: 0.8em; color: #666;">Win Rate</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.4em; font-weight: bold; color: #28a745;">${safeToFixed(optimized?.pf || 0, 2)}</div>
+                                    <div style="font-size: 0.8em; color: #666;">Profit Factor</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.4em; font-weight: bold; color: ${optimized.pnl_total >= 0 ? '#28a745' : '#dc3545'};">${safeToFixed(optimized?.pnl_total, 2)}%</div>
+                                    <div style="font-size: 0.8em; color: #666;">Total PnL</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.1em; font-weight: bold; color: #666;">${optimized.trade_win || 0}/${optimized.trade_loss || 0}</div>
+                                    <div style="font-size: 0.8em; color: #666;">Win/Loss</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.1em; font-weight: bold; color: #28a745;">${safeToFixed(optimized.avg_win || 0, 2)}%</div>
+                                    <div style="font-size: 0.8em; color: #666;">Avg Win</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.1em; font-weight: bold; color: #dc3545;">${safeToFixed(optimized.avg_loss || 0, 2)}%</div>
+                                    <div style="font-size: 0.8em; color: #666;">Avg Loss</div>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                                    <div style="font-size: 1.1em; font-weight: bold; color: #dc3545;">${safeToFixed(optimized.max_drawdown || 0, 2)}%</div>
+                                    <div style="font-size: 0.8em; color: #666;">Max Drawdown</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Parameters Display - Larger and Bold -->
+                            <div style="margin: 15px 0; padding: 12px; background: #d4edda; border: 2px solid #28a745; border-radius: 6px; text-align: center;">
+                                <div style="font-size: 1.2em; font-weight: bold; color: #155724; margin-bottom: 5px;">Optimized Parameters</div>
+                                <div style="font-size: 1.1em; font-weight: bold; color: #155724;">
+                                    <span style="background: #fff; padding: 4px 8px; margin: 0 2px; border-radius: 4px; border: 1px solid #28a745;">SL: ${safeToFixed(optimized.sl || 0, 1)}%</span> | 
+                                    <span style="background: #fff; padding: 4px 8px; margin: 0 2px; border-radius: 4px; border: 1px solid #28a745;">BE: ${safeToFixed(optimized.be || 0, 1)}%</span> | 
+                                    <span style="background: #fff; padding: 4px 8px; margin: 0 2px; border-radius: 4px; border: 1px solid #28a745;">TS: ${safeToFixed(optimized.ts_trig || 0, 1)}%/${safeToFixed(optimized.ts_step || 0, 1)}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Improvement Summary -->
+                    <div style="margin-top: 20px; padding: 15px; background: white; border-radius: 8px; text-align: center; border: 1px solid #ddd;">
+                        <h4 style="color: #333; margin-bottom: 10px;">📈 IMPROVEMENT SUMMARY</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div>
+                                <strong>PnL Improvement:</strong><br>
+                                <span style="color: ${improvement.pnl_improvement > 0 ? '#28a745' : '#dc3545'}; font-size: 1.2em; font-weight: bold;">
+                                    ${(improvement?.pnl_improvement || 0) > 0 ? '+' : ''}${safeToFixed(improvement?.pnl_improvement || 0, 2)}%
+                                </span>
+                            </div>
+                            <div>
+                                <strong>Win Rate Change:</strong><br>
+                                <span style="color: ${improvement.winrate_improvement > 0 ? '#28a745' : '#dc3545'}; font-size: 1.2em; font-weight: bold;">
+                                    ${(improvement?.winrate_improvement || 0) > 0 ? '+' : ''}${safeToFixed(improvement?.winrate_improvement || 0, 1)}%
+                                </span>
+                            </div>
+                            <div>
+                                <strong>Relative Improvement:</strong><br>
+                                <span style="color: ${improvement.pnl_improvement_pct > 0 ? '#28a745' : '#dc3545'}; font-size: 1.2em; font-weight: bold;">
+                                    ${(improvement?.pnl_improvement_pct || 0) > 0 ? '+' : ''}${safeToFixed(improvement?.pnl_improvement_pct || 0, 1)}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // �📊 Draw Cumulative PnL Chart using Canvas
+        function drawCumulativePnlChart(cumulativeData) {
+            const canvas = document.getElementById('cumulativePnlChart');
+            if (!canvas) {
+                console.error('Canvas element not found');
+                return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+            
+            const { labels, baseline_cumulative, optimized_cumulative } = cumulativeData;
+            
+            if (!labels || labels.length === 0) return;
+            
+            // Calculate min/max values for scaling
+            const allValues = [...(baseline_cumulative || []), ...(optimized_cumulative || [])];
+            const minValue = Math.min(...allValues, 0);
+            const maxValue = Math.max(...allValues, 0);
+            const valueRange = maxValue - minValue;
+            
+            // Margins
+            const margin = { top: 20, right: 80, bottom: 60, left: 80 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            // Helper functions
+            const xScale = (index) => margin.left + (index / (labels.length - 1)) * chartWidth;
+            const yScale = (value) => margin.top + ((maxValue - value) / valueRange) * chartHeight;
+            
+            // Draw grid
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            
+            // Horizontal grid lines
+            for (let i = 0; i <= 5; i++) {
+                const value = minValue + (valueRange * i / 5);
+                const y = yScale(value);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, y);
+                ctx.lineTo(margin.left + chartWidth, y);
+                ctx.stroke();
+                
+                // Y-axis labels
+                ctx.fillStyle = '#666';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillTextsafeToFixed((value || 0, 1) + '%', margin.left - 10, y + 4);
+            }
+            
+            // Draw zero line
+            if (minValue <= 0 && maxValue >= 0) {
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                const zeroY = yScale(0);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, zeroY);
+                ctx.lineTo(margin.left + chartWidth, zeroY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // Draw baseline line (red)
+            if (baseline_cumulative && baseline_cumulative.length > 0) {
+                ctx.strokeStyle = '#dc3545';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = 0; i < baseline_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(baseline_cumulative[i]);
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+                
+                // Draw points
+                ctx.fillStyle = '#dc3545';
+                for (let i = 0; i < baseline_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(baseline_cumulative[i]);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+            
+            // Draw optimized line (green)
+            if (optimized_cumulative && optimized_cumulative.length > 0) {
+                ctx.strokeStyle = '#28a745';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = 0; i < optimized_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(optimized_cumulative[i]);
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+                
+                // Draw points
+                ctx.fillStyle = '#28a745';
+                for (let i = 0; i < optimized_cumulative.length; i++) {
+                    const x = xScale(i);
+                    const y = yScale(optimized_cumulative[i]);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+            
+            // Draw axes
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            // Y-axis
+            ctx.moveTo(margin.left, margin.top);
+            ctx.lineTo(margin.left, margin.top + chartHeight);
+            // X-axis
+            ctx.moveTo(margin.left, margin.top + chartHeight);
+            ctx.lineTo(margin.left + chartWidth, margin.top + chartHeight);
+            ctx.stroke();
+            
+            // Chart title
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Cumulative PnL Comparison (%)', width / 2, 20);
+            
+            // Final values display
+            if (baseline_cumulative && baseline_cumulative.length > 0) {
+                const finalBaseline = baseline_cumulative[baseline_cumulative.length - 1];
+                ctx.fillStyle = '#dc3545';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillTextsafeToFixed(`Original: ${(finalBaseline || 0, 2)}%`, margin.left + chartWidth + 10, margin.top + 20);
+            }
+            
+            if (optimized_cumulative && optimized_cumulative.length > 0) {
+                const finalOptimized = optimized_cumulative[optimized_cumulative.length - 1];
+                ctx.fillStyle = '#28a745';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Optimized: ${safeToFixed(finalOptimized, 2)}%`, margin.left + chartWidth + 10, margin.top + 40);
+                
+                // Show improvement
+                if (baseline_cumulative && baseline_cumulative.length > 0) {
+                    const improvement = finalOptimized - baseline_cumulative[baseline_cumulative.length - 1];
+                    ctx.fillStyle = improvement >= 0 ? '#28a745' : '#dc3545';
+                    ctx.fillText(`Improvement: ${improvement >= 0 ? '+' : ''}${safeToFixed(improvement, 2)}%`, margin.left + chartWidth + 10, margin.top + 60);
+                }
+            }
+        }
+        
+        // 📈 Analyze Current Tradelist
+        async function analyzeCurrentTradelist() {
+            const strategySelect = document.getElementById('strategySelect');
+            if (!strategySelect.value) {
+                alert('❌ Vui lòng chọn strategy trước');
+                return;
+            }
+            
+            try {
+                const selectedOption = strategySelect.options[strategySelect.selectedIndex];
+                const symbol = selectedOption.dataset.symbol;
+                const timeframe = selectedOption.dataset.timeframe;
+                const strategyName = selectedOption.dataset.strategyName;
+                const version = selectedOption.dataset.version;
+                
+                const response = await fetch(`/get_strategy_data?symbol=${symbol}&timeframe=${timeframe}&strategy_name=${strategyName}&version=${version}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateTradelistSummary(result);
+                } else {
+                    alert('❌ Lỗi: ' + result.error);
+                }
+            } catch (error) {
+                console.error('❌ Error analyzing tradelist:', error);
+                alert('❌ Lỗi phân tích: ' + error.message);
+            }
+        }
+        
+        // 📊 Update Tradelist Summary
+        function updateTradelistSummary(data) {
+            const summaryDiv = document.getElementById('tradelistSummary');
+            
+            // Kiểm tra element tồn tại trước khi sử dụng
+            if (!summaryDiv) {
+                console.warn('⚠️ Element tradelistSummary không tồn tại');
+                return;
+            }
+            
+            if (data.data && data.data.length > 0) {
+                const trades = data.data;
+                const totalTrades = trades.length;
+                const winTrades = trades.filter(trade => {
+                    const pnl = trade.PnL || trade.pnl || 0;
+                    return pnl > 0;
+                }).length;
+                const winRate = safeToFixed((winTrades / totalTrades) * 100, 2);
+                
+                summaryDiv.innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; text-align: center;">
+                        <div>
+                            <div style="font-size: 1.5em; font-weight: bold; color: #007bff;">${totalTrades}</div>
+                            <div style="font-size: 0.8em; color: #666;">Total Trades</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5em; font-weight: bold; color: #28a745;">${winTrades}</div>
+                            <div style="font-size: 0.8em; color: #666;">Win Trades</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5em; font-weight: bold; color: ${winRate > 50 ? '#28a745' : '#dc3545'};">${winRate}%</div>
+                            <div style="font-size: 0.8em; color: #666;">Win Rate</div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                summaryDiv.innerHTML = '<p style="text-align: center; color: #666;">Không có data để phân tích</p>';
+            }
+        }
+        
+        // 💡 Get Smart Range Suggestions
+        async function getSmartRangeSuggestions() {
+            const strategySelect = document.getElementById('strategySelect');
+            if (!strategySelect.value) {
+                alert('❌ Vui lòng chọn strategy trước');
+                return;
+            }
+            
+            const selectedOption = strategySelect.options[strategySelect.selectedIndex];
+            const symbol = selectedOption.dataset.symbol;
+            const timeframe = selectedOption.dataset.timeframe;
+            
+            // Smart range suggestions based on symbol and timeframe
+            let ranges = getParameterRangeSuggestions(symbol, timeframe);
+            
+            document.getElementById('suggestionContent').innerHTML = `
+                <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                    <h5>🎯 Gợi ý Ranges cho ${symbol} ${timeframe}:</h5>
+                    <table style="width: 100%; font-size: 0.9em; margin: 10px 0;">
+                        <tr><td><strong>SL:</strong></td><td>${ranges.sl.min}% - ${ranges.sl.max}% (step ${ranges.sl.step}%)</td><td>${ranges.sl.reason}</td></tr>
+                        <tr><td><strong>BE:</strong></td><td>${ranges.be.min}% - ${ranges.be.max}% (step ${ranges.be.step}%)</td><td>${ranges.be.reason}</td></tr>
+                        <tr><td><strong>TS:</strong></td><td>${ranges.ts.min}% - ${ranges.ts.max}% (step ${ranges.ts.step}%)</td><td>${ranges.ts.reason}</td></tr>
+                    </table>
+                    <button class="btn btn-primary btn-sm" onclick="applyRangeSuggestions(${JSON.stringify(ranges).replace(/"/g, '&quot;')})">
+                        <i class="fas fa-magic"></i> Apply These Ranges
+                    </button>
+                </div>
+            `;
+        }
+        
+        // 🎯 Get Parameter Range Suggestions based on Symbol & Timeframe
+        function getParameterRangeSuggestions(symbol, timeframe) {
+            // Base range suggestions
+            let ranges = {
+                sl: {min: 0.5, max: 2.5, step: 0.1, reason: "Standard volatility"},
+                be: {min: 0.2, max: 1.2, step: 0.05, reason: "Conservative BE range"},
+                ts: {min: 0.1, max: 0.8, step: 0.02, reason: "Tight trailing range"}
+            };
+            
+            // Adjust for volatility based on symbol
+            if (symbol.includes('BTC')) {
+                ranges.sl = {min: 1.0, max: 4.0, step: 0.2, reason: "BTC high volatility"};
+                ranges.be = {min: 0.5, max: 2.0, step: 0.1, reason: "BTC BE range"};
+                ranges.ts = {min: 0.2, max: 1.2, step: 0.05, reason: "BTC TS range"};
+            } else if (symbol.includes('ETH')) {
+                ranges.sl = {min: 0.8, max: 3.0, step: 0.15, reason: "ETH medium volatility"};
+                ranges.be = {min: 0.3, max: 1.5, step: 0.08, reason: "ETH BE range"};
+                ranges.ts = {min: 0.15, max: 1.0, step: 0.03, reason: "ETH TS range"};
+            } else if (symbol.includes('USDT') && !symbol.includes('BTC') && !symbol.includes('ETH')) {
+                ranges.sl = {min: 0.3, max: 2.0, step: 0.08, reason: "Altcoin moderate volatility"};
+                ranges.be = {min: 0.1, max: 1.0, step: 0.04, reason: "Altcoin BE range"};
+                ranges.ts = {min: 0.05, max: 0.6, step: 0.02, reason: "Altcoin TS range"};
+            }
+            
+            // Adjust for timeframe
+            if (timeframe.includes('5') || timeframe.includes('15')) {
+                // Short timeframes - tighter ranges
+                ranges.sl.min *= 0.6; ranges.sl.max *= 0.7; ranges.sl.step *= 0.5;
+                ranges.be.min *= 0.6; ranges.be.max *= 0.7; ranges.be.step *= 0.5;
+                ranges.ts.min *= 0.6; ranges.ts.max *= 0.7; ranges.ts.step *= 0.5;
+                ranges.sl.reason += " + Short TF";
+            } else if (timeframe.includes('240') || timeframe.includes('1440')) {
+                // Long timeframes - wider ranges
+                ranges.sl.min *= 1.2; ranges.sl.max *= 1.4; ranges.sl.step *= 1.2;
+                ranges.be.min *= 1.2; ranges.be.max *= 1.4; ranges.be.step *= 1.2;
+                ranges.ts.min *= 1.2; ranges.ts.max *= 1.4; ranges.ts.step *= 1.2;
+                ranges.sl.reason += " + Long TF";
+            }
+            
+            // Round to reasonable precision
+            Object.keys(ranges).forEach(param => {
+                ranges[param].min = Math.round(ranges[param].min * 100) / 100;
+                ranges[param].max = Math.round(ranges[param].max * 100) / 100;
+                ranges[param].step = Math.round(ranges[param].step * 100) / 100;
+            });
+            
+            return ranges;
+        }
+        
+        // ✅ Apply Range Suggestions
+        function applyRangeSuggestions(ranges) {
+            document.getElementById('sl_min').value = ranges.sl.min;
+            document.getElementById('sl_max').value = ranges.sl.max;
+            document.getElementById('sl_step').value = ranges.sl.step;
+            
+            document.getElementById('be_min').value = ranges.be.min;
+            document.getElementById('be_max').value = ranges.be.max;
+            document.getElementById('be_step').value = ranges.be.step;
+            
+            document.getElementById('ts_active_min').value = ranges.ts.min;
+            document.getElementById('ts_active_max').value = ranges.ts.max;
+            document.getElementById('ts_step_min').value = ranges.ts.step;
+            document.getElementById('ts_step_max').value = ranges.ts.step + 2;
+            document.getElementById('ts_step_step').value = '1';
+            
+            alert('✅ Đã apply smart range suggestions!');
+            calculateCombinations();
+        }
+        
+        // 🛡️ Apply Conservative Ranges
+        function applyConservativeRanges() {
+            document.getElementById('sl_min').value = '1.5';
+            document.getElementById('sl_max').value = '4.0';
+            document.getElementById('sl_step').value = '0.2';
+            
+            document.getElementById('be_min').value = '0.6';
+            document.getElementById('be_max').value = '2.0';
+            document.getElementById('be_step').value = '0.1';
+            
+            document.getElementById('ts_active_min').value = '2.5';
+            document.getElementById('ts_active_max').value = '4.0';
+            document.getElementById('ts_step_min').value = '5';
+            document.getElementById('ts_step_max').value = '8';
+            document.getElementById('ts_step_step').value = '1';
+            
+            alert('✅ Đã apply Conservative ranges!');
+            calculateCombinations();
+        }
+        
+        // 🚀 Apply Aggressive Ranges
+        function applyAggressiveRanges() {
+            document.getElementById('sl_min').value = '0.3';
+            document.getElementById('sl_max').value = '1.5';
+            document.getElementById('sl_step').value = '0.08';
+            
+            document.getElementById('be_min').value = '0.1';
+            document.getElementById('be_max').value = '0.8';
+            document.getElementById('be_step').value = '0.04';
+            
+            document.getElementById('ts_active_min').value = '2.0';
+            document.getElementById('ts_active_max').value = '6.0';
+            document.getElementById('ts_step_min').value = '3';
+            document.getElementById('ts_step_max').value = '10';
+            document.getElementById('ts_step_step').value = '0.5';
+            
+            alert('✅ Đã apply Aggressive ranges!');
+            calculateCombinations();
+        }
+        
+        // 📉 Apply Narrow Ranges
+        function applyNarrowRanges() {
+            document.getElementById('sl_min').value = '0.8';
+            document.getElementById('sl_max').value = '1.5';
+            document.getElementById('sl_step').value = '0.1';
+            
+            document.getElementById('be_min').value = '0.3';
+            document.getElementById('be_max').value = '0.7';
+            document.getElementById('be_step').value = '0.05';
+            
+            document.getElementById('ts_active_min').value = '2.5';
+            document.getElementById('ts_active_max').value = '3.5';
+            document.getElementById('ts_step_min').value = '4';
+            document.getElementById('ts_step_max').value = '6';
+            document.getElementById('ts_step_step').value = '1';
+            
+            alert('✅ Đã apply Narrow ranges!');
+            calculateCombinations();
+        }
+        
+        // ✅ Validate Parameter Ranges
+        function validateParameterRanges() {
+            const sl_min = parseFloat(document.getElementById('sl_min').value);
+            const sl_max = parseFloat(document.getElementById('sl_max').value);
+            const be_min = parseFloat(document.getElementById('be_min').value);
+            const be_max = parseFloat(document.getElementById('be_max').value);
+            const ts_active_min = parseFloat(document.getElementById('ts_active_min').value);
+            const ts_active_max = parseFloat(document.getElementById('ts_active_max').value);
+            const ts_step_min = parseFloat(document.getElementById('ts_step_min').value);
+            const ts_step_max = parseFloat(document.getElementById('ts_step_max').value);
+            
+            let warnings = [];
+            let errors = [];
+            
+            // Check basic range validity (critical errors)
+            if (isNaN(sl_min) || isNaN(sl_max) || isNaN(be_min) || isNaN(be_max) || isNaN(ts_active_min) || isNaN(ts_active_max) || isNaN(ts_step_min) || isNaN(ts_step_max)) {
+                errors.push('❌ All parameters must be valid numbers');
+            }
+            if (sl_min >= sl_max) errors.push('❌ SL Min phải nhỏ hơn SL Max');
+            if (be_min >= be_max) errors.push('❌ BE Min phải nhỏ hơn BE Max');
+            if (ts_active_min >= ts_active_max) errors.push('❌ TS Active Min phải nhỏ hơn TS Active Max');
+            if (ts_step_min >= ts_step_max) errors.push('❌ TS Step Min phải nhỏ hơn TS Step Max');
+            
+            // Check logical constraints (warnings - overlaps are OK for optimization testing)
+            if (be_min >= sl_max) warnings.push('⚠️ BE Min >= SL Max - có thể không hợp lý');
+            if (ts_active_min >= be_max) warnings.push('⚠️ TS Active Min >= BE Max - có thể không hợp lý');
+            
+            // Check reasonable ranges (warnings)
+            if (sl_max > 10) warnings.push('⚠️ SL Max quá cao (>10%)');
+            if (sl_min < 0.01) warnings.push('⚠️ SL Min quá thấp (<0.01%)');
+            if (ts_active_min < 0.001) warnings.push('⚠️ TS Active Min quá thấp (<0.001%)');
+            if (ts_step_min < 0.001) warnings.push('⚠️ TS Step Min quá thấp (<0.001%)');
+            if (be_max > 5) warnings.push('⚠️ BE Max quá cao (>5%)');
+            
+            // Check step sizes
+            const sl_step = parseFloat(document.getElementById('sl_step').value);
+            const be_step = parseFloat(document.getElementById('be_step').value);
+            const ts_active_step = parseFloat(document.getElementById('ts_active_step').value);
+            const ts_step_step = parseFloat(document.getElementById('ts_step_step').value);
+            
+            if (sl_step <= 0) errors.push('❌ SL Step phải > 0');
+            if (be_step <= 0) errors.push('❌ BE Step phải > 0');
+            if (ts_active_step <= 0) errors.push('❌ TS Active Step phải > 0');
+            if (ts_step_step <= 0) errors.push('❌ TS Step Step phải > 0');
+            
+            if (sl_step > (sl_max - sl_min)) warnings.push('⚠️ SL Step quá lớn so với range');
+            if (be_step > (be_max - be_min)) warnings.push('⚠️ BE Step quá lớn so với range');
+            if (ts_active_step > (ts_active_max - ts_active_min)) warnings.push('⚠️ TS Active Step quá lớn so với range');
+            if (ts_step_step > (ts_step_max - ts_step_min)) warnings.push('⚠️ TS Step Step quá lớn so với range');
+            
+            // Display results
+            if (errors.length > 0) {
+                alert('❌ Critical Errors:\n' + errors.join('\n') + 
+                      (warnings.length > 0 ? '\n\nWarnings:\n' + warnings.join('\n') : ''));
+                return false;
+            } else if (warnings.length > 0) {
+                const proceed = confirm('⚠️ Validation warnings:\n' + warnings.join('\n') + '\n\nContinue anyway?');
+                if (proceed) {
+                    calculateCombinations();
+                }
+                return proceed;
+            } else {
+                alert('✅ All parameter ranges are valid!');
+                calculateCombinations();
+                return true;
+            }
+        }
+        
+        // 🧮 Calculate Total Combinations
+        function calculateCombinations() {
+            try {
+                const sl_min = parseFloat(document.getElementById('sl_min').value);
+                const sl_max = parseFloat(document.getElementById('sl_max').value);
+                const sl_step = parseFloat(document.getElementById('sl_step').value);
+                
+                const be_min = parseFloat(document.getElementById('be_min').value);
+                const be_max = parseFloat(document.getElementById('be_max').value);
+                const be_step = parseFloat(document.getElementById('be_step').value);
+                
+                const ts_active_min = parseFloat(document.getElementById('ts_active_min').value);
+                const ts_active_max = parseFloat(document.getElementById('ts_active_max').value);
+                const ts_active_step = parseFloat(document.getElementById('ts_active_step').value);
+                
+                const ts_step_min = parseFloat(document.getElementById('ts_step_min').value);
+                const ts_step_max = parseFloat(document.getElementById('ts_step_max').value);
+                const ts_step_step = parseFloat(document.getElementById('ts_step_step').value);
+                
+                // Calculate number of steps for each parameter
+                const sl_steps = Math.floor((sl_max - sl_min) / sl_step) + 1;
+                const be_steps = Math.floor((be_max - be_min) / be_step) + 1;
+                const ts_active_steps = Math.floor((ts_active_max - ts_active_min) / ts_active_step) + 1;
+                const ts_step_steps = Math.floor((ts_step_max - ts_step_min) / ts_step_step) + 1;
+                
+                // Check TP
+                let tp_steps = 1;
+                const tp_min = document.getElementById('tp_min').value;
+                const tp_max = document.getElementById('tp_max').value;
+                const tp_step_val = document.getElementById('tp_step').value;
+                
+                if (tp_min && tp_max && tp_step_val) {
+                    tp_steps = Math.floor((parseFloat(tp_max) - parseFloat(tp_min)) / parseFloat(tp_step_val)) + 1;
+                }
+                
+                const totalCombinations = sl_steps * be_steps * ts_active_steps * ts_step_steps * tp_steps;
+                const estimatedMinutes = Math.ceil(totalCombinations * 0.5); // Estimate 0.5 seconds per test
+                
+                document.getElementById('totalCombinations').textContent = totalCombinations.toLocaleString();
+                document.getElementById('estimatedTime').textContent = estimatedMinutes;
+                document.getElementById('combinationsInfo').style.display = 'block';
+                
+                // Color code based on complexity
+                const infoDiv = document.getElementById('combinationsInfo');
+                if (totalCombinations > 10000) {
+                    infoDiv.style.background = '#f8d7da';
+                    infoDiv.style.color = '#721c24';
+                } else if (totalCombinations > 1000) {
+                    infoDiv.style.background = '#fff3cd';
+                    infoDiv.style.color = '#856404';
+                } else {
+                    infoDiv.style.background = '#d4edda';
+                    infoDiv.style.color = '#155724';
+                }
+                
+            } catch (error) {
+                console.error('Error calculating combinations:', error);
+            }
+        }
+        
+        // 🗑️ Clear TP Range
+        function clearTPRange() {
+            document.getElementById('tp_min').value = '';
+            document.getElementById('tp_max').value = '';
+            document.getElementById('tp_step').value = '';
+            calculateCombinations();
+        }
+        
+        // 🔄 Reset to Default Ranges
+        function resetToDefaultRanges() {
+            document.getElementById('sl_min').value = '0.5';
+            document.getElementById('sl_max').value = '3.0';
+            document.getElementById('sl_step').value = '0.1';
+            
+            document.getElementById('be_min').value = '0.2';
+            document.getElementById('be_max').value = '1.5';
+            document.getElementById('be_step').value = '0.05';
+            
+            document.getElementById('ts_active_min').value = '0.1';
+            document.getElementById('ts_active_max').value = '1.0';
+            document.getElementById('ts_active_step').value = '0.05';
+            
+            document.getElementById('ts_step_min').value = '0.01';
+            document.getElementById('ts_step_max').value = '0.3';
+            document.getElementById('ts_step_step').value = '0.01';
+            
+            clearTPRange();
+            alert('✅ Đã reset về default ranges!');
+            calculateCombinations();
+        }
+        
+        // 🚀 Start Optimization with all parameters
+        async function startOptimization() {
+            const strategySelect = document.getElementById('strategySelect');
+            const candleSelect = document.getElementById('candleSelect');
+            
+            if (!strategySelect.value || !candleSelect.value) {
+                alert('❌ Vui lòng chọn cả Strategy và Candle Data');
+                return;
+            }
+            
+            // Validate parameter ranges first
+            if (!validateParameterRanges()) {
+                return;
+            }
+            
+            try {
+                // Get selected parameters to optimize
+                const selectedParams = Array.from(document.querySelectorAll('input[name="optimize_params"]:checked'))
+                    .map(input => input.value);
+                
+                if (selectedParams.length === 0) {
+                    alert('❌ Vui lòng chọn ít nhất 1 parameter để tối ưu!');
+                    return;
+                }
+                
+                // Get range parameters
+                const params = {
+                    strategy: strategySelect.value,
+                    candle_data: candleSelect.value,
+                    optimization_engine: document.querySelector('input[name="optimization_engine"]:checked').value,
+                    optimization_criteria: document.querySelector('select[name="optimization_criteria"]').value,
+                    selected_params: selectedParams,
+                    sl_min: parseFloat(document.getElementById('sl_min').value),
+                    sl_max: parseFloat(document.getElementById('sl_max').value),
+                    sl_step: parseFloat(document.getElementById('sl_step').value),
+                    be_min: parseFloat(document.getElementById('be_min').value),
+                    be_max: parseFloat(document.getElementById('be_max').value),
+                    be_step: parseFloat(document.getElementById('be_step').value),
+                    ts_active_min: parseFloat(document.getElementById('ts_active_min').value),
+                    ts_active_max: parseFloat(document.getElementById('ts_active_max').value),
+                    ts_active_step: parseFloat(document.getElementById('ts_active_step').value),
+                    ts_step_min: parseFloat(document.getElementById('ts_step_min').value),
+                    ts_step_max: parseFloat(document.getElementById('ts_step_max').value),
+                    ts_step_step: parseFloat(document.getElementById('ts_step_step').value)
+                };
+                
+                // Add TP if specified
+                const tp_min = document.getElementById('tp_min').value;
+                const tp_max = document.getElementById('tp_max').value;
+                const tp_step = document.getElementById('tp_step').value;
+                
+                if (tp_min && tp_max && tp_step) {
+                    params.tp_min = parseFloat(tp_min);
+                    params.tp_max = parseFloat(tp_max);
+                    params.tp_step = parseFloat(tp_step);
+                }
+                
+                // Add advanced options
+                params.step_multiplier = document.querySelector('input[name="step_multiplier"]').value;
+                params.engine_type = document.querySelector('select[name="engine_type"]').value;
+                params.max_iterations = document.querySelector('input[name="max_iterations"]').value;
+                
+                // Calculate total combinations for display
+                const totalCombinations = document.getElementById('totalCombinations').textContent;
+                
+                // Show loading with range info
+                const resultsSection = document.getElementById('resultsSection');
+                resultsSection.style.display = 'block';
+                
+                // Get criteria display name
+                const criteriaNames = {
+                    'pnl': '💰 PnL Total',
+                    'winrate': '🎯 Win Rate', 
+                    'pf': '📈 Profit Factor',
+                    'drawdown': '📉 Minimize Drawdown',
+                    'sharpe': '⚡ Sharpe Ratio',
+                    'recovery': '🔄 Recovery Factor'
+                };
+                const criteriaDisplay = criteriaNames[params.optimization_criteria] || params.optimization_criteria;
+                
+                // Get selected parameters display
+                const paramNames = {
+                    'sl': '📍 Stop Loss',
+                    'be': '🛡️ Break Even',
+                    'ts': '📈 Trailing Stop',
+                    'tp': '🎯 Take Profit'
+                };
+                const selectedParamsDisplay = params.selected_params.map(p => paramNames[p] || p).join(', ');
+                
+                resultsSection.innerHTML = `
+                    <div class="card full-width">
+                        <h3>⏳ Đang thực hiện optimization với ${params.optimization_engine === 'optuna' ? '🔥 Optuna (AI-Powered)' : '🔍 Grid Search (Brute Force)'}...</h3>
+                        <p><strong>Engine:</strong> ${params.optimization_engine === 'optuna' ? 'Optuna - Bayesian Optimization (Thông minh & Nhanh)' : 'Grid Search - Test tất cả combinations (Chậm nhưng đầy đủ)'}</p>
+                        <p><strong>Optimization Target:</strong> ${criteriaDisplay}</p>
+                        <p><strong>Optimizing Parameters:</strong> ${selectedParamsDisplay}</p>
+                        <p><strong>Parameter Ranges:</strong></p>
+                        <ul style="text-align: left;">
+                            <li>SL: ${params.sl_min}% → ${params.sl_max}% (step ${params.sl_step}%)</li>
+                            <li>BE: ${params.be_min}% → ${params.be_max}% (step ${params.be_step}%)</li>
+                            <li>TS Active: ${params.ts_active_min}% → ${params.ts_active_max}% (step ${params.ts_active_step}%)</li>
+                            <li>TS Step: ${params.ts_step_min}% → ${params.ts_step_max}% (step ${params.ts_step_step}%)</li>
+                            ${params.tp_min ? `<li>TP: ${params.tp_min}% → ${params.tp_max}% (step ${params.tp_step}%)</li>` : ''}
+                        </ul>
+                        <p><strong>Total Combinations:</strong> ${totalCombinations}</p>
+                        <p>Vui lòng đợi, quá trình này có thể mất vài phút...</p>
+                        <div id="optimizationProgress" style="margin-top: 15px;">
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar" style="width: 0%;">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                const response = await fetch('/optimize_ranges', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Use the correct data structure from the enhanced API response
+                    console.log('🎯 Full result structure:', result);
+                    console.log('🎯 Results data:', result.data);
+                    
+                    if (result.data && Array.isArray(result.data)) {
+                        // Pass the full result object containing comparison data
+                        // Also pass params to track optimization engine type
+                        try {
+                            displayRangeOptimizationResults(result, params);
+                        } catch (error) {
+                            console.error('❌ Error displaying results:', error);
+                            console.error('❌ Error stack:', error.stack);
+                            alert(`❌ Error displaying results: ${error.message}\n\nCheck console for details.`);
+                        }
+                    } else {
+                        console.error('❌ Invalid result structure:', result);
+                        alert('❌ Invalid optimization results format');
+                    }
+                    
+                    // Scroll to results
+                    setTimeout(() => {
+                        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+                    }, 500);
+                    
+                } else {
+                    resultsSection.innerHTML = `<div class="card full-width"><h3 style="color: red;">❌ Optimization Failed</h3><p>${result.error}</p></div>`;
+                }
+            } catch (error) {
+                console.error('❌ Range Optimization error:', error);
+                const resultsSection = document.getElementById('resultsSection');
+                resultsSection.innerHTML = `<div class="card full-width"><h3 style="color: red;">❌ Lỗi kết nối</h3><p>${error.message}</p></div>`;
+            }
+        }
+        
+        // 📊 Display Range Optimization Results with Enhanced Comparison
+        function displayRangeOptimizationResults(data, params = null) {
+            // Handle both array of results and full response data structure
+            let results = Array.isArray(data) ? data : data.data || [];
+            
+            // 🔄 Store optimization results for comparison functionality
+            window.lastOptimizationResults = {
+                data: results,
+                timestamp: new Date().toISOString(),
+                engine: params?.optimization_engine || 'grid', // Use actual engine from params
+                symbol: params?.symbol || document.getElementById('symbol')?.value || '',
+                count: results.length,
+                criteria: params?.optimization_criteria || 'pnl'
+            };
+            
+            if (!results || results.length === 0) {
+                document.getElementById('resultsSection').innerHTML = `
+                    <div class="card full-width">
+                        <h3 style="color: orange;">⚠️ Không có kết quả</h3>
+                        <p>Không tìm thấy kết quả nào từ optimization ranges.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Extract comparison data if available (when data is object with full response)
+            const comparisonData = data.baseline_result ? data : null;
+            
+            // Sort by performance metric (total profit)
+            results.sort((a, b) => (b.total_profit || 0) - (a.total_profit || 0));
+            
+            const topResult = results[0];
+            
+            let resultsHTML = `
+                <div class="card full-width">
+                    <h3>🏆 Range Optimization Results</h3>
+                    
+                    ${comparisonData ? `
+                    <!-- ====== BASELINE vs OPTIMIZED COMPARISON ====== -->
+                    <div style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border: 2px solid #6c757d; border-radius: 12px; padding: 20px; margin: 15px 0;">
+                        <h4 style="margin: 0 0 15px 0; color: #495057; text-align: center;">📊 BASELINE vs OPTIMIZED COMPARISON</h4>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center;">
+                            <!-- Baseline Results -->
+                            <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 15px;">
+                                <h5 style="margin: 0 0 10px 0; color: #856404; text-align: center;">📈 Original Tradelist (Baseline)</h5>
+                                
+                                <!-- Complete Stats Grid - 8 metrics like Quick Summary -->
+                                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; margin-bottom: 10px;">
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #ffc107;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #856404;">${comparisonData.baseline_result.total_trades}</div>
+                                        <div style="font-size: 0.7em; color: #666;">Total Trades</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #ffc107;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #856404;">${safeToFixed(comparisonData.baseline_result?.winrate || 0, 1)}%</div>
+                                        <div style="font-size: 0.7em; color: #666;">Win Rate</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #ffc107;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #856404;">${safeToFixed(comparisonData.baseline_result?.pf || 0, 2)}</div>
+                                        <div style="font-size: 0.7em; color: #666;">Profit Factor</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #ffc107;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: ${(comparisonData.baseline_result.pnl_total || 0) >= 0 ? '#28a745' : '#dc3545'};">${safeToFixed(comparisonData.baseline_result.pnl_total || 0, 2)}%</div>
+                                        <div style="font-size: 0.7em; color: #666;">Total PnL</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #ffc107;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #856404;">${comparisonData.baseline_result?.winning_trades || 0}/${comparisonData.baseline_result?.losing_trades || 0}</div>
+                                        <div style="font-size: 0.7em; color: #666;">Win/Loss</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #ffc107;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #28a745;">${safeToFixed(comparisonData.baseline_result?.avg_win || 0, 2)}%</div>
+                                        <div style="font-size: 0.7em; color: #666;">Avg Win</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #ffc107;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #dc3545;">${safeToFixed(comparisonData.baseline_result?.avg_loss || 0, 2)}%</div>
+                                        <div style="font-size: 0.7em; color: #666;">Avg Loss</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #ffc107;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #dc3545;">${safeToFixed(comparisonData.baseline_result?.max_dd || 0, 2)}%</div>
+                                        <div style="font-size: 0.7em; color: #666;">Max Drawdown</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Parameters - Larger and Bold -->
+                                <div style="margin-top: 10px; padding: 8px; background: rgba(255,193,7,0.2); border-radius: 4px; text-align: center;">
+                                    <div style="font-size: 0.9em; font-weight: bold; color: #856404;">
+                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #ffc107; font-size: 0.9em;">${comparisonData.baseline_result?.parameters?.sl || 'N/A'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Improvement Arrow -->
+                            <div style="text-align: center; font-size: 1.5em;">
+                                <div style="color: #28a745; font-weight: bold;">➡️</div>
+                                <div style="font-size: 0.4em; color: #28a745; font-weight: bold; margin-top: 5px;">
+                                    ${(comparisonData.improvement_summary.pnl_improvement || 0) >= 0 ? 'IMPROVED' : 'DECLINED'}
+                                </div>
+                            </div>
+                            
+                            <!-- Optimized Results -->
+                            <div style="background: #d4edda; border: 2px solid #28a745; border-radius: 8px; padding: 15px;">
+                                <h5 style="margin: 0 0 10px 0; color: #155724; text-align: center;">🚀 Optimized Strategy</h5>
+                                
+                                <!-- Complete Stats Grid - 8 metrics like Quick Summary -->
+                                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; margin-bottom: 10px;">
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #28a745;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #155724;">${comparisonData.best_result.total_trades}</div>
+                                        <div style="font-size: 0.7em; color: #666;">Total Trades</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #28a745;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #155724;">${safeToFixed(comparisonData.best_result?.winrate || 0, 1)}%</div>
+                                        <div style="font-size: 0.7em; color: #666;">Win Rate</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #28a745;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #155724;">${safeToFixed(comparisonData.best_result?.pf || 0, 2)}</div>
+                                        <div style="font-size: 0.7em; color: #666;">Profit Factor</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #28a745;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: ${(comparisonData.best_result.pnl_total || 0) >= 0 ? '#28a745' : '#dc3545'};">${safeToFixed(comparisonData.best_result.pnl_total || 0, 2)}%</div>
+                                        <div style="font-size: 0.7em; color: #666;">Total PnL</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #28a745;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #155724;">${comparisonData.best_result?.winning_trades || 0}/${comparisonData.best_result?.losing_trades || 0}</div>
+                                        <div style="font-size: 0.7em; color: #666;">Win/Loss</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #28a745;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #28a745;">${safeToFixed(comparisonData.best_result?.avg_win || 0, 2)}%</div>
+                                        <div style="font-size: 0.7em; color: #666;">Avg Win</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #28a745;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #dc3545;">${safeToFixed(comparisonData.best_result?.avg_loss || 0, 2)}%</div>
+                                        <div style="font-size: 0.7em; color: #666;">Avg Loss</div>
+                                    </div>
+                                    <div style="background: #fff; padding: 6px; border-radius: 4px; border: 1px solid #28a745;">
+                                        <div style="font-size: 1.2em; font-weight: bold; color: #dc3545;">${safeToFixed(comparisonData.best_result?.max_dd || 0, 2)}%</div>
+                                        <div style="font-size: 0.7em; color: #666;">Max Drawdown</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Parameters - Larger and Bold -->
+                                <div style="margin-top: 10px; padding: 8px; background: rgba(40,167,69,0.2); border-radius: 4px; text-align: center;">
+                                    <div style="font-size: 0.9em; font-weight: bold; color: #155724;">
+                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">SL: ${safeToFixed((comparisonData.best_result?.parameters?.sl || 0), 2)}%</span>
+                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">BE: ${safeToFixed((comparisonData.best_result?.parameters?.be || 0), 2)}%</span>
+                                        <span style="background: #fff; padding: 3px 6px; margin: 0 1px; border-radius: 3px; border: 1px solid #28a745; font-size: 0.9em;">TS: ${safeToFixed((comparisonData.best_result?.parameters?.ts_activation || 0), 2)}%/${safeToFixed((comparisonData.best_result?.parameters?.ts_step || 0), 2)}%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Improvement Summary -->
+                        <div style="background: ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '#d4edda' : '#f8d7da'}; border: 2px solid ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '#28a745' : '#dc3545'}; border-radius: 8px; padding: 15px; margin: 15px 0;">
+                            <h5 style="margin: 0 0 10px 0; text-align: center; color: ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '#155724' : '#721c24'};">
+                                ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '📈 IMPROVEMENT ACHIEVED' : '📉 PERFORMANCE DECLINE'}
+                            </h5>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                                <div><strong>PnL Improvement:</strong> <span style="color: ${comparisonData.improvement_summary.pnl_improvement >= 0 ? '#28a745' : '#dc3545'}; font-size: 1.1em; font-weight: bold;">${comparisonData.improvement_summary.pnl_improvement >= 0 ? '+' : ''}${safeToFixed(comparisonData.improvement_summary.pnl_improvement, 2)}%</span></div>
+                                <div><strong>Win Rate Change:</strong> <span style="color: ${comparisonData.improvement_summary.winrate_improvement >= 0 ? '#28a745' : '#dc3545'};">${comparisonData.improvement_summary.winrate_improvement >= 0 ? '+' : ''}${safeToFixed(comparisonData.improvement_summary.winrate_improvement, 1)}%</span></div>
+                                <div><strong>PF Change:</strong> <span style="color: ${comparisonData.improvement_summary.pf_improvement >= 0 ? '#28a745' : '#dc3545'};">${comparisonData.improvement_summary.pf_improvement >= 0 ? '+' : ''}${safeToFixed(comparisonData.improvement_summary.pf_improvement, 2)}</span></div>
+                                <div><strong>Relative Improvement:</strong> <span style="color: ${comparisonData.improvement_summary.relative_improvement >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">${comparisonData.improvement_summary.relative_improvement >= 0 ? '+' : ''}${safeToFixed(comparisonData.improvement_summary.relative_improvement, 1)}%</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    <div style="background: #d4edda; border: 2px solid #28a745; border-radius: 8px; padding: 15px; margin: 15px 0;">
+                        <h4 style="margin: 0 0 15px 0; color: #155724; text-align: center;">🥇 Best Parameters Found</h4>
+                        
+                        <!-- Parameters Section - Larger and Bold -->
+                        <div style="background: rgba(40,167,69,0.2); border-radius: 6px; padding: 12px; margin-bottom: 15px; text-align: center;">
+                            <div style="margin-bottom: 8px; font-size: 1.1em; font-weight: bold; color: #155724;">Optimized Parameters:</div>
+                            <div style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;">
+                                <span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">SL: ${safeToFixed(topResult.sl * 100, 2)}%</span>
+                                <span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">BE: ${safeToFixed(topResult.be * 100, 2)}%</span>
+                                <span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">TS: ${safeToFixed(topResult.ts_activation * 100, 2)}%/${safeToFixed(topResult.ts_step * 100, 2)}%</span>
+                                ${topResult.tp ? `<span style="background: #fff; padding: 6px 12px; border-radius: 4px; border: 2px solid #28a745; font-size: 1.2em; font-weight: bold; color: #155724;">TP: ${safeToFixed(topResult.tp * 100, 2)}%</span>` : ''}
+                            </div>
+                        </div>
+                        
+                        <!-- Complete Stats Grid -->
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center;">
+                            <div style="background: #fff; padding: 10px; border-radius: 4px; border: 1px solid #28a745;">
+                                <div style="font-size: 1.3em; font-weight: bold; color: #155724;">${topResult.total_trades || 0}</div>
+                                <div style="font-size: 0.8em; color: #666;">Total Trades</div>
+                            </div>
+                            <div style="background: #fff; padding: 10px; border-radius: 4px; border: 1px solid #28a745;">
+                                <div style="font-size: 1.3em; font-weight: bold; color: #155724;">${topResult.win_rate ? safeToFixed(topResult.win_rate * 100, 1) : '0.0'}%</div>
+                                <div style="font-size: 0.8em; color: #666;">Win Rate</div>
+                            </div>
+                            <div style="background: #fff; padding: 10px; border-radius: 4px; border: 1px solid #28a745;">
+                                <div style="font-size: 1.3em; font-weight: bold; color: ${topResult.total_profit > 0 ? '#28a745' : '#dc3545'};">${topResult.total_profit ? safeToFixed(topResult.total_profit, 2) : '0.00'}%</div>
+                                <div style="font-size: 0.8em; color: #666;">Total PnL</div>
+                            </div>
+                            <div style="background: #fff; padding: 10px; border-radius: 4px; border: 1px solid #28a745;">
+                                <div style="font-size: 1.3em; font-weight: bold; color: #155724;">${topResult.avg_win ? safeToFixed(topResult.avg_win, 2) : '0.00'}%</div>
+                                <div style="font-size: 0.8em; color: #666;">Avg Win</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin: 20px 0;">
+                        <h4>📈 Top ${Math.min(results.length, 10)} Results:</h4>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; font-size: 0.85em; border-collapse: collapse; margin: 10px 0;">
+                                <thead>
+                                    <tr style="background: #e9ecef;">
+                                        <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Rank</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">SL%</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">BE%</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">TS%</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">TP%</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Profit</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Win Rate</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Max DD</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">PF</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+            `;
+            
+            // Show top 10 results
+            results.slice(0, 10).forEach((result, index) => {
+                const rowColor = index === 0 ? '#d4edda' : (index < 3 ? '#fff3cd' : 'white');
+                resultsHTML += `
+                    <tr style="background: ${rowColor};">
+                        <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${index + 1}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${safeToFixed(result.sl, 2)}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${safeToFixed(result.be, 2)}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${safeToFixed(result.ts * 100, 2)}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${result.tp ? safeToFixed(result.tp, 2) : 'N/A'}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd; color: ${result.total_profit > 0 ? 'green' : 'red'};">
+                            ${result.total_profit ? safeToFixed(result.total_profit, 2) : '0.00'}
+                        </td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${result.win_rate ? safeToFixed(result.win_rate * 100, 1) : '0.0'}%</td>
+                        <td style="padding: 6px; border: 1px solid #ddd; color: red;">${result.max_drawdown ? safeToFixed(result.max_drawdown, 2) : '0.00'}%</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">${result.profit_factor ? safeToFixed(result.profit_factor, 2) : (result.pf ? safeToFixed(result.pf, 2) : '0.00')}</td>
+                        <td style="padding: 6px; border: 1px solid #ddd;">
+                            <button class="btn btn-sm btn-outline-primary" onclick="applyCombination(${result.sl}, ${result.be}, ${result.ts}, ${result.tp || 'null'})">
+                                <i class="fas fa-copy"></i> Use
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            resultsHTML += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <h5>📊 Summary Statistics:</h5>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div>
+                                <strong>Total Combinations Tested:</strong><br>
+                                ${results.length.toLocaleString()}
+                            </div>
+                            <div>
+                                <strong>Profitable Combinations:</strong><br>
+                                ${results.filter(r => (r.total_profit || 0) > 0).length} (${safeToFixed((results.filter(r => (r.total_profit || 0) > 0).length / results.length) * 100, 1)}%)
+                            </div>
+                            <div>
+                                <strong>Best Profit:</strong><br>
+                                <span style="color: green;">${safeToFixed(safeMax(results.map(r => r.total_profit || 0)), 2)}</span>
+                            </div>
+                            <div>
+                                <strong>Worst Loss:</strong><br>
+                                <span style="color: red;">${safeToFixed(safeMin(results.map(r => r.total_profit || 0)), 2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${comparisonData && comparisonData.cumulative_comparison ? `
+                    <!-- ====== CUMULATIVE PnL CHART ====== -->
+                    <div style="background: #f8f9fa; border: 2px solid #6c757d; border-radius: 8px; padding: 20px; margin: 15px 0;">
+                        <h4 style="margin: 0 0 15px 0; text-align: center;">📈 Cumulative PnL Comparison</h4>
+                        <canvas id="cumulativePnlChart" width="800" height="400" style="max-width: 100%; height: 400px; background: white; border-radius: 4px;"></canvas>
+                        <div style="margin-top: 15px; padding: 10px; background: #e9ecef; border-radius: 6px; font-size: 0.9em; text-align: center;">
+                            <strong>📊 Chart Legend:</strong><br>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-top: 8px;">
+                                <div><span style="color: #ffc107; font-weight: bold;">●</span> ${comparisonData.cumulative_comparison.baseline_label || 'Original Tradelist Results'}</div>
+                                <div><span style="color: #28a745; font-weight: bold;">●</span> ${comparisonData.cumulative_comparison.optimized_label || 'Optimized Strategy Results'}</div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    ${comparisonData && comparisonData.trade_comparison ? `
+                    <!-- ====== TRADE-BY-TRADE COMPARISON TABLE ====== -->
+                    <div style="background: #f8f9fa; border: 2px solid #6c757d; border-radius: 8px; padding: 20px; margin: 15px 0;">
+                        <h4 style="margin: 0 0 15px 0; text-align: center;">🔍 Trade-by-Trade Comparison (First 20 trades)</h4>
+                        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+                            <table style="width: 100%; font-size: 0.8em; border-collapse: collapse; background: white;">
+                                <thead style="position: sticky; top: 0; background: #e9ecef;">
+                                    <tr>
+                                        <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Trade #</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Entry Price</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Baseline Exit</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Baseline PnL</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Optimized Exit</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Optimized PnL</th>
+                                        <th style="padding: 8px; border: 1px solid #ddd;">Improvement</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tradeComparisonTableBody">
+                                    ${comparisonData.trade_comparison.slice(0, 20).map((trade, index) => {
+                                        const baselinePnlClass = trade.baseline_pnl >= 0 ? 'text-success' : 'text-danger';
+                                        const optimizedPnlClass = trade.optimized_pnl >= 0 ? 'text-success' : 'text-danger';
+                                        const improvementClass = trade.improvement >= 0 ? 'text-success' : 'text-danger';
+                                        const bgColor = trade.improvement > 0 ? '#d4edda' : (trade.improvement < 0 ? '#f8d7da' : 'white');
+                                        
+                                        return `
+                                        <tr style="background: ${bgColor};">
+                                            <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-weight: bold;">${index + 1}</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;">$${safeToFixed(trade.entry_price, 2)}</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;">$${safeToFixed(trade.baseline_exit_price, 2)} (${trade.baseline_exit_type})</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;" class="${baselinePnlClass}">${safeToFixed(trade.baseline_pnl, 2)}%</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;">$${safeToFixed(trade.optimized_exit_price, 2)} (${trade.optimized_exit_type})</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd;" class="${optimizedPnlClass}">${safeToFixed(trade.optimized_pnl, 2)}%</td>
+                                            <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;" class="${improvementClass}">${trade.improvement >= 0 ? '+' : ''}${safeToFixed(trade.improvement, 2)}%</td>
+                                        </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style="margin-top: 10px; padding: 10px; background: #e9ecef; border-radius: 4px; font-size: 0.85em; text-align: center;">
+                            <strong>📋 Legend:</strong> 
+                            <span class="badge badge-success">TS</span> = Trailing Stop | 
+                            <span class="badge badge-warning">BE</span> = Break Even | 
+                            <span class="badge badge-danger">SL</span> = Stop Loss |
+                            <span style="color: #28a745;">Green rows</span> = Improved trades | 
+                            <span style="color: #dc3545;">Red rows</span> = Worse trades
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    <div style="margin-top: 15px; text-align: center;">
+                        <button class="btn btn-success" onclick="applyCombination(${topResult.sl}, ${topResult.be}, ${topResult.ts}, ${topResult.tp || 'null'})">
+                            <i class="fas fa-star"></i> Use Best Parameters
+                        </button>
+                        <button class="btn btn-info" onclick="exportOptimizationResults()">
+                            <i class="fas fa-download"></i> Export Results
+                        </button>
+                        <button class="btn btn-secondary" onclick="compareWithPrevious()">
+                            <i class="fas fa-chart-line"></i> Compare Results
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('resultsSection').innerHTML = resultsHTML;
+            
+            // Draw cumulative PnL chart if comparison data exists
+            if (comparisonData && comparisonData.cumulative_comparison && comparisonData.cumulative_comparison.labels) {
+                drawCumulativePnlChart(comparisonData.cumulative_comparison);
+            }
+        }
+        
+        // 📈 Draw Cumulative PnL Chart
+        function drawCumulativePnlChart(cumulativeData) {
+            const canvas = document.getElementById('cumulativePnlChart');
+            if (!canvas) {
+                console.error('Canvas element not found');
+                return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+            
+            const { labels, baseline_cumulative, optimized_cumulative } = cumulativeData;
+            
+            if (!labels || labels.length === 0) {
+                ctx.fillStyle = '#6c757d';
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('No data available for chart', width / 2, height / 2);
+                return;
+            }
+            
+            // Calculate chart dimensions
+            const margin = { left: 60, right: 20, top: 40, bottom: 40 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            // Get all values for scaling
+            const allValues = [...(baseline_cumulative || []), ...(optimized_cumulative || [])];
+            const minValue = Math.min(...allValues, 0);
+            const maxValue = Math.max(...allValues, 0);
+            const valueRange = maxValue - minValue || 1;
+            
+            // Draw grid lines
+            ctx.strokeStyle = '#e9ecef';
+            ctx.lineWidth = 1;
+            
+            // Horizontal grid lines
+            for (let i = 0; i <= 5; i++) {
+                const y = margin.top + (chartHeight * i) / 5;
+                ctx.beginPath();
+                ctx.moveTo(margin.left, y);
+                ctx.lineTo(margin.left + chartWidth, y);
+                ctx.stroke();
+                
+                // Y-axis labels
+                const value = maxValue - (valueRange * i) / 5;
+                ctx.fillStyle = '#6c757d';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(safeToFixed(value, 1) + '%', margin.left - 5, y + 4);
+            }
+            
+            // Vertical grid lines
+            const stepX = chartWidth / (labels.length - 1 || 1);
+            for (let i = 0; i < labels.length; i += Math.ceil(labels.length / 10)) {
+                const x = margin.left + i * stepX;
+                ctx.beginPath();
+                ctx.moveTo(x, margin.top);
+                ctx.lineTo(x, margin.top + chartHeight);
+                ctx.stroke();
+            }
+            
+            // Draw baseline line
+            if (baseline_cumulative && baseline_cumulative.length > 0) {
+                ctx.strokeStyle = '#ffc107';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                
+                for (let i = 0; i < baseline_cumulative.length; i++) {
+                    const x = margin.left + (i * chartWidth) / (labels.length - 1 || 1);
+                    const y = margin.top + chartHeight - ((baseline_cumulative[i] - minValue) / valueRange) * chartHeight;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            }
+            
+            // Draw optimized line
+            if (optimized_cumulative && optimized_cumulative.length > 0) {
+                ctx.strokeStyle = '#28a745';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                
+                for (let i = 0; i < optimized_cumulative.length; i++) {
+                    const x = margin.left + (i * chartWidth) / (labels.length - 1 || 1);
+                    const y = margin.top + chartHeight - ((optimized_cumulative[i] - minValue) / valueRange) * chartHeight;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            }
+            
+            // Draw zero line
+            if (minValue < 0 && maxValue > 0) {
+                ctx.strokeStyle = '#6c757d';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                const zeroY = margin.top + chartHeight - ((0 - minValue) / valueRange) * chartHeight;
+                ctx.beginPath();
+                ctx.moveTo(margin.left, zeroY);
+                ctx.lineTo(margin.left + chartWidth, zeroY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // Chart title
+            ctx.fillStyle = '#495057';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Cumulative PnL Comparison (%)', width / 2, 25);
+            
+            // Final values display
+            if (baseline_cumulative && baseline_cumulative.length > 0) {
+                const finalBaseline = baseline_cumulative[baseline_cumulative.length - 1];
+                ctx.fillStyle = '#ffc107';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Baseline: ${safeToFixed(finalBaseline, 2)}%`, margin.left + chartWidth + 10, margin.top + 20);
+            }
+            
+            if (optimized_cumulative && optimized_cumulative.length > 0) {
+                const finalOptimized = optimized_cumulative[optimized_cumulative.length - 1];
+                ctx.fillStyle = '#28a745';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Optimized: ${safeToFixed(finalOptimized, 2)}%`, margin.left + chartWidth + 10, margin.top + 40);
+                
+                // Show improvement
+                if (baseline_cumulative && baseline_cumulative.length > 0) {
+                    const improvement = finalOptimized - baseline_cumulative[baseline_cumulative.length - 1];
+                    ctx.fillStyle = improvement >= 0 ? '#28a745' : '#dc3545';
+                    ctx.fillText(`Improvement: ${improvement >= 0 ? '+' : ''}${safeToFixed(improvement, 2)}%`, margin.left + chartWidth + 10, margin.top + 60);
+                }
+            }
+        }
+        
+        // 📋 Apply Combination to Form
+        function applyCombination(sl, be, ts, tp) {
+            // Apply to range inputs as single values for testing
+            document.getElementById('sl_min').value = safeToFixed(sl * 100, 3);
+            document.getElementById('sl_max').value = safeToFixed(sl * 100, 3);
+            document.getElementById('sl_step').value = '0.001';
+            
+            document.getElementById('be_min').value = safeToFixed(be * 100, 3);
+            document.getElementById('be_max').value = safeToFixed(be * 100, 3);
+            document.getElementById('be_step').value = '0.001';
+            
+            document.getElementById('ts_min').value = safeToFixed(ts * 100, 3);
+            document.getElementById('ts_max').value = safeToFixed(ts * 100, 3);
+            document.getElementById('ts_step').value = '0.001';
+            
+            if (tp && tp !== 'null') {
+                document.getElementById('tp_min').value = safeToFixed(tp * 100, 3);
+                document.getElementById('tp_max').value = safeToFixed(tp * 100, 3);
+                document.getElementById('tp_step').value = '0.001';
+            }
+            
+            alertsafeToFixed(`✅ Đã apply parameters: SL=${(sl*100, 2)}%, BE=${safeToFixed(be*100, 2)}%, TS=${safeToFixed(ts*100, 2)}%${tp ? `, TP=${safeToFixed(tp*100, 2)}%` : ''}`);
+            calculateCombinations();
+        }
+        
+        // 📤 Export Optimization Results - UPDATED WITH API INTEGRATION
+        function exportOptimizationResults() {
+            // Show export options modal
+            const exportModal = document.createElement('div');
+            exportModal.innerHTML = `
+                <div class="modal fade" id="exportModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">� Export Optimization Results</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Export Format:</label>
+                                    <select class="form-select" id="exportFormat">
+                                        <option value="json">JSON (Complete Data)</option>
+                                        <option value="csv">CSV (Spreadsheet)</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Filter by Symbol (Optional):</label>
+                                    <input type="text" class="form-control" id="exportSymbol" placeholder="e.g. BTCUSDT">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Filter by Engine (Optional):</label>
+                                    <select class="form-select" id="exportEngine">
+                                        <option value="">All Engines</option>
+                                        <option value="grid">Grid Search</option>
+                                        <option value="optuna">Optuna</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-success" onclick="performExport()">
+                                    <i class="fas fa-download"></i> Export
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(exportModal);
+            new bootstrap.Modal(document.getElementById('exportModal')).show();
+            
+            // Clean up modal after close
+            document.getElementById('exportModal').addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(exportModal);
+            });
+        }
+        
+        function performExport() {
+            const format = document.getElementById('exportFormat').value;
+            const symbol = document.getElementById('exportSymbol').value.trim();
+            const engine = document.getElementById('exportEngine').value;
+            
+            // Build export URL
+            let exportUrl = `/api/results/export?format=${format}`;
+            if (symbol) exportUrl += `&symbol=${encodeURIComponent(symbol)}`;
+            if (engine) exportUrl += `&engine=${engine}`;
+            
+            // Create download link
+            const link = document.createElement('a');
+            link.href = exportUrl;
+            link.download = `optimization_results.${format}`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Close modal
+            bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+            
+            // Show success message
+            showNotification('📤 Export started! Download should begin shortly.', 'success');
+        }
+        
+        // 🔄 Compare with Previous Results - UPDATED WITH RESULTS DATABASE INTEGRATION
+        function compareWithPrevious() {
+            // Show comparison options modal
+            const compareModal = document.createElement('div');
+            compareModal.innerHTML = `
+                <div class="modal fade" id="compareModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">� Compare Optimization Results</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Choose how to compare optimization results:</p>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary" onclick="openResultsDatabase()">
+                                        <i class="fas fa-database"></i> Open Results Database
+                                        <small class="d-block">View all optimization history with filtering & charts</small>
+                                    </button>
+                                    <button class="btn btn-info" onclick="compareCurrentRun()">
+                                        <i class="fas fa-chart-line"></i> Compare Current Run
+                                        <small class="d-block">Compare current results with previous runs</small>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(compareModal);
+            new bootstrap.Modal(document.getElementById('compareModal')).show();
+            
+            // Clean up modal after close
+            document.getElementById('compareModal').addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(compareModal);
+            });
+        }
+        
+        function openResultsDatabase() {
+            // Close modal and redirect to Results Database
+            bootstrap.Modal.getInstance(document.getElementById('compareModal')).hide();
+            window.open('/results', '_blank');
+            showNotification('📊 Opening Results Database in new tab...', 'info');
+        }
+        
+        function compareCurrentRun() {
+            // Close modal first
+            bootstrap.Modal.getInstance(document.getElementById('compareModal')).hide();
+            
+            // Get current optimization results
+            const currentResults = window.lastOptimizationResults || null;
+            if (!currentResults) {
+                showNotification('⚠️ No current optimization results to compare. Run an optimization first.', 'warning');
+                return;
+            }
+            
+            // Redirect to Results Database with current data highlighted
+            const params = new URLSearchParams({
+                compare: 'true',
+                engine: currentResults.engine || 'grid',
+                symbol: currentResults.symbol || ''
+            });
+            
+            window.open(`/results?${params.toString()}`, '_blank');
+            showNotification('🔄 Opening comparison view...', 'info');
+        }
+        
+        // Helper function for notifications
+        function showNotification(message, type = 'info') {
+            const alertClass = type === 'success' ? 'alert-success' : 
+                              type === 'warning' ? 'alert-warning' : 
+                              type === 'error' ? 'alert-danger' : 'alert-info';
+            
+            const notification = document.createElement('div');
+            notification.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+            notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            notification.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Auto dismiss after 5 seconds
+            setTimeout(() => {
+                if (notification && notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 5000);
+        }
+        
+        // 📊 Legacy Display Optimization Results (for backward compatibility)
+        function displayOptimizationResults(results) {
+            // This function handles results from the old single-parameter optimization
+            // Convert to new format if needed
+            if (Array.isArray(results)) {
+                displayRangeOptimizationResults(results);
+            } else {
+                // Handle single result format
+                const singleResult = [results];
+                displayRangeOptimizationResults(singleResult);
+            }
+        }
+        
+        // 🔄 Auto-calculate combinations when inputs change
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add event listeners to all range inputs
+            const rangeInputs = [
+                'sl_min', 'sl_max', 'sl_step',
+                'be_min', 'be_max', 'be_step', 
+                'ts_min', 'ts_max', 'ts_step',
+                'tp_min', 'tp_max', 'tp_step'
+            ];
+            
+            rangeInputs.forEach(inputId => {
+                const element = document.getElementById(inputId);
+                if (element) {
+                    element.addEventListener('input', function() {
+                        // Debounce the calculation to avoid too many calls
+                        clearTimeout(window.calculationTimeout);
+                        window.calculationTimeout = setTimeout(calculateCombinations, 300);
+                    });
+                }
+            });
+            
+            // Initial calculation on page load
+            setTimeout(calculateCombinations, 500);
+        });
+        
+        // � Test Enhanced Visualization Function
+        async function demoEnhancedVisualization() {
+            const confirmed = confirm(
+                '🎨 DEMO GIAO DIỆN MỚI\n\n' +
+                'Đây chỉ là demo với dữ liệu mẫu để xem giao diện mới.\n' +
+                'Để có kết quả thực tế, bạn cần chạy "Bắt đầu Optimization" trước.\n\n' +
+                'Bạn có muốn xem demo không?'
+            );
+            
+            if (!confirmed) return;
+            
+            try {
+                console.log('🎨 Demo Enhanced Visualization with Mock Data...');
+                
+                const response = await fetch('/test_enhanced_visualization', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('✅ Mock visualization data received:', data);
+                
+                // Show results section and populate with enhanced visualization
+                const resultsSection = document.getElementById('resultsSection');
+                resultsSection.style.display = 'block';
+                
+                // Call the enhanced display function
+                displayOptimizationResults(data);
+                
+                // Scroll to results
+                resultsSection.scrollIntoView({ behavior: 'smooth' });
+                
+                alert('✅ Demo hoàn thành!\n\nLưu ý: Đây là dữ liệu mẫu, không phải kết quả thực tế.\nĐể có kết quả thật, hãy chạy "Bắt đầu Optimization".');
+                
+            } catch (error) {
+                console.error('❌ Demo error:', error);
+                alert('❌ Demo thất bại: ' + error.message);
+            }
+        }
+
+        // �🎯 Set Focus and Initialize
+        window.addEventListener('load', function() {
+            // Focus on strategy selection to encourage user to start there
+            const strategySelect = document.getElementById('strategySelect');
+            if (strategySelect) {
+                strategySelect.focus();
+            }
+            
+            // Initialize default ranges if empty
+            const sl_min = document.getElementById('sl_min');
+            if (sl_min && !sl_min.value) {
+                resetToDefaultRanges();
+            }
+        });
+
+    </script>
+    
+    <style>
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin: 15px 0;
+        }
+        
+        .metric-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        
+        .delta-card {
+            border-color: #ffc107;
+            background: #fff8e1;
+        }
+        
+        .pnl-value {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .delta-value.positive {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .delta-value.negative {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .effective {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .ineffective {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .diagnostic-message {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+        }
+        
+        .trade-analysis-table {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .trade-analysis-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .trade-analysis-table th,
+        .trade-analysis-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .trade-analysis-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+        }
+        
+        .pnl-cell.profit {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .pnl-cell.loss {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .delta-cell.positive {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .delta-cell.negative {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "timestamp": "2025-09-23T12:36:45.401885",
+  "before_size": 85553152,
+  "backup_path": "C:\\Users\\aio\\OneDrive\\Desktop\\DATA TRADINGVIEW\\backtest\\BTC\\candlestick_data.backup_20250923_1236.db",
+  "sources_scanned": [],
+  "csv_imported": 0,
+  "db_imported": 0,
+  "pairs_summary": [
+    {
+      "symbol": "BIOUSDT",
+      "timeframe": "30m",
+      "rows": 12583,
+      "min_t": 1735905600,
+      "max_t": 1758553200
+    }
+  ],
+  "after_size": 85553152,
+  "optimize_status": 200,
+  "optimize_response": "{\"baseline_result\":{\"avg_loss\":-2.5371283949680032,\"avg_win\":8.86202061494561,\"losing_trades\":60,\"max_dd\":15.68103865633337,\"parameters\":{\"be\":\"ORIGINAL\",\"sl\":\"ORIGINAL\",\"ts_active\":\"ORIGINAL\",\"ts_step\":\"ORIGINAL\"},\"pf\":2.677915638115476,\"pnl_total\":255.42524458941787,\"recovery_factor\":16.288796309181656,\"sharpe_ratio\":0.24634339804365799,\"total_trades\":106,\"winning_trades\":46,\"winrate\":43.39622641509434},\"best_result\":{\"avg_loss\":-0.49999999999999534,\"avg_win\":13.778699590427664,\"max_consecutive_losses\":10,\"max_consecutive_wins\":3,\"max_drawdown\":4.999999999999972,\"parameters\":{\"be\":0.0,\"sl\":0.5,\"ts_active\":0.0,\"ts_step\":0.0},\"pf\":1.0,\"pnl_total\":290.1887901702643,\"recovery_factor\":58.0377580340532,\"sharpe_ratio\":0.3108302426239896,\"total_trades\":106,\"trade_loss\":0,\"trade_win\":0,\"winrate\":22.641509433962266},\"cumulative_comparison\":{\"baseline_cumulative\":[-1.2082444918265904,-3.5035558984046125,14.271165177554423,12.724374767654977,9.316330555189518,9.838628666880947,4.019015209472214,"
+}

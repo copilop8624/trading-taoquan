@@ -1,0 +1,72 @@
+tradelist\ACEUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_ACEUSDT.P_2025-09-22.csv']
+tradelist\AIOTUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_AIOTUSDT.P_2025-09-22.csv']
+tradelist\ALGOUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_ALGOUSDT.P_2025-09-22.csv']
+tradelist\BERAUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_BERAUSDT_2025-09-22.csv']
+tradelist\BINANCE_BIOUSDT.P, 30-TRADELIST.csv: Tổng trade: 212, nến DB: 12660, trade khớp: 212, thiếu nến: 0
+tradelist\BINANCE_BOMEUSDT.P, 60-tradelist.csv: Tổng trade: 424, nến DB: 13362, trade khớp: 424, thiếu nến: 0
+tradelist\BINANCE_HBARUSDT.P, 60-TRADELIST.csv: Tổng trade: 896, nến DB: 23934, trade khớp: 896, thiếu nến: 0
+tradelist\BINANCE_PERPUSDT.P, 30-TRADELIST.csv: Tổng trade: 1716, nến DB: 30348, trade khớp: 1716, thiếu nến: 0
+tradelist\BINANCE_PORTALUSDT.P, 30-TRADELIST.csv: Tổng trade: 660, nến DB: 27486, trade khớp: 660, thiếu nến: 0
+tradelist\BINANCE_RONINUSDT.P, 30-TRADELIST.csv: Tổng trade: 1218, nến DB: 28611, trade khớp: 1218, thiếu nến: 0
+tradelist\BINANCE_SAGAUSDT.P-TRADELIST, 30.csv: Tổng trade: 690, nến DB: 25575, trade khớp: 690, thiếu nến: 0
+tradelist\BIOUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_BIOUSDT.P_2025-09-22.csv']
+tradelist\BIOUSDT_30m_TRADELIST_v2.csv: ❌ Lỗi: No columns to parse from file
+tradelist\BIOUSDT_30m_TRADELIST_v3.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\BINANCE_BIOUSDT.P', ' 30-TRADELIST.csv']
+tradelist\BOMEUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_BOMEUSDT.P_2025-09-22.csv']
+tradelist\BOMEUSDT_30m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_BOMEUSDT.P_2025-09-22 -30m.csv']
+tradelist\BOMEUSDT_60m_TRADELIST_v2.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\BINANCE_BOMEUSDT.P', ' 60-tradelist.csv']
+tradelist\DEGENUSDT_2025m_TAOQUAN_STRATEGY_TES_v2.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_DEGENUSDT.P_2025-09-22.csv']
+tradelist\DOGEUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_DOGEUSDT.P_2025-09-22.csv']
+tradelist\DYMUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_DYMUSDT.P_2025-09-22.csv']
+tradelist\FLOKIUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_1000FLOKIUSDT.P_2025-09-22.csv']
+tradelist\HBARUSDT_60m_TRADELIST_v2.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\BINANCE_HBARUSDT.P', ' 60-TRADELIST.csv']
+tradelist\NEIROUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_NEIROUSDT.P_2025-09-22.csv']
+tradelist\NTRNUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_NTRNUSDT.P_2025-09-22.csv']
+tradelist\OBOLUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_OBOLUSDT.P_2025-09-22.csv']
+tradelist\PEPEUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_1000PEPEUSDT.P_2025-09-22.csv']
+tradelist\PERPUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_PERPUSDT.P_2025-09-22.csv']
+tradelist\PERPUSDT_30m_TRADELIST_v1.csv: Tổng trade: 21, nến DB: 30348, trade khớp: 21, thiếu nến: 0
+tradelist\PERPUSDT_30m_TRADELIST_v10.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\BINANCE_PERPUSDT.P', ' 30-TRADELIST.csv']
+tradelist\PERPUSDT_30m_TRADELIST_v5.csv: Tổng trade: 1, nến DB: 30348, trade khớp: 1, thiếu nến: 0
+tradelist\PERPUSDT_30m_TRADELIST_v6.csv: Tổng trade: 1, nến DB: 30348, trade khớp: 1, thiếu nến: 0
+tradelist\perpusdt_30m_tradelist_v7.csv: Tổng trade: 1, nến DB: 30348, trade khớp: 1, thiếu nến: 0
+tradelist\PORTALUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_PORTALUSDT.P_2025-09-22.csv']
+tradelist\PORTALUSDT_30m_TRADELIST_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\BINANCE_PORTALUSDT.P', ' 30-TRADELIST.csv']
+tradelist\REDUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_REDUSDT_2025-09-22.csv']
+tradelist\RONINUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_RONINUSDT.P_2025-09-22.csv']
+tradelist\RONINUSDT_30m_TRADELIST_v2.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\BINANCE_RONINUSDT.P', ' 30-TRADELIST.csv']
+tradelist\RUNEUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_RUNEUSDT_2025-09-22.csv']
+tradelist\SAGAUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_SAGAUSDT.P_2025-09-22.csv']
+tradelist\SAGAUSDT_30m_TRADELIST_v2.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\BINANCE_SAGAUSDT.P-TRADELIST', ' 30.csv']
+tradelist\SHIBUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_SHIBUSDT_2025-09-22.csv']
+tradelist\TaoQuan_Strategy_Tester_BINANCE_1000FLOKIUSDT.P_2025-09-22.csv: Tổng trade: 942, nến DB: 17597, trade khớp: 396, thiếu nến: 546
+tradelist\TaoQuan_Strategy_Tester_BINANCE_1000PEPEUSDT.P_2025-09-22.csv: ❌ Không đoán được symbol/timeframe phù hợp DB!
+tradelist\TaoQuan_Strategy_Tester_BINANCE_ACEUSDT.P_2025-09-22.csv: Tổng trade: 574, nến DB: 30348, trade khớp: 560, thiếu nến: 14
+tradelist\TaoQuan_Strategy_Tester_BINANCE_AIOTUSDT.P_2025-09-22.csv: Tổng trade: 300, nến DB: 433, trade khớp: 22, thiếu nến: 278
+tradelist\TaoQuan_Strategy_Tester_BINANCE_ALGOUSDT.P_2025-09-22.csv: Tổng trade: 936, nến DB: 23934, trade khớp: 936, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_BERAUSDT_2025-09-22.csv: Tổng trade: 364, nến DB: 11026, trade khớp: 364, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_BIOUSDT.P_2025-09-22.csv: Tổng trade: 214, nến DB: 12660, trade khớp: 214, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_BOMEUSDT.P_2025-09-22 -30m.csv: Tổng trade: 716, nến DB: 13362, trade khớp: 716, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_BOMEUSDT.P_2025-09-22.csv: Tổng trade: 544, nến DB: 13362, trade khớp: 544, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_DEGENUSDT.P_2025-09-22 (-m30csv.csv: Tổng trade: 300, nến DB: 14977, trade khớp: 300, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_DEGENUSDT.P_2025-09-22.csv: Tổng trade: 166, nến DB: 14977, trade khớp: 166, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_DOGEUSDT.P_2025-09-22.csv: Tổng trade: 2464, nến DB: 30348, trade khớp: 804, thiếu nến: 1660
+tradelist\TaoQuan_Strategy_Tester_BINANCE_DYMUSDT.P_2025-09-22.csv: Tổng trade: 572, nến DB: 14279, trade khớp: 572, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_NEIROUSDT.P_2025-09-22.csv: Tổng trade: 560, nến DB: 17893, trade khớp: 560, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_NTRNUSDT.P_2025-09-22.csv: ❌ Không đoán được symbol/timeframe phù hợp DB!
+tradelist\TaoQuan_Strategy_Tester_BINANCE_OBOLUSDT.P_2025-09-22.csv: Tổng trade: 244, nến DB: 6675, trade khớp: 244, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_PERPUSDT.P_2025-09-22.csv: Tổng trade: 2558, nến DB: 30348, trade khớp: 1728, thiếu nến: 830
+tradelist\TaoQuan_Strategy_Tester_BINANCE_PORTALUSDT.P_2025-09-22.csv: Tổng trade: 672, nến DB: 27486, trade khớp: 672, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_REDUSDT_2025-09-22.csv: Tổng trade: 190, nến DB: 9962, trade khớp: 190, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_RONINUSDT.P_2025-09-22.csv: Tổng trade: 1250, nến DB: 28611, trade khớp: 1250, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_RUNEUSDT_2025-09-22.csv: Tổng trade: 5498, nến DB: 30348, trade khớp: 1798, thiếu nến: 3700
+tradelist\TaoQuan_Strategy_Tester_BINANCE_SAGAUSDT.P_2025-09-22.csv: Tổng trade: 936, nến DB: 25575, trade khớp: 936, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_SHIBUSDT_2025-09-22.csv: Tổng trade: 2646, nến DB: 30348, trade khớp: 1334, thiếu nến: 1312
+tradelist\TaoQuan_Strategy_Tester_BINANCE_WIFUSDT.P_2025-09-22 -30m.csv: Tổng trade: 858, nến DB: 14752, trade khớp: 858, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_WIFUSDT.P_2025-09-22.csv: Tổng trade: 604, nến DB: 14752, trade khớp: 604, thiếu nến: 0
+tradelist\TaoQuan_Strategy_Tester_BINANCE_WLDUSDT_2025-09-22.csv: Tổng trade: 448, nến DB: 19029, trade khớp: 448, thiếu nến: 0
+tradelist\WIFUSDT.P_30m_BOT.OPTIMIZE_v1.csv: Tổng trade: 858, nến DB: 14752, trade khớp: 858, thiếu nến: 0
+tradelist\WIFUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_WIFUSDT.P_2025-09-22.csv']
+tradelist\WIFUSDT_30m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_WIFUSDT.P_2025-09-22 -30m.csv']
+tradelist\WIFUSDT_30m_WIFUSDT_P_30M_BOT_OP_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\WIFUSDT.P_30m_BOT.OPTIMIZE_v1.csv']
+tradelist\WLDUSDT_2025m_TAOQUAN_STRATEGY_TES_v1.csv: ❌ Không tìm thấy cột thời gian entry! Cột có: ['tradelist\\TaoQuan_Strategy_Tester_BINANCE_WLDUSDT_2025-09-22.csv']

@@ -206,6 +206,16 @@ class SmartRangeFinder:
         # Compute TP levels from runup percentiles using helper
         tp1, tp2, tp3 = self._suggest_tp_levels(stats)
 
+        # Calculate TP reach rates: percent of trades whose runup >= TP1/2/3
+        tp_reach_rates = {}
+        total_trades = len(runup_abs)
+        for label, tp in zip(['TP1', 'TP2', 'TP3'], [tp1, tp2, tp3]):
+            if total_trades > 0:
+                reach_count = (runup_abs >= tp).sum()
+                tp_reach_rates[label] = round(reach_count / total_trades * 100, 2)
+            else:
+                tp_reach_rates[label] = 0.0
+
         # Keep TP levels in range_analysis
         self.range_analysis = {
             'statistics': stats,
@@ -213,10 +223,12 @@ class SmartRangeFinder:
             'scenarios': scenarios,
             'recommended_ranges': ranges,
             'tp_levels': {'TP1': round(float(tp1), 3), 'TP2': round(float(tp2), 3), 'TP3': round(float(tp3), 3)},
+            'tp_reach_rates': tp_reach_rates,
             'warnings': list(self._analysis_warnings)
         }
 
         print(f"\n🎯 Suggested TP levels (from entry-based runup percentiles - p50/p75/p90): TP1={self.range_analysis['tp_levels']['TP1']}% (p50), TP2={self.range_analysis['tp_levels']['TP2']}% (p75), TP3={self.range_analysis['tp_levels']['TP3']}% (p90)")
+        print(f"   TP Reach Rates: TP1={tp_reach_rates['TP1']}%, TP2={tp_reach_rates['TP2']}%, TP3={tp_reach_rates['TP3']}%")
 
         return self.range_analysis
 
@@ -587,6 +599,7 @@ class SmartRangeFinder:
 
         rec = self.range_analysis['recommended_ranges']
         tp_levels = self.range_analysis.get('tp_levels', {})
+        tp_reach_rates = self.range_analysis.get('tp_reach_rates', {})
         recommended_strategy = 'balanced'
         sl = rec['sl_ranges'][recommended_strategy]
         be = rec['be_ranges'][recommended_strategy]
@@ -596,6 +609,7 @@ class SmartRangeFinder:
         print('\n🏆 FINAL RECOMMENDATIONS (ENTRY-BASED)')
         print(f"Based on {len(self.entry_trades)} entry trades")
         print(f"TP suggestions: TP1={tp_levels.get('TP1')}%, TP2={tp_levels.get('TP2')}%, TP3={tp_levels.get('TP3')}%")
+        print(f"TP reach rates: TP1={tp_reach_rates.get('TP1')}%, TP2={tp_reach_rates.get('TP2')}%, TP3={tp_reach_rates.get('TP3')}%")
 
         if self.validation_issues:
             print('\n⚠️ Data quality notes:')
@@ -608,6 +622,7 @@ class SmartRangeFinder:
                 'sl': sl, 'be': be, 'ts_trigger': ts, 'ts_step': ts_step
             },
             'tp_levels': tp_levels,
+            'tp_reach_rates': tp_reach_rates,
             'data_quality_issues': self.validation_issues,
             'total_trades_analyzed': len(self.entry_trades)
         }

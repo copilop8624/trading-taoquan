@@ -14,6 +14,87 @@ import glob
 import re
 
 class DataManager:
+    def auto_fill_all_missing_candles_from_tradelists(self, tradelist_dir='tradelist', candle_dir='candles', api_key=None, api_secret=None):
+        """
+        Scan all tradelist CSVs, determine required time ranges for each symbol/timeframe,
+        check for missing candles, fetch from Binance, and fill gaps in DB/CSV.
+        """
+        import glob
+        import pandas as pd
+        from datetime import datetime
+        try:
+            from binance.client import Client
+        except ImportError:
+            print("python-binance not installed. Please install it to use this feature.")
+            return
+        api_key = api_key or os.getenv('BINANCE_API_KEY', '')
+        api_secret = api_secret or os.getenv('BINANCE_API_SECRET', '')
+        TIMEFRAME_MAP = {
+            '5': Client.KLINE_INTERVAL_5MINUTE,
+            '15': Client.KLINE_INTERVAL_15MINUTE,
+            '30': Client.KLINE_INTERVAL_30MINUTE,
+            '60': Client.KLINE_INTERVAL_1HOUR,
+            '240': Client.KLINE_INTERVAL_4HOUR,
+            '1d': Client.KLINE_INTERVAL_1DAY,
+        }
+        def parse_tradelist_info(filename):
+            base = os.path.basename(filename)
+            for tf in TIMEFRAME_MAP:
+                if tf in base:
+                    symbol = base.split('_')[0].replace('BINANCE_', '').replace('.csv','').upper()
+                    return symbol, tf
+            return None, None
+        def get_tradelist_min_time(filepath):
+            df = pd.read_csv(filepath)
+            for col in ['Date/Time', 'date', 'datetime', 'Date']:
+                if col in df.columns:
+                    dt_col = col
+                    break
+            else:
+                raise Exception(f'No datetime column found in {filepath}')
+            min_time = pd.to_datetime(df[dt_col], errors='coerce').min()
+            return min_time
+        def fetch_binance_klines(symbol, interval, start_time, end_time):
+            client = Client(api_key, api_secret)
+            all_klines = []
+            start_ts = int(start_time.timestamp() * 1000)
+            end_ts = int(end_time.timestamp() * 1000)
+            while start_ts < end_ts:
+                klines = client.get_historical_klines(symbol, interval, start_ts, min(start_ts + 1000*1800, end_ts))
+                if not klines:
+                    break
+                all_klines.extend(klines)
+                last = klines[-1][0]
+                start_ts = last + 1800*1000
+                import time; time.sleep(0.2)
+            return all_klines
+        tradelist_files = glob.glob(os.path.join(tradelist_dir, '*.csv'))
+        for tradelist_file in tradelist_files:
+            symbol, tf = parse_tradelist_info(tradelist_file)
+            if not symbol or not tf:
+                print(f'Skip {tradelist_file}: cannot parse symbol/timeframe')
+                continue
+            print(f'Processing {tradelist_file} | Symbol: {symbol}, TF: {tf}')
+            min_trade_time = get_tradelist_min_time(tradelist_file)
+            # Check DB for earliest candle
+            df_candles = self.load_candle_data(symbol, tf)
+            if df_candles.empty or df_candles["time"].min() > min_trade_time:
+                min_candle_time = df_candles["time"].min() if not df_candles.empty else datetime.now()
+                print(f'Need to fetch candles for {symbol} {tf}: {min_trade_time} -> {min_candle_time}')
+                interval = TIMEFRAME_MAP[tf]
+                klines = fetch_binance_klines(symbol, interval, min_trade_time, min_candle_time)
+                if klines:
+                    df_new = pd.DataFrame(klines, columns=[
+                        'open_time','open','high','low','close','volume','close_time','quote_asset_volume','number_of_trades','taker_buy_base','taker_buy_quote','ignore'])
+                    df_new['time'] = pd.to_datetime(df_new['open_time'], unit='ms')
+                    df_new = df_new[['time','open','high','low','close','volume']]
+                    # Append to DB
+                    self._cache_to_database(symbol, tf, df_new)
+                    print(f'Appended {len(df_new)} candles to DB for {symbol} {tf}')
+                else:
+                    print(f'No candles fetched for {symbol} {tf}')
+            else:
+                print(f'No missing candles for {symbol} {tf}')
     """
     Centralized data management for candle data
     - Load from CSV files (existing BINANCE_* files)
@@ -276,26 +357,27 @@ def get_data_manager() -> DataManager:
     return data_manager
 
 if __name__ == "__main__":
-    # Test the data manager
+    import argparse
+    parser = argparse.ArgumentParser(description="DataManager CLI")
+    parser.add_argument('--fill-missing', action='store_true', help='Auto-fill all missing candles from tradelists using Binance API')
+    args = parser.parse_args()
+
     dm = DataManager()
-    
-    print("\n=== Data Manager Test ===")
-    
-    # Show available data
-    summary = dm.get_symbol_summary()
-    print(f"Available symbols: {summary['total_symbols']}")
-    print(f"Timeframes: {summary['timeframes_available']}")
-    
-    # Test loading some data
-    for symbol_key in list(dm.available_data.keys())[:2]:  # Test first 2 symbols
-        symbol = symbol_key.replace('BINANCE_', '')
-        timeframes = dm.get_available_timeframes(symbol_key)
-        
-        for tf in timeframes[:1]:  # Test first timeframe for each symbol
-            print(f"\n--- Testing {symbol} {tf}m ---")
-            df = dm.load_candle_data(symbol, tf)
-            if len(df) > 0:
-                validation = dm.validate_data_integrity(symbol, tf)
-                print(f"Records: {validation['total_records']}")
-                print(f"Date range: {validation['date_range']['start']} to {validation['date_range']['end']}")
-                print(f"Quality score: {validation['data_quality_score']:.1f}%")
+    if args.fill_missing:
+        dm.auto_fill_all_missing_candles_from_tradelists()
+    else:
+        print("\n=== Data Manager Test ===")
+        summary = dm.get_symbol_summary()
+        print(f"Available symbols: {summary['total_symbols']}")
+        print(f"Timeframes: {summary['timeframes_available']}")
+        for symbol_key in list(dm.available_data.keys())[:2]:
+            symbol = symbol_key.replace('BINANCE_', '')
+            timeframes = dm.get_available_timeframes(symbol_key)
+            for tf in timeframes[:1]:
+                print(f"\n--- Testing {symbol} {tf}m ---")
+                df = dm.load_candle_data(symbol, tf)
+                if len(df) > 0:
+                    validation = dm.validate_data_integrity(symbol, tf)
+                    print(f"Records: {validation['total_records']}")
+                    print(f"Date range: {validation['date_range']['start']} to {validation['date_range']['end']}")
+                    print(f"Quality score: {validation['data_quality_score']:.1f}%")
